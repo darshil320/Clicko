@@ -1,0 +1,23 @@
+# Local development only. Production hosting: docs/DECISIONS/0008-hosting-at-launch.md
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: clickco
+      POSTGRES_PASSWORD: clickco_local_only
+      POSTGRES_DB: clickco
+    ports: ["5433:5432"] # 5433: avoids clashing with a host Postgres
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clickco -d clickco"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+volumes:
+  pgdata:

@@ -1,0 +1,1 @@
+{ "extends": "@clickco/config/tsconfig/library.json" }
