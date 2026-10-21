@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "sourceRoot": "src",
+  "compilerOptions": {
+    "tsConfigPath": "tsconfig.build.json",
+    "assets": [
+      {
+        "include": "infra/db/migrations/*.sql",
+        "watchAssets": true
+      }
+    ]
+  }
+}

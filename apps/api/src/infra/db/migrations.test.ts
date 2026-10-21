@@ -1,0 +1,42 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { listMigrations } from './migrate';
+import { applySpecPatches, SPEC_PATCHES } from './spec-patches';
+
+const ROOT = join(__dirname, '../../../../..');
+const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
+
+describe('migrations mirror the specification (ADR-0006)', () => {
+  it('0001 is docs/clickco-04-schema.sql plus only the documented spec patches', () => {
+    expect(read('apps/api/src/infra/db/migrations/0001_clickco_schema.sql')).toBe(
+      applySpecPatches(read('docs/clickco-04-schema.sql')),
+    );
+  });
+
+  it('every spec patch is logged as a finding in docs/SPEC-AUDIT.md', () => {
+    const audit = read('docs/SPEC-AUDIT.md');
+    for (const p of SPEC_PATCHES) expect(audit).toContain(`| ${p.finding} |`);
+  });
+
+  it('refuses a patch whose target no longer appears exactly once', () => {
+    expect(() =>
+      applySpecPatches('nothing here', [{ finding: 'X', reason: '', find: 'absent', replace: '' }]),
+    ).toThrow(/exactly one match/);
+  });
+
+  it('0002 is byte-identical to docs/schema-addenda/0002-spec-audit-gaps.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0002_spec_audit_gaps.sql')).toBe(
+      read('docs/schema-addenda/0002-spec-audit-gaps.sql'),
+    );
+  });
+
+  it('lists migrations in numeric order with a sha256 checksum each', () => {
+    const migrations = listMigrations();
+    expect(migrations.map((m) => m.name)).toEqual([
+      '0001_clickco_schema.sql',
+      '0002_spec_audit_gaps.sql',
+    ]);
+    for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
