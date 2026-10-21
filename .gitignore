@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+.expo/
+.turbo/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+.claude/settings.local.json
