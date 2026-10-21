@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Write(./docs/clickco-*)",
+      "Edit(./docs/clickco-*)"
+    ],
+    "ask": [
+      "Bash(pnpm add*)",
+      "Bash(npm install*)",
+      "Bash(docker*)",
+      "Bash(git commit*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/guard.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/format.js"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/session-end.js"
+          }
+        ]
+      }
+    ]
+  }
+}
