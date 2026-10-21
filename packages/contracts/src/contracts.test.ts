@@ -203,6 +203,14 @@ describe('Booking', () => {
     ).toBe(true);
   });
 
+  it('rejects denormalised totals that disagree with the attached snapshot', () => {
+    const withPrice = { ...booking, price: snapshot };
+    expect(Booking.safeParse(withPrice).success).toBe(true);
+    expect(
+      Booking.safeParse({ ...withPrice, totalPaise: 1690820, balancePaise: 845409 }).success,
+    ).toBe(false);
+  });
+
   it('rejects a malformed reference', () => {
     expect(Booking.safeParse({ ...booking, reference: 'BK-4821' }).success).toBe(false);
   });

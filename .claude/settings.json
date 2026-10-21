@@ -2,6 +2,14 @@
   "permissions": {
     "deny": [
       "Bash(rm -rf *)",
+      "Bash(git push * -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push -f*)",
+      "Bash(rm -fR *)",
+      "Bash(rm -Rf *)",
+      "Bash(rm -f -r *)",
+      "Bash(rm -r -f *)",
+      "Bash(rm -fr *)",
       "Bash(git push --force*)",
       "Bash(git reset --hard*)",
       "Read(./.env)",
@@ -9,12 +17,7 @@
       "Write(./docs/clickco-*)",
       "Edit(./docs/clickco-*)"
     ],
-    "ask": [
-      "Bash(pnpm add*)",
-      "Bash(npm install*)",
-      "Bash(docker*)",
-      "Bash(git commit*)"
-    ]
+    "ask": ["Bash(pnpm add*)", "Bash(npm install*)", "Bash(docker*)", "Bash(git commit*)"]
   },
   "hooks": {
     "PreToolUse": [

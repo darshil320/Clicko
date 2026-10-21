@@ -29,46 +29,103 @@ export function listMigrations(dir: string = MIGRATIONS_DIR): Migration[] {
     });
 }
 
-export async function runMigrations(
-  sql: postgres.Sql,
-  migrations: Migration[] = listMigrations(),
-): Promise<string[]> {
+/**
+ * Refuses an unapplied migration that sorts before the newest applied one, and an
+ * applied migration whose file is gone. Both mean history and disk disagree.
+ */
+function assertConsistentHistory(
+  applied: ReadonlyMap<string, string>,
+  migrations: Migration[],
+): void {
+  const onDisk = new Set(migrations.map((m) => m.name));
+  const missing = [...applied.keys()].filter((name) => !onDisk.has(name));
+  if (missing.length > 0) {
+    throw new Error(`Applied migrations are missing from disk: ${missing.join(', ')}`);
+  }
+  const newestApplied = [...applied.keys()].sort().at(-1);
+  const outOfOrder = migrations.filter(
+    (m) => !applied.has(m.name) && newestApplied !== undefined && m.name < newestApplied,
+  );
+  if (outOfOrder.length > 0) {
+    throw new Error(
+      `Migrations out of order (numbered below applied ${newestApplied}): ` +
+        outOfOrder.map((m) => m.name).join(', '),
+    );
+  }
+}
+
+async function applyPending(sql: postgres.ReservedSql, migrations: Migration[]): Promise<string[]> {
   await sql`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name       text PRIMARY KEY,
       checksum   char(64) NOT NULL,
       applied_at timestamptz NOT NULL DEFAULT now()
     )`;
-  await sql`SELECT pg_advisory_lock(${LOCK_KEY})`;
-  try {
-    const applied = new Map(
-      (
-        await sql<
-          { name: string; checksum: string }[]
-        >`SELECT name, checksum FROM schema_migrations`
-      ).map((r) => [r.name, r.checksum]),
-    );
-    const newlyApplied: string[] = [];
-    for (const m of migrations) {
-      const previous = applied.get(m.name);
-      if (previous !== undefined) {
-        if (previous !== m.checksum) {
-          throw new Error(
-            `Migration ${m.name} was edited after being applied (checksum mismatch). ` +
-              'Add a new migration instead of changing an applied one.',
-          );
-        }
-        continue;
-      }
-      await sql.begin(async (tx) => {
-        await tx.unsafe(m.sql);
-        await tx`INSERT INTO schema_migrations (name, checksum) VALUES (${m.name}, ${m.checksum})`;
-      });
-      newlyApplied.push(m.name);
+  const rows = await sql<{ name: string; checksum: string }[]>`
+    SELECT name, checksum FROM schema_migrations`;
+  const applied = new Map(rows.map((r) => [r.name, r.checksum]));
+
+  for (const m of migrations) {
+    const previous = applied.get(m.name);
+    if (previous !== undefined && previous !== m.checksum) {
+      throw new Error(
+        `Migration ${m.name} was edited after being applied (checksum mismatch). ` +
+          'Add a new migration instead of changing an applied one.',
+      );
     }
-    return newlyApplied;
+  }
+  assertConsistentHistory(applied, migrations);
+
+  const newlyApplied: string[] = [];
+  for (const m of migrations.filter((x) => !applied.has(x.name))) {
+    await sql.unsafe('BEGIN');
+    try {
+      await sql.unsafe(m.sql);
+      await sql`INSERT INTO schema_migrations (name, checksum) VALUES (${m.name}, ${m.checksum})`;
+      await sql.unsafe('COMMIT');
+    } catch (error) {
+      await sql.unsafe('ROLLBACK');
+      throw error;
+    }
+    newlyApplied.push(m.name);
+  }
+  return newlyApplied;
+}
+
+/**
+ * Lock, history checks, every migration and unlock all run on ONE reserved
+ * connection: advisory locks are session-scoped, so a pooled unlock could land
+ * on a different session and leave the lock held.
+ */
+export async function runMigrations(
+  sql: postgres.Sql,
+  migrations: Migration[] = listMigrations(),
+): Promise<string[]> {
+  const conn = await sql.reserve();
+  try {
+    await conn`SELECT pg_advisory_lock(${LOCK_KEY})`;
+    try {
+      return await applyPending(conn, migrations);
+    } finally {
+      try {
+        await conn`SELECT pg_advisory_unlock(${LOCK_KEY})`;
+      } catch (unlockError) {
+        // Never mask the migration error; the lock dies with the session anyway.
+        process.stderr.write(
+          `Warning: advisory unlock failed: ${unlockError instanceof Error ? unlockError.message : String(unlockError)}\n`,
+        );
+      }
+    }
   } finally {
-    await sql`SELECT pg_advisory_unlock(${LOCK_KEY})`;
+    conn.release();
+  }
+}
+
+/** The integration suite creates and force-drops databases; never let it near a shared server. */
+export function assertLocalTestDatabase(url: string): void {
+  const host = new URL(url).hostname;
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
+    throw new Error(`TEST_DATABASE_URL must point at localhost, got host "${host}"`);
   }
 }
 

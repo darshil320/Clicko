@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: clickco
       POSTGRES_PASSWORD: clickco_local_only
       POSTGRES_DB: clickco
-    ports: ["5433:5432"] # 5433: avoids clashing with a host Postgres
+    ports: ["127.0.0.1:5433:5432"] # localhost only; 5433 avoids a host Postgres
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U clickco -d clickco"]
@@ -14,9 +14,10 @@ services:
       retries: 10
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    command: ["redis-server", "--requirepass", "clickco_local_only"]
+    ports: ["127.0.0.1:6380:6379"] # localhost only; 6380 avoids a host Redis
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "clickco_local_only", "ping"]
       interval: 5s
       retries: 10
 volumes:

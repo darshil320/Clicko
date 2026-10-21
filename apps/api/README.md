@@ -14,8 +14,9 @@ Local-only values (match `docker-compose.yml`; not secrets):
 NODE_ENV=development
 PORT=4000
 DATABASE_URL=postgres://clickco:clickco_local_only@localhost:5433/clickco
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://:clickco_local_only@localhost:6380
 ```
 
-Integration tests run when `DATABASE_URL` is set and are skipped otherwise.
+Integration tests run only when `TEST_DATABASE_URL` points at **localhost** (they create and drop scratch databases):
+`TEST_DATABASE_URL=postgres://clickco:clickco_local_only@localhost:5433/clickco pnpm test`
 Migrations 0001/0002 are generated from `docs/` by `pnpm db:sync-spec` — never hand-edit them (ADR-0006).

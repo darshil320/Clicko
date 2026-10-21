@@ -1,17 +1,31 @@
 import { randomBytes } from 'node:crypto';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { runMigrations } from './migrate';
+import { assertLocalTestDatabase, listMigrations, runMigrations } from './migrate';
 
-const ADMIN_URL = process.env.DATABASE_URL;
+const ADMIN_URL = process.env.TEST_DATABASE_URL;
 
-// Needs `pnpm db:up`. Skipped (not failed) when no database is configured.
+describe('assertLocalTestDatabase', () => {
+  it('accepts localhost and 127.0.0.1', () => {
+    expect(() => assertLocalTestDatabase('postgres://u:p@localhost:5433/db')).not.toThrow();
+    expect(() => assertLocalTestDatabase('postgres://u:p@127.0.0.1:5433/db')).not.toThrow();
+  });
+
+  it('refuses any other host, because the suite creates and force-drops databases', () => {
+    expect(() => assertLocalTestDatabase('postgres://u:p@db.railway.internal:5432/db')).toThrow(
+      /localhost/,
+    );
+  });
+});
+
+// Needs `pnpm db:up` and TEST_DATABASE_URL. Skipped (not failed) otherwise.
 describe.runIf(ADMIN_URL)('migrations against a real Postgres + PostGIS', () => {
   const dbName = `clickco_test_${randomBytes(4).toString('hex')}`;
   let admin: postgres.Sql;
   let sql: postgres.Sql;
 
   beforeAll(async () => {
+    assertLocalTestDatabase(ADMIN_URL as string);
     admin = postgres(ADMIN_URL as string, { max: 1, onnotice: () => {} });
     await admin.unsafe(`CREATE DATABASE ${dbName}`);
     const url = new URL(ADMIN_URL as string);
@@ -66,6 +80,33 @@ describe.runIf(ADMIN_URL)('migrations against a real Postgres + PostGIS', () => 
       'support_tickets',
       'ticket_messages',
     ]);
+  });
+
+  it('refuses a new migration numbered below one already applied', async () => {
+    const outOfOrder = [
+      { name: '0000_sneaky.sql', sql: 'SELECT 1', checksum: 'a'.repeat(64) },
+      ...listMigrations(),
+    ];
+    await expect(runMigrations(sql, outOfOrder)).rejects.toThrow(/out of order/);
+  });
+
+  it('refuses to run when an applied migration file has disappeared', async () => {
+    await expect(runMigrations(sql, listMigrations().slice(0, 1))).rejects.toThrow(/missing/);
+  });
+
+  it('rolls back a failing migration and leaves no record of it', async () => {
+    const broken = [
+      ...listMigrations(),
+      {
+        name: '0099_broken.sql',
+        sql: 'CREATE TABLE half_done (id int); SELECT nope;',
+        checksum: 'b'.repeat(64),
+      },
+    ];
+    await expect(runMigrations(sql, broken)).rejects.toThrow();
+    const [row] = await sql`SELECT to_regclass('half_done') AS t,
+      (SELECT count(*)::int FROM schema_migrations WHERE name = '0099_broken.sql') AS n`;
+    expect(row).toEqual({ t: null, n: 0 });
   });
 
   it('rejects an edit to a migration that has already been applied', async () => {

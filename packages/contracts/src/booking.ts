@@ -45,6 +45,10 @@ export const Booking = z
     message: 'advance + balance must equal total',
     path: ['balancePaise'],
   })
+  .refine((b) => b.price === undefined || b.price.totalAmountPaise === b.totalPaise, {
+    message: 'denormalised total must match the attached price snapshot',
+    path: ['totalPaise'],
+  })
   .refine((b) => b.galleryRecipient !== 'SUBJECT' || b.subject !== null, {
     message: 'a subject contact is required when the gallery goes to the subject',
     path: ['subject'],
