@@ -6,4 +6,5 @@ export * from './enums.js';
 export * from './money.js';
 export * from './photographer.js';
 export * from './price-snapshot.js';
+export * from './pricing.js';
 export * from './serviceability.js';
