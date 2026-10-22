@@ -13,7 +13,10 @@
     "format": "biome check --write .",
     "db:up": "docker compose up -d postgres redis",
     "db:down": "docker compose down",
-    "db:migrate": "pnpm --filter @clickco/api db:migrate"
+    "db:migrate": "pnpm --filter @clickco/api db:migrate",
+    "db:seed": "pnpm --filter @clickco/api db:seed",
+    "console": "pnpm --filter @clickco/admin dev",
+    "api": "pnpm --filter @clickco/api start:local"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
