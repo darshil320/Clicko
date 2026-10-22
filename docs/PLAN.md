@@ -1,7 +1,7 @@
 # CLICKCO — CONSOLIDATED DELIVERY PLAN
 
 **Synthesised from:** `clickco-v0.2-locked-spec.md`, `clickco-terms-conditions-v2.md`, `clickco-01` … `clickco-06`, `DOMAIN.md`, `SPEC-AUDIT.md`, `OPEN-DECISIONS.md`.
-**Plan date:** 21 Oct 2026 · **Owner:** Darshil · **Status:** Sprint 0 in progress
+**Plan date:** 21 Oct 2026 · **Owner:** Darshil · **Status:** Sprint 0 complete (22 Oct) — S1 next
 
 Where the source docs disagree, this plan follows the *later* document and records why in §7. The `docs/clickco-*` files stay read-only; this file and `docs/DECISIONS/` are where resolutions live.
 
@@ -114,7 +114,7 @@ Per doc 03 §3–4 and doc 06:
 - [x] `packages/contracts`: Money, enums, PriceSnapshot, Booking, Photographer, City
 - [x] `docker-compose.yml`: Postgres 16 + PostGIS, Redis 7
 - [x] `apps/api` boot skeleton: Zod env, health endpoint, SQL migration runner applying `clickco-04-schema.sql` + audit addenda
-- [ ] `apps/web` legal-pages site — **blocked on Q1/Q2** (entity name, Grievance Officer)
+- [x] `apps/web` legal-pages site: T&C, refund, privacy and grievance pages rendered from the spec. Entity is **Clicko**. `build:production` refuses to build until the address, privacy email and Grievance Officer are filled in `apps/web/src/legal/config.ts`
 - [ ] Long-lead submissions B1–B11 — **Darshil, needs Q1**
 - [ ] Stitch → Figma Wave 1 (B16)
 
@@ -155,7 +155,7 @@ Per doc 03 §3–4 and doc 06:
 
 Sprint 0 continues without these; each lists what it blocks.
 
-1. **Legal entity** — exact registered name, registered address, PAN/GSTIN status. Is it a DMC Tech entity or a new company? → blocks B1–B9, T&C header, invoices (`invoice_series`).
+1. **Legal entity** — name confirmed as **Clicko** (22 Oct). Still needed: registered address, PAN/GSTIN status. → blocks B1–B9, T&C header, invoices (`invoice_series`).
 2. **Grievance Officer** — name, email, phone, address; plus the privacy email for T&C §9.4/§11.4. → blocks T&C publish, store submission.
 3. **Video at launch** — I've defaulted to **photos-only at launch** (ADR-0005). Confirm or override. → photographer gear rubric (S6), storage maths.
 4. **Domain** — is `clickco.in` registered and on Cloudflare? → B11, deep links.

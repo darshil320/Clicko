@@ -2,7 +2,8 @@
 
 > **Status 21 Oct 2026:** OD-01, 02, 03 (provisional), 04, 05, 07, 08, 10, 11, 12 resolved in
 > [`DECISIONS/0005-open-decisions-resolved.md`](DECISIONS/0005-open-decisions-resolved.md).
-> **Still open — Darshil only:** OD-06 (legal entity + address), OD-09 (Grievance Officer).
+> **OD-06:** entity name = **Clicko** (Darshil, 22 Oct 2026); registered address still open.
+> **Still open — Darshil only:** OD-06 address, OD-09 (Grievance Officer).
 > OD-11 (video) is defaulted to photos-only pending confirmation.
 
 One row per decision the spec set explicitly marks as unresolved. Owner is Darshil unless stated otherwise. Sourced from `clickco-v0.2-locked-spec.md` §15, `clickco-terms-conditions-v2.md` (bracketed placeholders + changelog), and `clickco-05-pricing-engine.md` §12.

@@ -1,0 +1,25 @@
+{
+  "name": "@clickco/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:production": "LEGAL_STRICT=1 next build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clickco/design-tokens": "workspace:*",
+    "marked": "18.1.1",
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@clickco/config": "workspace:*",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  }
+}

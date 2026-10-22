@@ -12,3 +12,6 @@ coverage/
 !.env.example
 .DS_Store
 .claude/settings.local.json
+out/
+next-env.d.ts
+.playwright-mcp/
