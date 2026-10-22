@@ -1,4 +1,5 @@
 import type {
+  CityTier,
   JoinWaitlistBody,
   JoinWaitlistResponse,
   ServiceabilityResult,
@@ -16,6 +17,14 @@ import {
   SERVICEABILITY_REPOSITORY,
   type ServiceabilityRepository,
 } from './repositories/serviceability.repository';
+
+export interface BookableVenue {
+  readonly pincode: string;
+  readonly cityId: string;
+  readonly cityTier: CityTier;
+  readonly state: string;
+  readonly travelZone: 0 | 1 | 2;
+}
 
 export const WAITLIST_POLICY = { maxJoinsPerPhonePerDay: 3, maxMonthsAhead: 18 } as const;
 
@@ -46,7 +55,7 @@ export class ServiceabilityService {
         pincode,
         status: area.status,
         areaName: area.areaName,
-        city: area.city,
+        city: { id: area.city.id, name: area.city.name, tier: area.city.tier },
         travelZone: area.travelZone,
         limitedAvailability: area.status === 'PILOT',
       };
@@ -107,5 +116,26 @@ export class ServiceabilityService {
       intendedTier: body.intendedTier ?? null,
     });
     return { joined: true, waitingCount: await this.repo.countWaiting(cityId, body.pincode) };
+  }
+
+  /**
+   * The venue facts pricing needs. Only LIVE/PILOT pincodes resolve: a quote can
+   * never exist for a WAITLIST, BLOCKED or unknown pincode (Invariant 23).
+   */
+  async resolveVenue(pincode: string): Promise<BookableVenue> {
+    const area = await this.repo.findArea(pincode);
+    if (!area || (area.status !== 'LIVE' && area.status !== 'PILOT')) {
+      throw new UnprocessableEntityException({
+        code: 'NOT_SERVICEABLE',
+        message: 'We do not serve this pincode yet — join the waitlist',
+      });
+    }
+    return {
+      pincode,
+      cityId: area.city.id,
+      cityTier: area.city.tier,
+      state: area.city.state,
+      travelZone: area.travelZone,
+    };
   }
 }

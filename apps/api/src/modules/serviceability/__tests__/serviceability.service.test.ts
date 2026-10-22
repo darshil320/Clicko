@@ -11,11 +11,13 @@ const NOW = new Date('2026-11-02T10:00:00.000Z');
 const SURAT = {
   id: '5c2d7a90-1e3f-4b6a-8c9d-2e4f6a8b0c12',
   name: 'Surat',
+  state: 'Gujarat',
   tier: 'TIER_1' as const,
 };
 const CHENNAI = {
   id: '9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
   name: 'Chennai',
+  state: 'Tamil Nadu',
   tier: 'METRO' as const,
 };
 
@@ -80,7 +82,7 @@ describe('ServiceabilityService.check', () => {
       pincode: '395007',
       status: 'LIVE',
       areaName: 'Vesu',
-      city: SURAT,
+      city: { id: SURAT.id, name: SURAT.name, tier: SURAT.tier },
       travelZone: 0,
       limitedAvailability: false,
     });
@@ -175,5 +177,20 @@ describe('ServiceabilityService.join', () => {
       expect(await statusOf(service.join({ ...base, pincode }))).toBe(200);
     }
     expect(await statusOf(service.join({ ...base, pincode: '600004' }))).toBe(429);
+  });
+
+  it('resolves a bookable venue for pricing, including its state', async () => {
+    expect(await service.resolveVenue('395007')).toEqual({
+      pincode: '395007',
+      cityId: SURAT.id,
+      cityTier: 'TIER_1',
+      state: 'Gujarat',
+      travelZone: 0,
+    });
+  });
+
+  it('refuses to resolve a waitlist or unknown pincode for pricing', async () => {
+    expect(await statusOf(service.resolveVenue('600001'))).toBe(422);
+    expect(await statusOf(service.resolveVenue('110001'))).toBe(422);
   });
 });

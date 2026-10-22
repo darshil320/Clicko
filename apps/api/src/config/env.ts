@@ -19,6 +19,17 @@ export const EnvSchema = z
     SMS_ADAPTER: z.enum(['console', 'dlt']),
     // Load-balancer hops in front of the API. Never `true`: that would trust a client-sent X-Forwarded-For.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Browser origins allowed to call the API (comma-separated exact origins). Empty = none.
+    CORS_ORIGINS: z
+      .string()
+      .default('')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((o) => o.trim())
+          .filter(Boolean),
+      )
+      .pipe(z.array(z.url())),
   })
   .refine(
     (e) => e.SMS_ADAPTER !== 'console' || e.NODE_ENV === 'development' || e.NODE_ENV === 'test',

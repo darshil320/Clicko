@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 import { AppModule } from './app.module';
 import { AuthController } from './modules/auth/auth.controller';
+import { PricingController } from './modules/pricing/pricing.controller';
 import { ServiceabilityController } from './modules/serviceability/serviceability.controller';
 import { UsersController } from './modules/users/users.controller';
 
@@ -24,6 +25,7 @@ describe('AppModule dependency graph', () => {
     expect(moduleRef.get(AuthController)).toBeInstanceOf(AuthController);
     expect(moduleRef.get(UsersController)).toBeInstanceOf(UsersController);
     expect(moduleRef.get(ServiceabilityController)).toBeInstanceOf(ServiceabilityController);
+    expect(moduleRef.get(PricingController)).toBeInstanceOf(PricingController);
     await moduleRef.close();
   });
 });

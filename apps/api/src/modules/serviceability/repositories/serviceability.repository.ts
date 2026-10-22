@@ -8,7 +8,12 @@ export interface AreaRecord {
   readonly status: AreaStatus;
   readonly areaName: string | null;
   readonly travelZone: 0 | 1 | 2;
-  readonly city: { readonly id: string; readonly name: string; readonly tier: CityTier };
+  readonly city: {
+    readonly id: string;
+    readonly name: string;
+    readonly state: string;
+    readonly tier: CityTier;
+  };
 }
 
 export interface WaitlistInsert {
@@ -46,10 +51,11 @@ export class PgServiceabilityRepository implements ServiceabilityRepository {
         city_id: string;
         city_name: string;
         city_tier: CityTier;
+        city_state: string;
       }[]
     >`
       SELECT a.pincode, a.status, a.area_name, a.travel_zone,
-             c.id AS city_id, c.name AS city_name, c.tier AS city_tier
+             c.id AS city_id, c.name AS city_name, c.tier AS city_tier, c.state AS city_state
       FROM serviceable_areas a JOIN cities c ON c.id = a.city_id
       WHERE a.pincode = ${pincode}`;
     if (!row) return null;
@@ -58,7 +64,7 @@ export class PgServiceabilityRepository implements ServiceabilityRepository {
       status: row.status,
       areaName: row.area_name,
       travelZone: row.travel_zone as 0 | 1 | 2,
-      city: { id: row.city_id, name: row.city_name, tier: row.city_tier },
+      city: { id: row.city_id, name: row.city_name, state: row.city_state, tier: row.city_tier },
     };
   }
 

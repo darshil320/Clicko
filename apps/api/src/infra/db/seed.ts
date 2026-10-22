@@ -1,6 +1,7 @@
 import postgres from 'postgres';
 import { loadEnv } from '../../config/env';
 import { expandPincodes, LAUNCH_CITIES, type SeedCity } from './seeds/launch-cities';
+import { seedLaunchRuleset } from './seeds/launch-ruleset.seed';
 
 /** Idempotent reference-data seed. Inserts what is missing; never overwrites ops edits. */
 export async function seedLaunchCities(
@@ -38,6 +39,10 @@ async function main(): Promise<void> {
   try {
     const r = await seedLaunchCities(sql);
     process.stdout.write(`Seeded ${r.cities} cities; ${r.pincodes} new pincodes.\n`);
+    const p = await seedLaunchRuleset(sql);
+    process.stdout.write(
+      p.created ? 'Published pricing ruleset 2026.10.01.\n' : 'Pricing ruleset already present.\n',
+    );
   } finally {
     await sql.end();
   }

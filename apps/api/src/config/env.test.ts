@@ -13,7 +13,7 @@ const valid = {
 
 describe('loadEnv', () => {
   it('parses a complete environment and coerces PORT', () => {
-    expect(loadEnv(valid)).toEqual({ ...valid, PORT: 4000, TRUST_PROXY_HOPS: 0 });
+    expect(loadEnv(valid)).toEqual({ ...valid, PORT: 4000, TRUST_PROXY_HOPS: 0, CORS_ORIGINS: [] });
   });
 
   it('fails at boot when a required variable is missing', () => {
@@ -51,5 +51,13 @@ describe('loadEnv', () => {
 
   it('never trusts an unbounded proxy chain', () => {
     expect(() => loadEnv({ ...valid, TRUST_PROXY_HOPS: 'true' })).toThrow(/TRUST_PROXY_HOPS/);
+  });
+
+  it('parses an explicit list of CORS origins and rejects junk', () => {
+    expect(
+      loadEnv({ ...valid, CORS_ORIGINS: 'http://localhost:3001, https://admin.clickco.in' })
+        .CORS_ORIGINS,
+    ).toEqual(['http://localhost:3001', 'https://admin.clickco.in']);
+    expect(() => loadEnv({ ...valid, CORS_ORIGINS: '*' })).toThrow(/CORS_ORIGINS/);
   });
 });
