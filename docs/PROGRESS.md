@@ -2,6 +2,31 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-22 · Sprint 1 · session 1 — auth + serviceability
+**Shipped**
+- Phone OTP login: `/auth/otp/request`, `/auth/otp/verify`, `/auth/refresh`, `/auth/logout`, `GET /me`
+  - OTP: 6 digits, HMAC-hashed (bound to challenge + phone), 5-min TTL, 5 attempts, single use,
+    newest-code-only, purpose-checked; limits 30s cooldown, 5/h + 10/day per phone, 20/h per IP (/64 for IPv6),
+    enforced under advisory locks so parallel requests can't race
+  - Sessions: 15-min HS256 access JWT (`typ at+jwt`, exp/iat/sub required), 30-day opaque refresh
+    tokens stored hashed, rotated on use, 30s retry grace, reuse ⇒ revoke all; blocked users lose all sessions
+- Pincode gate `GET /serviceability/:pincode` + `POST /waitlist` (IST date bounds, 3 joins/phone/day)
+- Seed: Surat LIVE, Mumbai LIVE, Vadodara PILOT + pincode ranges (`db:seed`, idempotent)
+- Standard `{success,data,error}` envelope + global exception filter; Zod validation pipe; per-IP throttle
+- Security review done; all High/Medium findings fixed. DI made metadata-free (`@Inject` everywhere) and
+  guarded by `app.module.test.ts`; compiled build smoke-booted
+
+**Not yet verified**
+- DB integration + e2e suites (`app.e2e.test.ts`, migration tests) — written, NOT run: Docker daemon hung this session.
+  Run `TEST_DATABASE_URL=postgres://clickco:clickco_local_only@localhost:5433/clickco pnpm test` after restarting Docker.
+
+**Deferred (tracked)**
+- Absolute session lifetime + refresh-token family id → needs a schema addendum (S3, with payments auth work)
+- Throttler storage → Redis before running more than one API instance
+- Waitlist launch notifications must confirm consent/phone ownership before messaging (S11)
+- `drizzle-kit pull` deferred: repositories use typed postgres.js SQL; revisit when joins get heavy (S3)
+- DLT SMS adapter (blocked on PLAN B6); seeded pincodes need India Post verification + zones/centroids
+
 ## 2026-10-22 · Sprint 0 · session 2 — Sprint 0 closed
 **Shipped**
 - Review fixes (migration runner locking/ordering, 503 health, localhost-only Docker, test-DB guard)
