@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from './app.module';
+import { CLOCK } from './common/clock';
 import { seedLaunchCities } from './infra/db/seed';
 import { SMS_PORT, type SmsPort } from './modules/auth/sms/sms.port';
 import { createScratchDb, type ScratchDb, TEST_DATABASE_URL } from './test-support/scratch-db';
@@ -24,6 +25,11 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
   let app: INestApplication;
   let base: string;
   const sms = new CapturingSms();
+  // Controllable clock: lets a test step past OTP cooldowns without sleeping.
+  let now = new Date();
+  const advance = (ms: number) => {
+    now = new Date(now.getTime() + ms);
+  };
 
   const call = async (method: string, path: string, body?: unknown, token?: string) => {
     const res = await fetch(`${base}${path}`, {
@@ -63,6 +69,8 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(SMS_PORT)
       .useValue(sms)
+      .overrideProvider(CLOCK)
+      .useValue(() => now)
       .compile();
     app = moduleRef.createNestApplication();
     await app.listen(0);
@@ -85,6 +93,7 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
   });
 
   it('recognises a returning user', async () => {
+    advance(31_000); // past the resend cooldown from the first login
     const res = await login('+919876543210');
     expect(res.json.data.user.isNew).toBe(false);
   });
