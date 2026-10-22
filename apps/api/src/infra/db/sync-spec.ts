@@ -12,4 +12,8 @@ writeFileSync(
   join(MIGRATIONS, '0002_spec_audit_gaps.sql'),
   readFileSync(join(ROOT, 'docs/schema-addenda/0002-spec-audit-gaps.sql'), 'utf8'),
 );
-process.stdout.write('Migrations 0001–0002 regenerated from docs/.\n');
+writeFileSync(
+  join(MIGRATIONS, '0003_booking_consent.sql'),
+  readFileSync(join(ROOT, 'docs/schema-addenda/0003-booking-consent.sql'), 'utf8'),
+);
+process.stdout.write('Migrations 0001–0003 regenerated from docs/.\n');

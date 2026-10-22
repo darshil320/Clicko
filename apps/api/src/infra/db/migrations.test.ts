@@ -31,11 +31,18 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0003 is byte-identical to docs/schema-addenda/0003-booking-consent.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0003_booking_consent.sql')).toBe(
+      read('docs/schema-addenda/0003-booking-consent.sql'),
+    );
+  });
+
   it('lists migrations in numeric order with a sha256 checksum each', () => {
     const migrations = listMigrations();
     expect(migrations.map((m) => m.name)).toEqual([
       '0001_clickco_schema.sql',
       '0002_spec_audit_gaps.sql',
+      '0003_booking_consent.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

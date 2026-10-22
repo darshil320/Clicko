@@ -43,10 +43,7 @@ describe.runIf(ADMIN_URL)('migrations against a real Postgres + PostGIS', () => 
   it('records every migration exactly once and is idempotent on re-run', async () => {
     await runMigrations(sql);
     const rows = await sql`SELECT name FROM schema_migrations ORDER BY name`;
-    expect(rows.map((r) => r.name)).toEqual([
-      '0001_clickco_schema.sql',
-      '0002_spec_audit_gaps.sql',
-    ]);
+    expect(rows.map((r) => r.name)).toEqual(listMigrations().map((m) => m.name));
   });
 
   it('creates the double-booking exclusion constraint on assignments', async () => {
