@@ -7,6 +7,8 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
   const env = app.get<Env>(ENV);
+  // Exact hop count so req.ip is the client, not the load balancer (OTP per-IP limits depend on it).
+  app.getHttpAdapter().getInstance().set('trust proxy', env.TRUST_PROXY_HOPS);
   await app.listen(env.PORT);
 }
 

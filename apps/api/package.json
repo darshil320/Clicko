@@ -9,13 +9,16 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "db:migrate": "tsx src/infra/db/migrate.ts",
-    "db:sync-spec": "tsx src/infra/db/sync-spec.ts"
+    "db:sync-spec": "tsx src/infra/db/sync-spec.ts",
+    "db:seed": "tsx src/infra/db/seed.ts"
   },
   "dependencies": {
     "@clickco/contracts": "workspace:*",
     "@nestjs/common": "11.2.7",
     "@nestjs/core": "11.2.7",
     "@nestjs/platform-express": "11.2.7",
+    "@nestjs/throttler": "6.7.1",
+    "jose": "6.2.13",
     "postgres": "3.4.9",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
@@ -25,6 +28,7 @@
     "@clickco/config": "workspace:*",
     "@nestjs/cli": "11.0.24",
     "@nestjs/testing": "11.2.7",
+    "@types/express": "5.0.6",
     "tsx": "4.23.15"
   }
 }

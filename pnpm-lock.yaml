@@ -37,6 +37,12 @@ importers:
       "@nestjs/platform-express":
         specifier: 11.2.7
         version: 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)
+      "@nestjs/throttler":
+        specifier: 6.7.1
+        version: 6.7.1(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2)
+      jose:
+        specifier: 6.2.13
+        version: 6.2.13
       postgres:
         specifier: 3.4.9
         version: 3.4.9
@@ -59,6 +65,9 @@ importers:
       "@nestjs/testing":
         specifier: 11.2.7
         version: 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@nestjs/platform-express@11.2.7)
+      "@types/express":
+        specifier: 5.0.6
+        version: 5.0.6
       tsx:
         specifier: 4.23.15
         version: 4.23.15
@@ -1139,6 +1148,17 @@ packages:
       "@nestjs/platform-express":
         optional: true
 
+  "@nestjs/throttler@6.7.1":
+    resolution:
+      {
+        integrity: sha512-gAyY1AkU+cSK5DCjFOB43xax9oakameH4xZa9kAgqBqSBQZgmv3DZylLV8KyZNzOGhceL3kDVtby+CF8VAdmEA==,
+      }
+    engines: { node: ^20.19.0 || ^22.12.0 || >=24.0.0 }
+    peerDependencies:
+      "@nestjs/common": ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0 || ^12.0.0
+      "@nestjs/core": ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0 || ^12.0.0
+      reflect-metadata: ^0.1.13 || ^0.2.0
+
   "@next/env@16.4.2":
     resolution:
       {
@@ -1441,10 +1461,22 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  "@types/body-parser@1.19.6":
+    resolution:
+      {
+        integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==,
+      }
+
   "@types/chai@5.2.3":
     resolution:
       {
         integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==,
+      }
+
+  "@types/connect@3.4.38":
+    resolution:
+      {
+        integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==,
       }
 
   "@types/deep-eql@4.0.2":
@@ -1471,6 +1503,24 @@ packages:
         integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==,
       }
 
+  "@types/express-serve-static-core@5.1.3":
+    resolution:
+      {
+        integrity: sha512-dPfW8NFiOF4wOHc7+N/QSxlY9cfSsenewGbAz8C8U/MULPd/YZ27LvJUIlzaXie7e6Ove9YunJGgC9tbHD2cKw==,
+      }
+
+  "@types/express@5.0.6":
+    resolution:
+      {
+        integrity: sha512-sKYVuV7Sv9fbPIt/442koC7+IIwK5olP1KWeD88e/idgoJqDm3JV/YUiPwkoKK92ylff2MGxSz1CSjsXelx0YA==,
+      }
+
+  "@types/http-errors@2.0.5":
+    resolution:
+      {
+        integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==,
+      }
+
   "@types/json-schema@7.0.15":
     resolution:
       {
@@ -1481,6 +1531,18 @@ packages:
     resolution:
       {
         integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==,
+      }
+
+  "@types/qs@6.15.1":
+    resolution:
+      {
+        integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==,
+      }
+
+  "@types/range-parser@1.2.7":
+    resolution:
+      {
+        integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==,
       }
 
   "@types/react-dom@19.3.0":
@@ -1495,6 +1557,18 @@ packages:
     resolution:
       {
         integrity: sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==,
+      }
+
+  "@types/send@1.2.1":
+    resolution:
+      {
+        integrity: sha512-arsCikDvlU99zl1g69TcAB3mzZPpxgw0UQnaHeC1Nwb015xp8bknZv5rIfri9xTOcMuaVgvabfIRA7PSZVuZIQ==,
+      }
+
+  "@types/serve-static@2.2.0":
+    resolution:
+      {
+        integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==,
       }
 
   "@vitest/mocker@5.0.5":
@@ -2479,6 +2553,12 @@ packages:
         integrity: sha512-7vuh85V5cdDofPyxn58nrPjBktZo0u9x1g8WtjQol+jZDaE+fhN+cIvTj11GndBnMnyfrUOG1sZQxCdjKh+DKg==,
       }
     engines: { node: ">= 10.13.0" }
+
+  jose@6.2.13:
+    resolution:
+      {
+        integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==,
+      }
 
   js-tokens@4.0.0:
     resolution:
@@ -4319,6 +4399,12 @@ snapshots:
     optionalDependencies:
       "@nestjs/platform-express": 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)
 
+  "@nestjs/throttler@6.7.1(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2)":
+    dependencies:
+      "@nestjs/common": 11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      "@nestjs/core": 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.7)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      reflect-metadata: 0.2.2
+
   "@next/env@16.4.2": {}
 
   "@next/swc-darwin-arm64@16.4.2":
@@ -4425,10 +4511,19 @@ snapshots:
   "@turbo/windows-arm64@2.11.10":
     optional: true
 
+  "@types/body-parser@1.19.6":
+    dependencies:
+      "@types/connect": 3.4.38
+      "@types/node": 22.20.5
+
   "@types/chai@5.2.3":
     dependencies:
       "@types/deep-eql": 4.0.2
       assertion-error: 2.0.1
+
+  "@types/connect@3.4.38":
+    dependencies:
+      "@types/node": 22.20.5
 
   "@types/deep-eql@4.0.2": {}
 
@@ -4444,11 +4539,30 @@ snapshots:
 
   "@types/estree@1.0.9": {}
 
+  "@types/express-serve-static-core@5.1.3":
+    dependencies:
+      "@types/node": 22.20.5
+      "@types/qs": 6.15.1
+      "@types/range-parser": 1.2.7
+      "@types/send": 1.2.1
+
+  "@types/express@5.0.6":
+    dependencies:
+      "@types/body-parser": 1.19.6
+      "@types/express-serve-static-core": 5.1.3
+      "@types/serve-static": 2.2.0
+
+  "@types/http-errors@2.0.5": {}
+
   "@types/json-schema@7.0.15": {}
 
   "@types/node@22.20.5":
     dependencies:
       undici-types: 6.21.0
+
+  "@types/qs@6.15.1": {}
+
+  "@types/range-parser@1.2.7": {}
 
   "@types/react-dom@19.3.0(@types/react@19.3.0)":
     dependencies:
@@ -4457,6 +4571,15 @@ snapshots:
   "@types/react@19.3.0":
     dependencies:
       csstype: 3.2.3
+
+  "@types/send@1.2.1":
+    dependencies:
+      "@types/node": 22.20.5
+
+  "@types/serve-static@2.2.0":
+    dependencies:
+      "@types/http-errors": 2.0.5
+      "@types/node": 22.20.5
 
   "@vitest/mocker@5.0.5(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(terser@5.51.2)(tsx@4.23.15))":
     dependencies:
@@ -5046,6 +5169,8 @@ snapshots:
       "@types/node": 22.20.5
       merge-stream: 2.0.0
       supports-color: 8.1.1
+
+  jose@6.2.13: {}
 
   js-tokens@4.0.0: {}
 
