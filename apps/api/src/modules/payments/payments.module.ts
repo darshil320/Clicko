@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../common/clock';
 import { ENV, type Env } from '../../config/env';
+import { AuthHoldsService } from './auth-holds.service';
 import { PAYMENT_GATEWAY, type PaymentGatewayPort } from './gateways/payment-gateway.port';
 import { RazorpayGateway } from './gateways/razorpay.gateway';
 import { SandboxGateway } from './gateways/sandbox.gateway';
 import { InvoicesService } from './invoices.service';
 import { LedgerService } from './ledger/ledger.service';
 import { PaymentsService } from './payments.service';
+import { PaymentsSubscribers } from './payments.subscribers';
 import { InvoicesRepository } from './repositories/invoices.repository';
 import { PaymentsRepository } from './repositories/payments.repository';
 import { WebhookEventsRepository } from './repositories/webhook-events.repository';
@@ -39,7 +41,9 @@ function gatewayFor(env: Env, clock: Clock): PaymentGatewayPort {
     LedgerService,
     InvoicesService,
     PaymentsService,
+    AuthHoldsService,
+    PaymentsSubscribers,
   ],
-  exports: [PaymentsService, PAYMENT_GATEWAY],
+  exports: [PaymentsService, AuthHoldsService, PAYMENT_GATEWAY],
 })
 export class PaymentsModule {}

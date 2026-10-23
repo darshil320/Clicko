@@ -50,7 +50,11 @@ export class TokenService {
     return this.pair(subject, now, refresh.token, refresh.row.expiresAt);
   }
 
-  async refresh(refreshToken: string): Promise<TokenPair & { subject: Subject }> {
+  /** `expectedKind` scopes the route: another kind's token is SESSION_INVALID and not consumed. */
+  async refresh(
+    refreshToken: string,
+    expectedKind: SubjectKind,
+  ): Promise<TokenPair & { subject: Subject }> {
     const now = this.clock();
     const next = this.newRefresh(now, null);
     const result = await this.repo.rotate(
@@ -58,6 +62,7 @@ export class TokenService {
       now,
       next.row,
       TOKEN_POLICY.rotationGraceMs,
+      expectedKind,
     );
     if (result.outcome !== 'ROTATED') throw new UnauthorizedException(SESSION_INVALID);
     const subject: Subject = { kind: result.subjectKind, id: result.subjectId };

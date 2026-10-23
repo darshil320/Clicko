@@ -1,8 +1,8 @@
 import { HttpException, Logger } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { OTP_POLICY, OtpService } from '../otp.service';
+import type { OtpDeliveryQueue, OtpDeliveryRequest } from '../otp-delivery';
 import type { OtpChallengeRow, OtpRepository } from '../repositories/otp.repository';
-import type { SmsPort } from '../sms/sms.port';
 
 const PHONE = '+919876543210';
 const PEPPER = 'p'.repeat(32);
@@ -10,14 +10,18 @@ const PEPPER = 'p'.repeat(32);
 class FakeOtpRepository implements OtpRepository {
   rows: OtpChallengeRow[] = [];
 
-  async countForPhoneSince(phone: string, since: Date) {
-    return this.rows.filter((r) => r.phone === phone && r.createdAt >= since).length;
+  async countForPhoneSince(phone: string, purpose: string, since: Date) {
+    return this.rows.filter(
+      (r) => r.phone === phone && r.purpose === purpose && r.createdAt >= since,
+    ).length;
   }
   async countForIpSince(ip: string, since: Date) {
     return this.rows.filter((r) => r.ip === ip && r.createdAt >= since).length;
   }
-  async latestCreatedAt(phone: string) {
-    const mine = this.rows.filter((r) => r.phone === phone).map((r) => r.createdAt.getTime());
+  async latestCreatedAt(phone: string, purpose: string) {
+    const mine = this.rows
+      .filter((r) => r.phone === phone && r.purpose === purpose)
+      .map((r) => r.createdAt.getTime());
     return mine.length ? new Date(Math.max(...mine)) : null;
   }
   async insert(row: OtpChallengeRow) {
@@ -59,10 +63,14 @@ class FakeOtpRepository implements OtpRepository {
   }
 }
 
-class CapturingSms implements SmsPort {
-  sent: Array<{ phone: string; code: string }> = [];
-  async sendOtp(phone: string, code: string) {
-    this.sent = [...this.sent, { phone, code }];
+/** Records what would be queued; `sent` holds the codes that would reach a phone. */
+class CapturingDelivery implements OtpDeliveryQueue {
+  queued: OtpDeliveryRequest[] = [];
+  get sent() {
+    return this.queued.filter((q) => q.deliver).map((q) => ({ phone: q.phone, code: q.code }));
+  }
+  async enqueue(request: OtpDeliveryRequest) {
+    this.queued = [...this.queued, request];
   }
 }
 
@@ -79,14 +87,14 @@ const statusOf = async (p: Promise<unknown>) => {
 describe('OtpService', () => {
   let now: Date;
   let repo: FakeOtpRepository;
-  let sms: CapturingSms;
+  let sms: CapturingDelivery;
   let service: OtpService;
 
   beforeEach(() => {
     Logger.overrideLogger(false);
     now = new Date('2026-11-02T10:00:00.000Z');
     repo = new FakeOtpRepository();
-    sms = new CapturingSms();
+    sms = new CapturingDelivery();
     service = new OtpService(repo, sms, () => now, PEPPER);
   });
 
@@ -156,15 +164,33 @@ describe('OtpService', () => {
     expect(await statusOf(service.request('+919111111111', 'LOGIN', '10.9.9.9'))).toBe(429);
   });
 
-  it('answers 503 when the SMS gateway fails, and the attempt still counts toward limits', async () => {
+  it('answers 200 without waiting for the SMS gateway: sending is a queued job (ADR-0012 D8)', async () => {
+    expect(await statusOf(service.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(200);
+    expect(sms.queued).toHaveLength(1);
+  });
+
+  it('answers 503 only when the job queue itself is down, and the attempt still counts', async () => {
     const failing = new OtpService(
       repo,
-      { sendOtp: async () => Promise.reject(new Error('gateway down')) },
+      { enqueue: async () => Promise.reject(new Error('redis down')) },
       () => now,
       PEPPER,
     );
     expect(await statusOf(failing.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(503);
     expect(await statusOf(failing.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(429);
+  });
+
+  it('a number we will not reveal gets the same queued job and response, but no code is sent', async () => {
+    const res = await service.request(PHONE, 'PRO_LOGIN', '10.0.0.1', false);
+    expect(res).toMatchObject({ resendAfterSeconds: OTP_POLICY.resendCooldownMs / 1000 });
+    expect(sms.queued).toHaveLength(1);
+    expect(sms.sent).toEqual([]);
+  });
+
+  it('counts limits per purpose: a client login does not use up the photographer cooldown', async () => {
+    await service.request(PHONE, 'LOGIN', '10.0.0.1');
+    expect(await statusOf(service.request(PHONE, 'PRO_LOGIN', '10.0.0.1'))).toBe(200);
+    expect(await statusOf(service.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(429);
   });
 
   it('checks limits and inserts under the per-phone lock, so parallel requests cannot race', async () => {

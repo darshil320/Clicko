@@ -11,9 +11,13 @@ import type postgres from 'postgres';
 import { SQL } from '../../infra/db/db.module';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
 import {
+  type AssignmentBookingDetail,
   type BookingRow,
   type BookingView,
   type CreateQuotedInput,
+  type Db,
+  type DispatchFacts,
+  type OfferBookingSummary,
   type PromoUsage,
   type SnapshotTotals,
   SYSTEM_ACTOR,
@@ -21,6 +25,7 @@ import {
   type TransitionInput,
   type Tx,
 } from './bookings.types';
+import { BookingDispatchRepository } from './repositories/booking-dispatch.repository';
 import { BookingReadsRepository } from './repositories/booking-reads.repository';
 import { BookingsRepository, type NewBooking } from './repositories/bookings.repository';
 import { toAddonRows, toSnapshotRow } from './snapshot-row';
@@ -72,6 +77,7 @@ export class BookingsService {
     @Inject(BookingsRepository) private readonly writes: BookingsRepository,
     @Inject(BookingReadsRepository) private readonly reads: BookingReadsRepository,
     @Inject(SQL) private readonly sql: postgres.Sql,
+    @Inject(BookingDispatchRepository) private readonly dispatchReads: BookingDispatchRepository,
   ) {}
 
   /** — → DRAFT → QUOTED with snapshot sequence 1 and its add-ons, in the caller's transaction. */
@@ -169,6 +175,26 @@ export class BookingsService {
     return this.reads.promoUsage(tx, userId, promoCode, now);
   }
 
+  /** Dispatch inputs for one booking, in the caller's transaction. Throws 404 when absent. */
+  async dispatchFacts(db: Db, bookingId: string): Promise<DispatchFacts> {
+    const facts = await this.dispatchReads.facts(db, bookingId);
+    if (!facts) throw new NotFoundException(NOT_FOUND);
+    return facts;
+  }
+
+  /** DISPATCHING bookings starting before `cutoff` (the dispatch deadline sweeper). */
+  dispatchingStartingBefore(cutoff: Date, limit: number): Promise<string[]> {
+    return this.dispatchReads.dispatchingStartingBefore(this.sql, cutoff, limit);
+  }
+
+  offerSummaries(bookingIds: readonly string[]): Promise<OfferBookingSummary[]> {
+    return this.dispatchReads.offerSummaries(this.sql, bookingIds);
+  }
+
+  assignmentDetails(bookingIds: readonly string[]): Promise<AssignmentBookingDetail[]> {
+    return this.dispatchReads.assignmentDetails(this.sql, bookingIds);
+  }
+
   /** A booking as seen inside the caller's transaction (sees its own uncommitted changes). */
   async view(tx: Tx, bookingId: string): Promise<BookingView> {
     const view = await this.reads.byId(tx, bookingId);
@@ -213,7 +239,7 @@ export class BookingsService {
       occurredAt: t.occurredAt,
     });
     await appendDomainEvent(tx, {
-      eventType: eventTypeFor(t.to),
+      eventType: eventTypeFor(t.to, from),
       aggregateKind: 'booking',
       aggregateId: t.bookingId,
       occurredAt: t.occurredAt,

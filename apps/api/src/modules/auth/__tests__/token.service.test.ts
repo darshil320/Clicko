@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type {
   RefreshTokenRepository,
   RefreshTokenRow,
+  SubjectKind,
   UnboundRefreshToken,
 } from '../repositories/refresh-token.repository';
 import { TOKEN_POLICY, TokenService } from '../token.service';
@@ -15,9 +16,16 @@ class FakeRefreshRepo implements RefreshTokenRepository {
   async insert(row: RefreshTokenRow) {
     this.rows = [...this.rows, row];
   }
-  async rotate(tokenHash: string, now: Date, replacement: UnboundRefreshToken) {
+  async rotate(
+    tokenHash: string,
+    now: Date,
+    replacement: UnboundRefreshToken,
+    _graceMs: number,
+    expectedKind: SubjectKind,
+  ) {
     const row = this.rows.find((r) => r.tokenHash === tokenHash);
     if (!row) return { outcome: 'NOT_FOUND' as const };
+    if (row.subjectKind !== expectedKind) return { outcome: 'NOT_FOUND' as const };
     if (row.revokedAt && now.getTime() - row.revokedAt.getTime() <= TOKEN_POLICY.rotationGraceMs) {
       return { outcome: 'GRACE' as const };
     }
@@ -104,7 +112,7 @@ describe('TokenService', () => {
 
   it('rotates a refresh token: the new one works, the old one does not', async () => {
     const first = await tokens.issue({ kind: 'USER', id: USER }, null);
-    const second = await tokens.refresh(first.refreshToken);
+    const second = await tokens.refresh(first.refreshToken, 'USER');
     expect(second.refreshToken).not.toBe(first.refreshToken);
     await expect(tokens.verifyAccess(second.accessToken)).resolves.toEqual({
       kind: 'USER',
@@ -114,35 +122,42 @@ describe('TokenService', () => {
 
   it('treats reuse of a rotated refresh token as theft and revokes every session', async () => {
     const first = await tokens.issue({ kind: 'USER', id: USER }, null);
-    const second = await tokens.refresh(first.refreshToken);
+    const second = await tokens.refresh(first.refreshToken, 'USER');
     now = new Date(now.getTime() + TOKEN_POLICY.rotationGraceMs + 1);
-    expect(await statusOf(tokens.refresh(first.refreshToken))).toBe(401);
-    expect(await statusOf(tokens.refresh(second.refreshToken))).toBe(401);
+    expect(await statusOf(tokens.refresh(first.refreshToken, 'USER'))).toBe(401);
+    expect(await statusOf(tokens.refresh(second.refreshToken, 'USER'))).toBe(401);
+  });
+
+  it('refuses a session of another kind on a scoped route without consuming it', async () => {
+    const pro = await tokens.issue({ kind: 'PHOTOGRAPHER', id: USER }, null);
+    expect(await statusOf(tokens.refresh(pro.refreshToken, 'USER'))).toBe(401);
+    const rotated = await tokens.refresh(pro.refreshToken, 'PHOTOGRAPHER');
+    expect(rotated.subject).toEqual({ kind: 'PHOTOGRAPHER', id: USER });
   });
 
   it('rejects an expired or unknown refresh token', async () => {
     const pair = await tokens.issue({ kind: 'USER', id: USER }, null);
-    expect(await statusOf(tokens.refresh('A'.repeat(43)))).toBe(401);
+    expect(await statusOf(tokens.refresh('A'.repeat(43), 'USER'))).toBe(401);
     now = new Date(now.getTime() + TOKEN_POLICY.refreshTtlMs + 1);
-    expect(await statusOf(tokens.refresh(pair.refreshToken))).toBe(401);
+    expect(await statusOf(tokens.refresh(pair.refreshToken, 'USER'))).toBe(401);
   });
 
   it('logout revokes the refresh token', async () => {
     const pair = await tokens.issue({ kind: 'USER', id: USER }, null);
     await tokens.revoke(pair.refreshToken);
-    expect(await statusOf(tokens.refresh(pair.refreshToken))).toBe(401);
+    expect(await statusOf(tokens.refresh(pair.refreshToken, 'USER'))).toBe(401);
   });
 
   it('refuses a duplicate refresh inside the grace window without logging the user out everywhere', async () => {
     const first = await tokens.issue({ kind: 'USER', id: USER }, null);
-    const second = await tokens.refresh(first.refreshToken);
-    expect(await statusOf(tokens.refresh(first.refreshToken))).toBe(401);
-    expect(await statusOf(tokens.refresh(second.refreshToken))).toBe(200);
+    const second = await tokens.refresh(first.refreshToken, 'USER');
+    expect(await statusOf(tokens.refresh(first.refreshToken, 'USER'))).toBe(401);
+    expect(await statusOf(tokens.refresh(second.refreshToken, 'USER'))).toBe(200);
   });
 
   it('keeps the device id across rotations', async () => {
     const first = await tokens.issue({ kind: 'USER', id: USER }, 'pixel-7');
-    await tokens.refresh(first.refreshToken);
+    await tokens.refresh(first.refreshToken, 'USER');
     expect(repo.rows.map((r) => r.deviceId)).toEqual(['pixel-7', 'pixel-7']);
   });
 
@@ -150,8 +165,8 @@ describe('TokenService', () => {
     const a = await tokens.issue({ kind: 'USER', id: USER }, 'a');
     const b = await tokens.issue({ kind: 'USER', id: USER }, 'b');
     await tokens.revokeAll({ kind: 'USER', id: USER });
-    expect(await statusOf(tokens.refresh(a.refreshToken))).toBe(401);
-    expect(await statusOf(tokens.refresh(b.refreshToken))).toBe(401);
+    expect(await statusOf(tokens.refresh(a.refreshToken, 'USER'))).toBe(401);
+    expect(await statusOf(tokens.refresh(b.refreshToken, 'USER'))).toBe(401);
   });
 
   it('rejects a token without an expiry or with the wrong token type', async () => {

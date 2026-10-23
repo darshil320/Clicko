@@ -3,10 +3,12 @@ import { fromPaiseBigint } from '@clickco/utils';
 import type { Clock } from '../../../common/clock';
 import { hmacSha256Hex, signatureMatches } from './hmac';
 import type {
+  CaptureResult,
   CreateOrderInput,
   GatewayEvent,
   GatewayName,
   PaymentGatewayPort,
+  ReleaseResult,
 } from './payment-gateway.port';
 import { parseRazorpayWebhook } from './razorpay-webhook.parser';
 
@@ -49,7 +51,16 @@ export class SandboxGateway implements PaymentGatewayPort {
     return parseRazorpayWebhook(rawBody);
   }
 
-  async capture(_providerPaymentId: string, _amountPaise: bigint): Promise<void> {}
+  async capture(_providerPaymentId: string, _amountPaise: bigint): Promise<CaptureResult> {
+    return 'CAPTURED';
+  }
+
+  async releaseAuthorization(
+    _providerPaymentId: string,
+    _amountPaise: bigint,
+  ): Promise<ReleaseResult> {
+    return 'RELEASED';
+  }
 
   buildWebhook(input: {
     readonly providerOrderId: string;

@@ -9,4 +9,5 @@
 export { toBreakdownJson } from './breakdown';
 export { computeQuote, priceExtension, resolveEmergencyBand } from './compute-quote';
 export * from './launch-ruleset';
+export * from './payout';
 export * from './types';

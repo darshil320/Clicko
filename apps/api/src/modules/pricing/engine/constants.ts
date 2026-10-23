@@ -16,3 +16,12 @@ export const METRES_PER_KM = 1_000n;
 export const QUOTE_TTL_MS = 15 * 60_000;
 
 export const HOUR_MS = 3_600_000;
+
+/**
+ * ADR-0012 D1: an unfilled booking is cancelled this long before its start when the band's
+ * emergency rule leaves auto_refund_minutes_before unset.
+ */
+export const DEFAULT_AUTO_REFUND_MINUTES = 90;
+
+/** ADR-0012 D2: a quote must leave at least this long between booking and the auto-cancel point. */
+export const MIN_FILL_WINDOW_MINUTES = 30;

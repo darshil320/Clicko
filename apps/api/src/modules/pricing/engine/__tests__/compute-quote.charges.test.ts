@@ -24,10 +24,10 @@ import {
   withBaseRate,
 } from './fixtures';
 
-/** Diwali Saturday 23:00 IST booked 1 h ahead: HOURS_UNDER_3 × Diwali × night × weekend all apply. */
+/** Diwali Saturday 23:00 IST booked 2.5 h ahead (the shortest bookable lead, ADR-0012 D2): HOURS_UNDER_3 × Diwali × night × weekend all apply. */
 const everyFactor = () => {
   const scheduledStart = ist('2026-11-07T23:00');
-  return { scheduledStart, now: hoursBefore(scheduledStart, 1) };
+  return { scheduledStart, now: hoursBefore(scheduledStart, 2.5) };
 };
 
 describe('Travel', () => {
@@ -343,7 +343,7 @@ describe('Addons', () => {
 
   it('does not multiply addons by the emergency multiplier', () => {
     const request = quoteRequest({
-      now: hoursBefore(quoteRequest().scheduledStart, 1),
+      now: hoursBefore(quoteRequest().scheduledStart, 2.5),
       addons: [{ code: 'DRONE', quantity: 1 }],
     });
 

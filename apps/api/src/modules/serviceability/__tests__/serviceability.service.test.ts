@@ -60,6 +60,19 @@ class FakeRepo implements ServiceabilityRepository {
     const all = [...this.areas.values()].map((a) => a.city);
     return new Map(all.filter((c) => cityIds.includes(c.id)).map((c) => [c.id, c.name]));
   }
+  async venuePoints(pincode: string) {
+    const area = this.areas.get(pincode);
+    if (!area) return null;
+    return { centroid: pincode === '395007' ? 'CENTROID-HEX' : null, cityCentre: 'CENTRE-HEX' };
+  }
+  async areaLabels(pincodes: readonly string[]) {
+    return new Map(
+      pincodes
+        .map((p) => this.areas.get(p))
+        .filter((a): a is AreaRecord => a !== undefined)
+        .map((a) => [a.pincode, { areaName: a.areaName, cityName: a.city.name }]),
+    );
+  }
 }
 
 const statusOf = async (p: Promise<unknown>) => {
@@ -198,6 +211,17 @@ describe('ServiceabilityService.join', () => {
     expect(await service.cityNames([SURAT.id, 'unknown'])).toEqual(
       new Map([[SURAT.id, SURAT.name]]),
     );
+  });
+
+  it('gives dispatch the pincode centroid, else the city centre, as an opaque point', async () => {
+    expect(await service.venueFallbackPoint('395007')).toBe('CENTROID-HEX');
+    expect(await service.venueFallbackPoint('394270')).toBe('CENTRE-HEX');
+    expect(await service.venueFallbackPoint('110001')).toBeNull();
+  });
+
+  it('labels pincodes with area and city names for photographer offers', async () => {
+    const labels = await service.areaLabels(['395007', '110001']);
+    expect(labels).toEqual(new Map([['395007', { areaName: 'Vesu', cityName: SURAT.name }]]));
   });
 
   it('refuses to resolve a waitlist or unknown pincode for pricing', async () => {

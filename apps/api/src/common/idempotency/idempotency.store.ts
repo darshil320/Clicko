@@ -10,12 +10,14 @@ export const IDEMPOTENCY_POLICY = {
 } as const;
 
 export interface ClaimRequest {
-  /** `<subject id>:<Idempotency-Key header>` */
+  /** `<subject kind>:<subject id>:<Idempotency-Key header>` */
   readonly key: string;
   /** `<METHOD> <route pattern>` */
   readonly scope: string;
   readonly requestHash: string;
   readonly now: Date;
+  /** Overrides IDEMPOTENCY_POLICY.ttlMs for this route (@Idempotent({ ttlMs })). */
+  readonly ttlMs?: number;
 }
 
 export type ClaimResult =
@@ -46,7 +48,7 @@ export class IdempotencyStore {
   constructor(@Inject(SQL) private readonly sql: postgres.Sql) {}
 
   async claim(c: ClaimRequest): Promise<ClaimResult> {
-    const expiresAt = new Date(c.now.getTime() + IDEMPOTENCY_POLICY.ttlMs);
+    const expiresAt = new Date(c.now.getTime() + (c.ttlMs ?? IDEMPOTENCY_POLICY.ttlMs));
     const inserted = await this.sql`
       INSERT INTO idempotency_keys (key, scope, request_hash, locked_at, expires_at, created_at)
       VALUES (${c.key}, ${c.scope}, ${c.requestHash}, ${c.now}, ${expiresAt}, ${c.now})

@@ -145,6 +145,88 @@ describe('RazorpayGateway HTTP calls', () => {
   });
 });
 
+describe('RazorpayGateway capture and release (ADR-0012 D4, inert without keys)', () => {
+  const creds = { keyId: 'rzp_test_x', keySecret: 'shh', webhookSecret: SECRET };
+  type Reply = { readonly status: number; readonly json: unknown } | 'NETWORK';
+  const replies = (...r: Reply[]) => {
+    const queue = [...r];
+    return vi.fn(async () => {
+      const next = queue.shift() ?? { status: 500, json: {} };
+      if (next === 'NETWORK') throw new TypeError('fetch failed');
+      return new Response(JSON.stringify(next.json), { status: next.status });
+    });
+  };
+  const call = (fn: ReturnType<typeof replies>, i: number) =>
+    fn.mock.calls[i] as unknown as [string, RequestInit];
+  const payment = (status: string) => ({
+    status: 200,
+    json: { id: 'pay_1', status, amount: 845411 },
+  });
+  const gw = (fetchFn: ReturnType<typeof replies>) => new RazorpayGateway(creds, fetchFn);
+
+  it('captures with integer paise and INR', async () => {
+    const fetchFn = replies({ status: 200, json: { id: 'pay_1', status: 'captured' } });
+    expect(await gw(fetchFn).capture('pay_1', 845_411n)).toBe('CAPTURED');
+    const [url, init] = call(fetchFn, 0);
+    expect(url).toBe('https://api.razorpay.com/v1/payments/pay_1/capture');
+    expect(JSON.parse(String(init.body))).toEqual({ amount: 845411, currency: 'INR' });
+  });
+
+  it('after any error, asks the gateway: already captured is CAPTURED', async () => {
+    const fetchFn = replies({ status: 400, json: { error: {} } }, payment('captured'));
+    expect(await gw(fetchFn).capture('pay_1', 845_411n)).toBe('CAPTURED');
+    expect(call(fetchFn, 1)).toEqual([
+      'https://api.razorpay.com/v1/payments/pay_1',
+      expect.objectContaining({ method: 'GET' }),
+    ]);
+  });
+
+  it('is DECLINED only when the authorisation is gone (refunded or failed at the gateway)', async () => {
+    expect(
+      await gw(replies({ status: 400, json: {} }, payment('refunded'))).capture('pay_1', 1n),
+    ).toBe('DECLINED');
+    expect(await gw(replies('NETWORK', payment('failed'))).capture('pay_1', 1n)).toBe('DECLINED');
+  });
+
+  it('is UNKNOWN (retry later) while the payment is still authorised or the gateway cannot be read', async () => {
+    expect(
+      await gw(replies({ status: 502, json: {} }, payment('authorized'))).capture('pay_1', 1n),
+    ).toBe('UNKNOWN');
+    expect(
+      await gw(replies({ status: 400, json: {} }, payment('authorized'))).capture('pay_1', 1n),
+    ).toBe('UNKNOWN');
+    expect(await gw(replies('NETWORK', 'NETWORK')).capture('pay_1', 1n)).toBe('UNKNOWN');
+  });
+
+  it('releases an authorisation by refunding the full amount, after confirming it is uncaptured', async () => {
+    const fetchFn = replies(payment('authorized'), { status: 200, json: { id: 'rfnd_1' } });
+    expect(await gw(fetchFn).releaseAuthorization('pay_9', 50_000n)).toBe('RELEASED');
+    expect(call(fetchFn, 0)[1]).toMatchObject({ method: 'GET' });
+    const [url, init] = call(fetchFn, 1);
+    expect(url).toBe('https://api.razorpay.com/v1/payments/pay_9/refund');
+    expect(JSON.parse(String(init.body))).toEqual({ amount: 50000 });
+  });
+
+  it('never refunds a payment the gateway already captured, and reports it', async () => {
+    const fetchFn = replies(payment('captured'));
+    expect(await gw(fetchFn).releaseAuthorization('pay_9', 50_000n)).toBe('CAPTURED');
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats an already refunded or failed payment as released, and an unreadable one as UNKNOWN', async () => {
+    expect(await gw(replies(payment('refunded'))).releaseAuthorization('pay_9', 1n)).toBe(
+      'RELEASED',
+    );
+    expect(await gw(replies('NETWORK')).releaseAuthorization('pay_9', 1n)).toBe('UNKNOWN');
+    const failedRefund = replies(
+      payment('authorized'),
+      { status: 500, json: {} },
+      payment('authorized'),
+    );
+    expect(await gw(failedRefund).releaseAuthorization('pay_9', 1n)).toBe('UNKNOWN');
+  });
+});
+
 describe('SandboxGateway', () => {
   it('creates fake orders and signs the webhooks it builds like Razorpay does', async () => {
     const gw = new SandboxGateway(SECRET, () => new Date('2026-11-10T06:30:00Z'));

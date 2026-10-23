@@ -16,11 +16,44 @@ describe('loadEnv', () => {
     expect(loadEnv(valid)).toEqual({
       ...valid,
       PORT: 4000,
+      QUEUE_PREFIX: 'clickco',
+      QUEUE_WORKERS: 'on',
       TRUST_PROXY_HOPS: 0,
       CORS_ORIGINS: [],
       PAYMENT_GATEWAY: 'sandbox',
       SANDBOX_WEBHOOK_SECRET: 'clickco-sandbox-webhook-secret-dev-only',
     });
+  });
+
+  it('accepts a queue namespace; workers can be switched off in test only', () => {
+    const env = loadEnv({
+      ...valid,
+      NODE_ENV: 'test',
+      QUEUE_PREFIX: 'clickco-test-1a2b',
+      QUEUE_WORKERS: 'off',
+    });
+    expect(env).toMatchObject({ QUEUE_PREFIX: 'clickco-test-1a2b', QUEUE_WORKERS: 'off' });
+    expect(() => loadEnv({ ...valid, QUEUE_PREFIX: 'bad:prefix' })).toThrow(/QUEUE_PREFIX/);
+    expect(() => loadEnv({ ...valid, QUEUE_WORKERS: 'off' })).toThrow(/QUEUE_WORKERS/);
+  });
+
+  it('staging and production need TLS Redis and an explicit queue prefix', () => {
+    const deployed = {
+      ...valid,
+      NODE_ENV: 'production',
+      SMS_ADAPTER: 'dlt',
+      PAYMENT_GATEWAY: 'razorpay',
+      RAZORPAY_KEY_ID: 'rzp_live_x',
+      RAZORPAY_KEY_SECRET: 'secret',
+      RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
+    };
+    expect(() => loadEnv({ ...deployed, QUEUE_PREFIX: 'clickco-prod' })).toThrow(/REDIS_URL/);
+    expect(() => loadEnv({ ...deployed, REDIS_URL: 'rediss://cache:6380' })).toThrow(
+      /QUEUE_PREFIX/,
+    );
+    expect(
+      loadEnv({ ...deployed, REDIS_URL: 'rediss://cache:6380', QUEUE_PREFIX: 'clickco-prod' }),
+    ).toMatchObject({ QUEUE_PREFIX: 'clickco-prod' });
   });
 
   it('fails at boot when a required variable is missing', () => {
@@ -87,7 +120,13 @@ describe('loadEnv', () => {
     });
 
     it('accepts razorpay in production with all three keys', () => {
-      const env = loadEnv({ ...live, NODE_ENV: 'production', ...razorpay });
+      const env = loadEnv({
+        ...live,
+        NODE_ENV: 'production',
+        REDIS_URL: 'rediss://cache.internal:6380',
+        QUEUE_PREFIX: 'clickco-prod',
+        ...razorpay,
+      });
       expect(env.PAYMENT_GATEWAY).toBe('razorpay');
     });
 

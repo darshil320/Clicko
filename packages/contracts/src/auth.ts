@@ -1,12 +1,17 @@
 import { z } from 'zod';
 import { IsoDateTime, PhoneE164, Uuid } from './common.js';
 
-export const OtpPurpose = z.enum(['LOGIN']);
+/** LOGIN = client app; PRO_LOGIN = photographer app (ADR-0010), issued only via /pro/auth. */
+export const OtpPurpose = z.enum(['LOGIN', 'PRO_LOGIN']);
 export type OtpPurpose = z.infer<typeof OtpPurpose>;
 
 export const OtpCode = z.string().regex(/^\d{6}$/, 'must be 6 digits');
 
-export const RequestOtpBody = z.object({ phone: PhoneE164, purpose: OtpPurpose.default('LOGIN') });
+/** POST /auth/otp/request — client logins only; photographers use /pro/auth/otp/request. */
+export const RequestOtpBody = z.object({
+  phone: PhoneE164,
+  purpose: z.literal('LOGIN').default('LOGIN'),
+});
 export type RequestOtpBody = z.infer<typeof RequestOtpBody>;
 
 export const RequestOtpResponse = z.object({

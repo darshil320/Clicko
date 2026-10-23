@@ -140,7 +140,8 @@ describe('doc 05 §7 worked example (Professional · Food · Surat · 2 h · wed
       emergencyBand: 'NONE',
       isGuaranteed: true,
       captureOnAcceptOnly: false,
-      autoRefundMinutesBefore: null,
+      // ADR-0012 D1: every band auto-cancels an unfilled booking 90 min before the start.
+      autoRefundMinutesBefore: 90,
     });
   });
 });
@@ -429,7 +430,8 @@ describe('Emergency boundaries', () => {
     { band: 'NEXT_DAY', leadHours: 30, bps: 12000, base: 1_020_000n },
     { band: 'SAME_DAY', leadHours: 12, bps: 14000, base: 1_190_000n },
     { band: 'HOURS_3_8', leadHours: 5, bps: 18000, base: 1_530_000n },
-    { band: 'HOURS_UNDER_3', leadHours: 1, bps: 22000, base: 1_870_000n },
+    // 2.5 h: the shortest bookable lead is 90 + 30 min (ADR-0012 D2).
+    { band: 'HOURS_UNDER_3', leadHours: 2.5, bps: 22000, base: 1_870_000n },
   ];
 
   it.each(bands)(
@@ -459,32 +461,32 @@ describe('Emergency boundaries', () => {
       leadHours: 168,
       isGuaranteed: true,
       captureOnAcceptOnly: false,
-      autoRefundMinutesBefore: null,
+      autoRefundMinutesBefore: 90,
     },
     {
       band: 'NEXT_DAY',
       leadHours: 30,
       isGuaranteed: true,
       captureOnAcceptOnly: false,
-      autoRefundMinutesBefore: null,
+      autoRefundMinutesBefore: 90,
     },
     {
       band: 'SAME_DAY',
       leadHours: 12,
       isGuaranteed: true,
       captureOnAcceptOnly: false,
-      autoRefundMinutesBefore: null,
+      autoRefundMinutesBefore: 90,
     },
     {
       band: 'HOURS_3_8',
       leadHours: 5,
-      isGuaranteed: true,
+      isGuaranteed: false,
       captureOnAcceptOnly: false,
-      autoRefundMinutesBefore: null,
+      autoRefundMinutesBefore: 90,
     },
     {
       band: 'HOURS_UNDER_3',
-      leadHours: 1,
+      leadHours: 2.5,
       isGuaranteed: false,
       captureOnAcceptOnly: true,
       autoRefundMinutesBefore: 90,
@@ -518,7 +520,7 @@ describe('Emergency boundaries', () => {
     // 1530000 + 275400 = 1805400, all upfront
     { band: 'HOURS_3_8', leadHours: 5, advance: 1_805_400n, balance: 0n },
     // 1870000 + 336600 = 2206600, all authorised upfront
-    { band: 'HOURS_UNDER_3', leadHours: 1, advance: 2_206_600n, balance: 0n },
+    { band: 'HOURS_UNDER_3', leadHours: 2.5, advance: 2_206_600n, balance: 0n },
   ];
 
   it.each(splits)(

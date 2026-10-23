@@ -49,8 +49,9 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(200)
   async refresh(@Body(new ZodValidationPipe(RefreshBody)) body: RefreshBody) {
-    const { subject, ...pair } = await this.tokens.refresh(body.refreshToken);
-    const user = subject.kind === 'USER' ? await this.users.findById(subject.id) : null;
+    // USER only: a photographer session refreshes at /pro/auth/refresh and is not consumed here.
+    const { subject, ...pair } = await this.tokens.refresh(body.refreshToken, 'USER');
+    const user = await this.users.findById(subject.id);
     if (!user || user.isBlocked) {
       // A blocked account loses every session, not just this one.
       await this.tokens.revokeAll(subject);

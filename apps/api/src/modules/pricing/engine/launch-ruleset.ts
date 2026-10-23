@@ -197,34 +197,36 @@ export function launchRuleset(id: string, cityIds: LaunchCityIds): Ruleset {
       tier: null,
       multiplierBps: c.upliftBps,
     })),
+    // ADR-0012 D1: every band auto-cancels an unfilled booking 90 min before the start; SA-14 /
+    // T&C §3.7: under 8 h is best effort, so HOURS_3_8 is not guaranteed.
     emergency: [
       {
         band: 'NONE',
         multiplierBps: 10000,
         captureOnAcceptOnly: false,
         isGuaranteed: true,
-        autoRefundMinutesBefore: null,
+        autoRefundMinutesBefore: 90,
       },
       {
         band: 'NEXT_DAY',
         multiplierBps: 12000,
         captureOnAcceptOnly: false,
         isGuaranteed: true,
-        autoRefundMinutesBefore: null,
+        autoRefundMinutesBefore: 90,
       },
       {
         band: 'SAME_DAY',
         multiplierBps: 14000,
         captureOnAcceptOnly: false,
         isGuaranteed: true,
-        autoRefundMinutesBefore: null,
+        autoRefundMinutesBefore: 90,
       },
       {
         band: 'HOURS_3_8',
         multiplierBps: 18000,
         captureOnAcceptOnly: false,
-        isGuaranteed: true,
-        autoRefundMinutesBefore: null,
+        isGuaranteed: false,
+        autoRefundMinutesBefore: 90,
       },
       {
         band: 'HOURS_UNDER_3',

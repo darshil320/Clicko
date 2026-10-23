@@ -30,13 +30,15 @@ export interface RefreshTokenRepository {
    * A token that was already revoked means it was stolen and replayed: every live
    * token for that subject is revoked and REUSED returned — unless it was revoked
    * within `graceMs`, which is a client retry (GRACE). The replacement inherits the
-   * old token's subject and device.
+   * old token's subject and device. A token of another subject kind than `expectedKind` is
+   * NOT_FOUND and left untouched (a pro token sent to the client route is not consumed).
    */
   rotate(
     tokenHash: string,
     now: Date,
     replacement: UnboundRefreshToken,
     graceMs: number,
+    expectedKind: SubjectKind,
   ): Promise<RotateResult>;
   revokeAllForSubject(kind: SubjectKind, id: string, now: Date): Promise<void>;
   revoke(tokenHash: string, now: Date): Promise<void>;
@@ -59,20 +61,26 @@ export class PgRefreshTokenRepository implements RefreshTokenRepository {
     tokenHash: string,
     now: Date,
     replacement: UnboundRefreshToken,
+    graceMs: number,
+    expectedKind: SubjectKind,
   ): Promise<RotateResult> {
     return this.sql.begin(async (tx) => {
       const [row] = await tx<
         {
           subject_kind: SubjectKind;
           subject_id: string;
+          device_id: string | null;
           revoked_at: Date | null;
           expires_at: Date;
         }[]
       >`
-        SELECT subject_kind, subject_id, revoked_at, expires_at FROM refresh_tokens
+        SELECT subject_kind, subject_id, device_id, revoked_at, expires_at FROM refresh_tokens
         WHERE token_hash = ${tokenHash} FOR UPDATE`;
-      if (!row) return { outcome: 'NOT_FOUND' } as const;
+      if (!row || row.subject_kind !== expectedKind) return { outcome: 'NOT_FOUND' } as const;
       if (row.revoked_at) {
+        // Rotated moments ago: a duplicate client retry, not theft — refuse without the mass revoke.
+        if (now.getTime() - row.revoked_at.getTime() <= graceMs)
+          return { outcome: 'GRACE' } as const;
         await tx`
           UPDATE refresh_tokens SET revoked_at = ${now}
           WHERE subject_kind = ${row.subject_kind} AND subject_id = ${row.subject_id} AND revoked_at IS NULL`;
@@ -83,7 +91,7 @@ export class PgRefreshTokenRepository implements RefreshTokenRepository {
       await tx`
         INSERT INTO refresh_tokens (id, subject_kind, subject_id, token_hash, device_id, expires_at, created_at)
         VALUES (${replacement.id}, ${row.subject_kind}, ${row.subject_id}, ${replacement.tokenHash},
-                ${replacement.deviceId}, ${replacement.expiresAt}, ${replacement.createdAt})`;
+                ${replacement.deviceId ?? row.device_id}, ${replacement.expiresAt}, ${replacement.createdAt})`;
       return {
         outcome: 'ROTATED',
         subjectKind: row.subject_kind,

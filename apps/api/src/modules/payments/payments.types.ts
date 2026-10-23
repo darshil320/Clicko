@@ -27,6 +27,7 @@ export interface PaymentRecord {
   readonly status: PaymentStatus;
   readonly amountPaise: bigint;
   readonly capturedPaise: bigint;
+  readonly gatewayFeePaise: bigint;
   readonly provider: GatewayName;
   readonly providerOrderId: string | null;
   readonly providerPaymentId: string | null;

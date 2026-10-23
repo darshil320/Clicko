@@ -10,10 +10,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../common/clock';
+import { OtpDelivery, type OtpDeliveryQueue } from './otp-delivery';
+import { OTP_PEPPER } from './otp-tokens';
 import { OTP_REPOSITORY, type OtpRepository } from './repositories/otp.repository';
-import { SMS_PORT, type SmsPort } from './sms/sms.port';
 
-export const OTP_PEPPER = Symbol('OTP_PEPPER');
+export { OTP_PEPPER } from './otp-tokens';
 
 export const OTP_POLICY = {
   ttlMs: 5 * 60 * 1000,
@@ -43,15 +44,21 @@ export class OtpService {
 
   constructor(
     @Inject(OTP_REPOSITORY) private readonly repo: OtpRepository,
-    @Inject(SMS_PORT) private readonly sms: SmsPort,
+    @Inject(OtpDelivery) private readonly delivery: OtpDeliveryQueue,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(OTP_PEPPER) private readonly pepper: string,
   ) {}
 
+  /**
+   * Stores the challenge and queues the SMS (ADR-0012 D8) — the gateway is never on the request
+   * path. `deliver = false` (a PRO_LOGIN for a number that is not an active photographer) queues
+   * an identical decoy job that sends nothing, so response, timing and limits match a real one.
+   */
   async request(
     phone: string,
     purpose: OtpPurpose,
     ip: string | null,
+    deliver = true,
   ): Promise<RequestOtpResponse> {
     const now = this.clock();
     const id = randomUUID();
@@ -59,7 +66,7 @@ export class OtpService {
     const expiresAt = new Date(now.getTime() + OTP_POLICY.ttlMs);
 
     await this.repo.withLocks(phone, ip, async (repo) => {
-      await this.enforceLimits(repo, phone, ip, now);
+      await this.enforceLimits(repo, phone, purpose, ip, now);
       await repo.supersedeActive(phone, purpose, now);
       await repo.insert({
         id,
@@ -76,12 +83,12 @@ export class OtpService {
     });
 
     try {
-      await this.sms.sendOtp(phone, code);
+      await this.delivery.enqueue({ challengeId: id, phone, code, deliver, expiresAt });
     } catch (error) {
-      // The row stays and counts toward rate limits, so a failing gateway can't be hammered.
-      // Name only: provider errors can carry the request (phone, code, API key).
+      // The queue (Redis) is down — the same for every number, so this reveals nothing. The row
+      // stays and counts toward rate limits. Name only: errors can carry the request.
       this.logger.error(
-        `OTP SMS send failed (${error instanceof Error ? error.name : 'unknown error'})`,
+        `OTP SMS could not be queued (${error instanceof Error ? error.name : 'unknown error'})`,
       );
       throw new ServiceUnavailableException({
         code: 'SMS_UNAVAILABLE',
@@ -117,24 +124,26 @@ export class OtpService {
     }
   }
 
+  /** Per phone AND purpose (a client login never uses up the photographer allowance); IP is global. */
   private async enforceLimits(
     repo: OtpRepository,
     phone: string,
+    purpose: OtpPurpose,
     ip: string | null,
     now: Date,
   ): Promise<void> {
-    const latest = await repo.latestCreatedAt(phone);
+    const latest = await repo.latestCreatedAt(phone, purpose);
     if (latest) {
       const waitMs = latest.getTime() + OTP_POLICY.resendCooldownMs - now.getTime();
       if (waitMs > 0)
         throw rateLimited('Please wait before requesting another code', Math.ceil(waitMs / 1000));
     }
     const hourAgo = new Date(now.getTime() - HOUR_MS);
-    if ((await repo.countForPhoneSince(phone, hourAgo)) >= OTP_POLICY.maxPerPhonePerHour) {
+    if ((await repo.countForPhoneSince(phone, purpose, hourAgo)) >= OTP_POLICY.maxPerPhonePerHour) {
       throw rateLimited('Too many codes requested for this number. Try again later.', 3600);
     }
     const dayAgo = new Date(now.getTime() - DAY_MS);
-    if ((await repo.countForPhoneSince(phone, dayAgo)) >= OTP_POLICY.maxPerPhonePerDay) {
+    if ((await repo.countForPhoneSince(phone, purpose, dayAgo)) >= OTP_POLICY.maxPerPhonePerDay) {
       throw rateLimited('Too many codes requested for this number today.', 86400);
     }
     if (ip && (await repo.countForIpSince(ip, hourAgo)) >= OTP_POLICY.maxPerIpPerHour) {

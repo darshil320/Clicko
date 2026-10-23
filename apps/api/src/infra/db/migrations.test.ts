@@ -37,12 +37,19 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0004 is byte-identical to docs/schema-addenda/0004-outbox-backoff.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0004_outbox_backoff.sql')).toBe(
+      read('docs/schema-addenda/0004-outbox-backoff.sql'),
+    );
+  });
+
   it('lists migrations in numeric order with a sha256 checksum each', () => {
     const migrations = listMigrations();
     expect(migrations.map((m) => m.name)).toEqual([
       '0001_clickco_schema.sql',
       '0002_spec_audit_gaps.sql',
       '0003_booking_consent.sql',
+      '0004_outbox_backoff.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

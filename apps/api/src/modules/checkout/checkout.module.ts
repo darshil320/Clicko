@@ -7,11 +7,13 @@ import { PricingModule } from '../pricing/pricing.module';
 import { ServiceabilityModule } from '../serviceability/serviceability.module';
 import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
-import { DevPaymentsController } from './dev-payments.controller';
 import { PaymentFlowService } from './payment-flow.service';
 import { PaymentWebhooksController } from './payment-webhooks.controller';
 
-/** Orchestrates pricing → bookings → payments and owns their HTTP surface. Nothing imports it. */
+/**
+ * Orchestrates pricing → bookings → payments and owns their HTTP surface. Only DevToolsModule
+ * imports it (the development payment simulator drives PaymentFlowService).
+ */
 @Module({
   imports: [
     TokenModule,
@@ -21,7 +23,8 @@ import { PaymentWebhooksController } from './payment-webhooks.controller';
     BookingsModule,
     PaymentsModule,
   ],
-  controllers: [CheckoutController, PaymentWebhooksController, DevPaymentsController],
+  controllers: [CheckoutController, PaymentWebhooksController],
   providers: [CheckoutService, PaymentFlowService],
+  exports: [PaymentFlowService],
 })
 export class CheckoutModule {}

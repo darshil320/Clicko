@@ -2,6 +2,9 @@ import type { AreaStatus, CityTier, PlanTier } from '@clickco/contracts';
 import { Inject, Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import { SQL } from '../../../infra/db/db.module';
+import type { AreaLabel, VenuePoints } from '../serviceability.types';
+
+export type { AreaLabel, VenuePoints } from '../serviceability.types';
 
 export interface AreaRecord {
   readonly pincode: string;
@@ -35,6 +38,10 @@ export interface ServiceabilityRepository {
   insertWaitlist(entry: WaitlistInsert): Promise<void>;
   /** Display names for city ids (other modules never read the cities table themselves). */
   cityNames(cityIds: readonly string[]): Promise<Map<string, string>>;
+  /** The pincode centroid and its city's centre as raw geography text (hex EWKB); null if unknown. */
+  venuePoints(pincode: string): Promise<VenuePoints | null>;
+  /** Area + city names for pincodes (photographer offers show the area, never the address). */
+  areaLabels(pincodes: readonly string[]): Promise<Map<string, AreaLabel>>;
 }
 
 export const SERVICEABILITY_REPOSITORY = Symbol('SERVICEABILITY_REPOSITORY');
@@ -91,6 +98,22 @@ export class PgServiceabilityRepository implements ServiceabilityRepository {
       VALUES (${e.phone}, ${e.fullName}, ${e.pincode}, ${e.cityId}, ${e.cityNameRaw},
               ${e.intendedDate}, ${e.intendedTier})
       ON CONFLICT (phone_e164, pincode, coalesce(intended_date, '1900-01-01')) DO NOTHING`;
+  }
+
+  async venuePoints(pincode: string): Promise<VenuePoints | null> {
+    const [row] = await this.sql<{ centroid: string | null; centre: string }[]>`
+      SELECT a.centroid::text AS centroid, c.centre::text AS centre
+      FROM serviceable_areas a JOIN cities c ON c.id = a.city_id WHERE a.pincode = ${pincode}`;
+    return row ? { centroid: row.centroid, cityCentre: row.centre } : null;
+  }
+
+  async areaLabels(pincodes: readonly string[]): Promise<Map<string, AreaLabel>> {
+    if (pincodes.length === 0) return new Map();
+    const rows = await this.sql<{ pincode: string; area_name: string | null; city_name: string }[]>`
+      SELECT a.pincode, a.area_name, c.name AS city_name
+      FROM serviceable_areas a JOIN cities c ON c.id = a.city_id
+      WHERE a.pincode IN ${this.sql([...new Set(pincodes)])}`;
+    return new Map(rows.map((r) => [r.pincode, { areaName: r.area_name, cityName: r.city_name }]));
   }
 
   async cityNames(cityIds: readonly string[]): Promise<Map<string, string>> {

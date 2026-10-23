@@ -146,3 +146,28 @@ export async function seedLaunchRuleset(sql: postgres.Sql): Promise<{ created: b
     return { created: true };
   });
 }
+
+/**
+ * DEVELOPMENT ONLY (ADR-0012 D1). Databases seeded before ADR-0012 hold the launch ruleset with
+ * the old emergency rows (auto-refund only for HOURS_UNDER_3; HOURS_3_8 guaranteed). A published
+ * ruleset is never edited where it matters (Invariant 17) — production has no rows yet — so this
+ * realigns only a development database to the fixture. Idempotent: returns the rows it changed.
+ */
+export async function alignLaunchEmergencyRules(sql: postgres.Sql): Promise<number> {
+  const [rs] = await sql<{ id: string }[]>`
+    SELECT id FROM pricing_rulesets WHERE version = ${LAUNCH_RULESET_VERSION}`;
+  if (!rs) return 0;
+  const fixture = launchRuleset(rs.id, { surat: '', mumbai: '', vadodara: '' }).emergency;
+  let changed = 0;
+  for (const e of fixture) {
+    const rows = await sql`
+      UPDATE emergency_multipliers
+         SET is_guaranteed = ${e.isGuaranteed}, auto_refund_minutes_before = ${e.autoRefundMinutesBefore}
+       WHERE ruleset_id = ${rs.id} AND band = ${e.band}
+         AND (is_guaranteed IS DISTINCT FROM ${e.isGuaranteed}
+              OR auto_refund_minutes_before IS DISTINCT FROM ${e.autoRefundMinutesBefore})
+      RETURNING id`;
+    changed += rows.length;
+  }
+  return changed;
+}

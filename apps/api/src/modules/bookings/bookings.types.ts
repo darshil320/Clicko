@@ -94,3 +94,58 @@ export interface TimelineEntry {
   readonly reason: string | null;
   readonly occurredAt: Date;
 }
+
+/** What dispatch needs to find and rank photographers for a booking (ADR-0010). */
+export interface DispatchFacts {
+  readonly bookingId: string;
+  readonly reference: string;
+  readonly status: BookingStatus;
+  readonly userId: string;
+  readonly cityId: string;
+  readonly categoryId: string;
+  /** categories.cert_required_from (catalogue). */
+  readonly certRequiredFrom: PlanTier | null;
+  readonly tier: PlanTier;
+  readonly scheduledStart: Date;
+  readonly scheduledEnd: Date;
+  readonly emergencyBand: EmergencyBand;
+  readonly venuePincode: string;
+  /** Geography as Postgres prints it (hex EWKB); null until venues are geocoded (S11). */
+  readonly venueLocation: string | null;
+  /** A booked add-on requires DGCA drone credentials. */
+  readonly needsDroneCredentials: boolean;
+  /** Snapshot sequence 1 expected_payout_paise. */
+  readonly expectedPayoutPaise: bigint;
+  /** The ruleset the booking was priced on (its auto-cancel point comes from here). */
+  readonly rulesetId: string;
+  /** Snapshot sequence 1 payout inputs (the no-show incentive is computed by pricing). */
+  readonly payout: {
+    readonly baseAmountPaise: bigint;
+    readonly travelAmountPaise: bigint;
+    readonly payoutShareBps: number;
+    readonly expectedPayoutPaise: bigint;
+  };
+}
+
+/** A booking as an offer may show it: no address, no phone. */
+export interface OfferBookingSummary {
+  readonly bookingId: string;
+  readonly reference: string;
+  readonly status: BookingStatus;
+  readonly categoryCode: string;
+  readonly tier: PlanTier;
+  readonly scheduledStart: Date;
+  readonly scheduledHours: number;
+  readonly emergencyBand: EmergencyBand;
+  readonly venuePincode: string;
+  readonly cityId: string;
+  readonly bookerName: string;
+  readonly expectedPayoutPaise: bigint;
+}
+
+/** After acceptance: the address too. Client phones are never exposed (Invariant 11). */
+export interface AssignmentBookingDetail extends OfferBookingSummary {
+  readonly venueAddress: string;
+  readonly venueLandmark: string | null;
+  readonly specialRequirements: string | null;
+}

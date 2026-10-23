@@ -19,6 +19,7 @@ const payment = (over: Partial<PaymentRecord> = {}): PaymentRecord => ({
   status: 'CREATED',
   amountPaise: 845_411n,
   capturedPaise: 0n,
+  gatewayFeePaise: 0n,
   provider: 'SANDBOX',
   providerOrderId: 'order_sbx_00000000000000',
   providerPaymentId: null,

@@ -16,9 +16,10 @@ export interface OtpChallengeRow {
 }
 
 export interface OtpRepository {
-  countForPhoneSince(phone: string, since: Date): Promise<number>;
+  /** Per phone and purpose (ADR-0012 sec L12). */
+  countForPhoneSince(phone: string, purpose: string, since: Date): Promise<number>;
   countForIpSince(ip: string, since: Date): Promise<number>;
-  latestCreatedAt(phone: string): Promise<Date | null>;
+  latestCreatedAt(phone: string, purpose: string): Promise<Date | null>;
   insert(row: OtpChallengeRow): Promise<void>;
   /** Retires every unused challenge for this phone + purpose (only the newest code works). */
   supersedeActive(phone: string, purpose: string, now: Date): Promise<void>;
@@ -70,9 +71,10 @@ export class PgOtpRepository implements OtpRepository {
       WHERE phone_e164 = ${phone} AND purpose = ${purpose} AND consumed_at IS NULL`;
   }
 
-  async countForPhoneSince(phone: string, since: Date): Promise<number> {
+  async countForPhoneSince(phone: string, purpose: string, since: Date): Promise<number> {
     const [row] = await this.sql<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM otp_challenges WHERE phone_e164 = ${phone} AND created_at >= ${since}`;
+      SELECT count(*)::int AS n FROM otp_challenges
+      WHERE phone_e164 = ${phone} AND purpose = ${purpose} AND created_at >= ${since}`;
     return row?.n ?? 0;
   }
 
@@ -85,9 +87,10 @@ export class PgOtpRepository implements OtpRepository {
     return row?.n ?? 0;
   }
 
-  async latestCreatedAt(phone: string): Promise<Date | null> {
+  async latestCreatedAt(phone: string, purpose: string): Promise<Date | null> {
     const [row] = await this.sql<{ at: Date | null }[]>`
-      SELECT max(created_at) AS at FROM otp_challenges WHERE phone_e164 = ${phone}`;
+      SELECT max(created_at) AS at FROM otp_challenges
+      WHERE phone_e164 = ${phone} AND purpose = ${purpose}`;
     return row?.at ?? null;
   }
 

@@ -6,6 +6,7 @@ import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
 import { BookingsService } from '../bookings/bookings.service';
 import type { BookingRow, Tx } from '../bookings/bookings.types';
+import { ACCEPTED_STATUSES } from '../bookings/state-machine';
 import type {
   PaymentFailedEvent,
   PaymentSucceededEvent,
@@ -27,6 +28,12 @@ export const PAYMENT_GRACE_MS = 30 * 60_000;
 
 /** Statuses a capture may move a payment out of. Anything else is a replay or a second charge. */
 const CAPTURABLE: readonly PaymentStatus[] = ['CREATED', 'FAILED', 'AUTHORIZED'];
+
+/**
+ * A held (<3h) payment is captured when a photographer accepts (ADR-0010/0011). Dispatch records
+ * that capture itself; when the gateway's webhook wins the race, it is booked here instead.
+ */
+const HELD_CAPTURE_EXPECTED = ACCEPTED_STATUSES;
 
 function paymentWindowOpen(booking: BookingRow, now: Date): boolean {
   const expires = booking.quoteExpiresAt?.getTime();
@@ -152,11 +159,17 @@ export class PaymentFlowService {
     return payment;
   }
 
+  /** Lock order everywhere is booking → payment (ADR-0012 D4): find, lock booking, lock payment. */
   private async apply(tx: Tx, event: PaymentSucceededEvent | PaymentFailedEvent): Promise<Applied> {
+    const ref = await this.payments.findByOrder(tx, event.providerOrderId);
+    const unknown: Applied = {
+      outcome: 'UNKNOWN_ORDER',
+      note: `No payment for order ${event.providerOrderId}`,
+    };
+    if (!ref) return unknown;
+    const booking = await this.bookings.lock(tx, ref.bookingId);
     const payment = await this.payments.lockByOrder(tx, event.providerOrderId);
-    if (!payment) {
-      return { outcome: 'UNKNOWN_ORDER', note: `No payment for order ${event.providerOrderId}` };
-    }
+    if (!payment) return unknown;
     if (event.kind === 'PAYMENT_FAILED') return this.applyFailure(tx, payment, event);
     if (event.amountPaise !== payment.amountPaise) {
       const reason = `AMOUNT_MISMATCH: expected ${payment.amountPaise}, got ${event.amountPaise}`;
@@ -164,24 +177,33 @@ export class PaymentFlowService {
       return review(reason);
     }
     return event.kind === 'PAYMENT_CAPTURED'
-      ? this.applyCapture(tx, payment, event)
-      : this.applyAuthorization(tx, payment, event);
+      ? this.applyCapture(tx, payment, event, booking)
+      : this.applyAuthorization(tx, payment, event, booking);
   }
 
   private async applyCapture(
     tx: Tx,
     payment: PaymentRecord,
     event: PaymentSucceededEvent,
+    booking: BookingRow,
   ): Promise<Applied> {
+    const now = this.clock();
+    if (payment.status === 'AUTH_RELEASED')
+      return this.capturedAfterRelease(tx, payment, event, now);
     if (!CAPTURABLE.includes(payment.status)) {
-      if (payment.providerPaymentId === event.providerPaymentId) return alreadyApplied;
+      if (payment.providerPaymentId === event.providerPaymentId) {
+        // Dispatch booked this capture itself; the webhook may still bring the gateway fee.
+        await this.payments.recordLateFee(tx, payment, event.feePaise, now);
+        return alreadyApplied;
+      }
       // A second successful payment on the same order: the client was charged twice.
       const reason = `SECOND_CAPTURE_ON_${payment.status}: ${event.providerPaymentId}`;
       await this.payments.flagForReview(tx, payment, reason, event.amountPaise);
       return review(reason);
     }
-    const booking = await this.bookings.lock(tx, payment.bookingId);
-    const now = this.clock();
+    if (payment.isAuthOnly && payment.status === 'AUTHORIZED') {
+      return this.applyHeldCapture(tx, payment, event, booking, now);
+    }
     const awaiting = booking.status === 'ADVANCE_PENDING' && paymentWindowOpen(booking, now);
     await this.payments.recordCapture(tx, {
       payment,
@@ -203,16 +225,56 @@ export class PaymentFlowService {
     return applied;
   }
 
+  /** We released this hold, yet the gateway captured it: book the money, flag it for refund. */
+  private async capturedAfterRelease(
+    tx: Tx,
+    payment: PaymentRecord,
+    event: PaymentSucceededEvent,
+    now: Date,
+  ): Promise<Applied> {
+    if (payment.providerPaymentId !== event.providerPaymentId) {
+      const reason = `SECOND_CAPTURE_ON_AUTH_RELEASED: ${event.providerPaymentId}`;
+      await this.payments.flagForReview(tx, payment, reason, event.amountPaise);
+      return review(reason);
+    }
+    await this.payments.recordCapture(tx, { payment, event, capturedAt: now, invoiceBasis: null });
+    await this.bookings.addAmountPaid(tx, payment.bookingId, event.amountPaise);
+    await this.payments.flagForReview(tx, payment, 'CAPTURED_AFTER_RELEASE', event.amountPaise);
+    return review('CAPTURED_AFTER_RELEASE: refund or reconcile');
+  }
+
+  /** The capture of a held payment: expected once a photographer has accepted, flagged otherwise. */
+  private async applyHeldCapture(
+    tx: Tx,
+    payment: PaymentRecord,
+    event: PaymentSucceededEvent,
+    booking: BookingRow,
+    now: Date,
+  ): Promise<Applied> {
+    const expected = HELD_CAPTURE_EXPECTED.includes(booking.status);
+    await this.payments.recordCapture(tx, {
+      payment,
+      event,
+      capturedAt: now,
+      invoiceBasis: expected ? await this.bookings.quoteSnapshotTotals(tx, booking.id) : null,
+    });
+    await this.bookings.addAmountPaid(tx, booking.id, event.amountPaise);
+    if (expected) return applied;
+    const reason = `HELD_PAYMENT_CAPTURED_WHILE_${booking.status}`;
+    await this.payments.flagForReview(tx, payment, reason, event.amountPaise);
+    return review(`${reason}: refund or reconcile`);
+  }
+
   /** Authorise-only (<3h) confirms on authorisation; capture follows photographer acceptance (S5). */
   private async applyAuthorization(
     tx: Tx,
     payment: PaymentRecord,
     event: PaymentSucceededEvent,
+    booking: BookingRow,
   ): Promise<Applied> {
     // A normal payment is authorised then captured; only the capture counts.
     if (!payment.isAuthOnly) return { outcome: 'IGNORED', note: null };
     if (payment.status !== 'CREATED' && payment.status !== 'FAILED') return alreadyApplied;
-    const booking = await this.bookings.lock(tx, payment.bookingId);
     const now = this.clock();
     const releaseAt = booking.scheduledStart.getTime() - AUTH_RELEASE_LEAD_MS;
     await this.payments.markAuthorized(tx, {

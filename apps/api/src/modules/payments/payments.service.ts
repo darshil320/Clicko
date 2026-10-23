@@ -4,7 +4,7 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException } fr
 import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
-import { appendDomainEvent } from '../../infra/outbox/outbox';
+import { appendDomainEvent, appendDomainEventOnce } from '../../infra/outbox/outbox';
 import {
   type GatewayName,
   PAYMENT_GATEWAY,
@@ -20,6 +20,7 @@ import type {
   Db,
   IncomingWebhook,
   IngestResult,
+  InvoiceBasis,
   InvoiceRecord,
   NewPayment,
   PaymentPurpose,
@@ -100,6 +101,11 @@ export class PaymentsService {
 
   findById(paymentId: string): Promise<PaymentRecord | null> {
     return this.payments.findById(this.sql, paymentId);
+  }
+
+  /** No lock: lock the booking first, then lockByOrder (ADR-0012 D4 lock order). */
+  findByOrder(db: Db, providerOrderId: string): Promise<PaymentRecord | null> {
+    return this.payments.findByOrder(db, this.gateway.name, providerOrderId);
   }
 
   lockByOrder(tx: Tx, providerOrderId: string): Promise<PaymentRecord | null> {
@@ -192,33 +198,18 @@ export class PaymentsService {
    */
   async recordCapture(tx: Tx, c: CaptureInput): Promise<{ invoiceId: string | null }> {
     const { payment, event, capturedAt } = c;
-    const refs = { bookingId: payment.bookingId, paymentId: payment.id, userId: payment.userId };
-    await this.ledger.post(tx, {
-      txnKind: captureTxnKind(payment.purpose),
-      entries: advanceCapturedEntries(event.amountPaise),
-      refs,
-      memo: `${payment.purpose} captured ${event.providerPaymentId}`,
-      occurredAt: capturedAt,
-    });
+    await this.postCaptured(tx, payment, event.amountPaise, event.providerPaymentId, capturedAt);
     if (event.feePaise > 0n) {
       await this.ledger.post(tx, {
         txnKind: 'GATEWAY_FEE',
         entries: gatewayFeeEntries(event.feePaise),
-        refs,
+        refs: this.refs(payment),
         memo: `Gateway fee on ${event.providerPaymentId}`,
         occurredAt: capturedAt,
       });
     }
-    const invoice = c.invoiceBasis
-      ? await this.invoices.issue(tx, {
-          bookingId: payment.bookingId,
-          userId: payment.userId,
-          paymentId: payment.id,
-          purpose: payment.purpose,
-          amountPaise: event.amountPaise,
-          basis: c.invoiceBasis,
-          issuedAt: capturedAt,
-        })
+    const invoiceId = c.invoiceBasis
+      ? await this.issueInvoice(tx, payment, event.amountPaise, c.invoiceBasis, capturedAt)
       : null;
     await this.payments.markCaptured(tx, payment.id, {
       providerPaymentId: event.providerPaymentId,
@@ -227,9 +218,9 @@ export class PaymentsService {
       capturedPaise: event.amountPaise,
       feePaise: event.feePaise,
       capturedAt,
-      invoiceId: invoice?.id ?? null,
+      invoiceId,
     });
-    return { invoiceId: invoice?.id ?? null };
+    return { invoiceId };
   }
 
   /** Authorise-only (<3h): no money captured, no invoice, no ledger until capture. */
@@ -249,5 +240,94 @@ export class PaymentsService {
       failureCode: event.failureCode,
       failureReason: event.failureReason,
     });
+  }
+
+  /**
+   * A fee the gateway reported after the capture was already booked (dispatch captures a hold
+   * itself; the webhook brings the fee later). Posted once (ADR-0012).
+   */
+  async recordLateFee(tx: Tx, payment: PaymentRecord, feePaise: bigint, at: Date): Promise<void> {
+    if (feePaise <= 0n || !(await this.payments.recordFee(tx, payment.id, feePaise))) return;
+    await this.ledger.post(tx, {
+      txnKind: 'GATEWAY_FEE',
+      entries: gatewayFeeEntries(feePaise),
+      refs: this.refs(payment),
+      memo: `Gateway fee on ${payment.providerPaymentId ?? payment.id}`,
+      occurredAt: at,
+    });
+  }
+
+  /** flagForReview, at most once per payment and reason (for at-least-once subscribers). */
+  async flagForReviewOnce(
+    tx: Tx,
+    payment: PaymentRecord,
+    reason: string,
+    amountPaise: bigint,
+  ): Promise<void> {
+    await appendDomainEventOnce(tx, {
+      eventType: 'payment.needs_review',
+      aggregateKind: 'payment',
+      aggregateId: payment.id,
+      occurredAt: this.clock(),
+      dedupeKey: reason,
+      payload: {
+        payment_id: payment.id,
+        booking_id: payment.bookingId,
+        reason,
+        amount_paise: fromPaiseBigint(amountPaise),
+      },
+    });
+  }
+
+  /**
+   * Captured money on a booking Clickco could not serve (CANCELLED_PRO, PRO_NO_SHOW): flagged for
+   * the refund flow (S8). Idempotent per payment and reason.
+   */
+  async flagCapturedForRefund(bookingId: string, reason: string): Promise<number> {
+    const captured = await this.payments.capturedForBooking(this.sql, bookingId);
+    for (const p of captured) {
+      await this.sql.begin((tx) => this.flagForReviewOnce(tx, p, reason, p.capturedPaise));
+    }
+    return captured.length;
+  }
+
+  refs(payment: PaymentRecord) {
+    return { bookingId: payment.bookingId, paymentId: payment.id, userId: payment.userId };
+  }
+
+  /** CASH_GATEWAY / CLIENT_RECEIVABLE for money that arrived. */
+  async postCaptured(
+    tx: Tx,
+    payment: PaymentRecord,
+    amountPaise: bigint,
+    providerPaymentId: string,
+    capturedAt: Date,
+  ): Promise<void> {
+    await this.ledger.post(tx, {
+      txnKind: captureTxnKind(payment.purpose),
+      entries: advanceCapturedEntries(amountPaise),
+      refs: this.refs(payment),
+      memo: `${payment.purpose} captured ${providerPaymentId}`,
+      occurredAt: capturedAt,
+    });
+  }
+
+  async issueInvoice(
+    tx: Tx,
+    payment: PaymentRecord,
+    amountPaise: bigint,
+    basis: InvoiceBasis,
+    issuedAt: Date,
+  ): Promise<string> {
+    const invoice = await this.invoices.issue(tx, {
+      bookingId: payment.bookingId,
+      userId: payment.userId,
+      paymentId: payment.id,
+      purpose: payment.purpose,
+      amountPaise,
+      basis,
+      issuedAt,
+    });
+    return invoice.id;
   }
 }

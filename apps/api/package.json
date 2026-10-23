@@ -11,6 +11,7 @@
     "db:migrate": "node --env-file-if-exists=.env --import tsx src/infra/db/migrate.ts",
     "db:sync-spec": "tsx src/infra/db/sync-spec.ts",
     "db:seed": "node --env-file-if-exists=.env --import tsx src/infra/db/seed.ts",
+    "db:seed:dev": "node --env-file-if-exists=.env --import tsx src/infra/db/seed-dev.ts",
     "start:local": "nest build && node --env-file=.env dist/main.js"
   },
   "dependencies": {

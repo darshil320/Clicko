@@ -20,7 +20,10 @@ const PRE_SHOOT: readonly S[] = [
   'EN_ROUTE',
 ];
 
-/** Every row of docs/DOMAIN.md §2, written out by hand. The table must allow exactly these. */
+/**
+ * Every row of docs/DOMAIN.md §2 as amended by ADR-0011, written out by hand. The table must allow
+ * exactly these.
+ */
 const DOMAIN_ROWS: ReadonlyArray<readonly [S, S]> = [
   ['DRAFT', 'QUOTED'],
   ['QUOTED', 'ADVANCE_PENDING'],
@@ -39,24 +42,21 @@ const DOMAIN_ROWS: ReadonlyArray<readonly [S, S]> = [
   ['DELIVERED', 'CLOSED'],
   // (any pre-shoot state) → CANCELLED_CLIENT
   ...PRE_SHOOT.map((from) => [from, 'CANCELLED_CLIENT'] as const),
-  // "Photographer cancels after acceptance": the post-acceptance pre-shoot states
-  ['ASSIGNED', 'CANCELLED_PRO'],
-  ['EN_ROUTE', 'CANCELLED_PRO'],
-  ['ASSIGNED', 'PRO_NO_SHOW'],
-  ['EN_ROUTE', 'PRO_NO_SHOW'],
+  // ADR-0011 §1: a photographer cancellation or a no-show re-broadcast goes back to dispatch …
+  ['ASSIGNED', 'DISPATCHING'],
+  ['EN_ROUTE', 'DISPATCHING'],
+  // … and only a failed replacement search (or an unfilled <3h emergency at T-90) ends there.
+  ['DISPATCHING', 'CANCELLED_PRO'],
+  ['DISPATCHING', 'PRO_NO_SHOW'],
   ['CHECKED_IN', 'ACCESS_DENIED'],
   ['IN_PROGRESS', 'ACCESS_DENIED'],
   ['IN_PROGRESS', 'UNSAFE_SITE'],
   ['UPLOADING', 'DATA_LOSS'],
   ['PROCESSING', 'DATA_LOSS'],
   ['QA', 'DATA_LOSS'],
-  // "DELIVERED (or earlier)": every post-shoot state up to and including DELIVERED
-  ['CHECKED_OUT', 'QUALITY_ESCALATION'],
-  ['UPLOADING', 'QUALITY_ESCALATION'],
-  ['PROCESSING', 'QUALITY_ESCALATION'],
-  ['QA', 'QUALITY_ESCALATION'],
-  ['BALANCE_PENDING', 'QUALITY_ESCALATION'],
+  // ADR-0011 §2: escalation only after delivery, and the Quality Manager closes it.
   ['DELIVERED', 'QUALITY_ESCALATION'],
+  ['QUALITY_ESCALATION', 'CLOSED'],
   ['BALANCE_PENDING', 'ABANDONED'],
 ];
 
@@ -96,7 +96,11 @@ describe('booking state machine (DOMAIN.md §2)', () => {
     ['CONFIRMED', 'QUOTED'],
     ['ADVANCE_PENDING', 'QUOTED'],
     ['CHECKED_IN', 'CANCELLED_CLIENT'],
-    ['DISPATCHING', 'CANCELLED_PRO'],
+    ['ASSIGNED', 'CANCELLED_PRO'],
+    ['EN_ROUTE', 'PRO_NO_SHOW'],
+    ['CHECKED_OUT', 'QUALITY_ESCALATION'],
+    ['BALANCE_PENDING', 'QUALITY_ESCALATION'],
+    ['CONFIRMED', 'CANCELLED_PRO'],
     ['QUOTED', 'QUOTED'],
   ] as const)('refuses %s → %s with a typed error', (from, to) => {
     expect(canTransition(from, to)).toBe(false);
@@ -118,7 +122,6 @@ describe('booking state machine (DOMAIN.md §2)', () => {
       'ACCESS_DENIED',
       'UNSAFE_SITE',
       'DATA_LOSS',
-      'QUALITY_ESCALATION',
       'ABANDONED',
     ]);
     for (const from of terminal) {
@@ -133,5 +136,17 @@ describe('booking state machine (DOMAIN.md §2)', () => {
     expect(eventTypeFor('CONFIRMED')).toBe('booking.confirmed');
     expect(eventTypeFor('CANCELLED_CLIENT')).toBe('booking.cancelled_client');
     expect(eventTypeFor('QA')).toBe('booking.qa');
+    expect(eventTypeFor('CLOSED', 'QUALITY_ESCALATION')).toBe('booking.closed');
+  });
+
+  it('names the return to dispatch booking.redispatching, not booking.dispatching (ADR-0011)', () => {
+    expect(eventTypeFor('DISPATCHING', 'CONFIRMED')).toBe('booking.dispatching');
+    expect(eventTypeFor('DISPATCHING', 'ASSIGNED')).toBe('booking.redispatching');
+    expect(eventTypeFor('DISPATCHING', 'EN_ROUTE')).toBe('booking.redispatching');
+    expect(eventTypeFor('CANCELLED_PRO', 'DISPATCHING')).toBe('booking.cancelled_pro');
+  });
+
+  it('keeps QUALITY_ESCALATION open until the Quality Manager closes it', () => {
+    expect(isTerminal('QUALITY_ESCALATION')).toBe(false);
   });
 });

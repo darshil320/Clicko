@@ -7,6 +7,8 @@ import { z } from 'zod';
  */
 const Secret = z.string().min(32, 'must be at least 32 characters');
 
+const DEPLOYED: readonly string[] = ['staging', 'production'];
+
 /** A key copied from .env.example as `KEY=` arrives as ''. Treat that as unset. */
 const unsetIfEmpty = <S extends z.ZodType>(schema: S) =>
   z.preprocess((v) => (v === '' ? undefined : v), schema);
@@ -17,6 +19,16 @@ export const EnvSchema = z
     PORT: z.coerce.number().int().min(0).max(65535), // 0 = ephemeral (tests)
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
+    // Namespaces every BullMQ queue and Redis lock key. Tests use a unique value per run.
+    // Required in staging/production (no shared default between environments on one Redis).
+    QUEUE_PREFIX: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]{0,39}$/, 'lowercase letters, digits and hyphens')
+        .optional(),
+    ),
+    // `off` = enqueue only, never process — test only (tests drive the job handlers directly).
+    QUEUE_WORKERS: unsetIfEmpty(z.enum(['on', 'off']).default('on')),
     JWT_ACCESS_SECRET: Secret,
     OTP_HASH_PEPPER: Secret,
     // `console` prints OTPs to the server log — development only. `dlt` lands with TRAI DLT approval.
@@ -70,7 +82,20 @@ export const EnvSchema = z
   .refine((e) => e.JWT_ACCESS_SECRET !== e.OTP_HASH_PEPPER, {
     message: 'must differ from OTP_HASH_PEPPER',
     path: ['JWT_ACCESS_SECRET'],
-  });
+  })
+  .refine((e) => !DEPLOYED.includes(e.NODE_ENV) || e.REDIS_URL.startsWith('rediss://'), {
+    message: 'staging and production must reach Redis over TLS (rediss://)',
+    path: ['REDIS_URL'],
+  })
+  .refine((e) => !DEPLOYED.includes(e.NODE_ENV) || e.QUEUE_PREFIX !== undefined, {
+    message: 'staging and production must set QUEUE_PREFIX explicitly',
+    path: ['QUEUE_PREFIX'],
+  })
+  .refine((e) => e.QUEUE_WORKERS === 'on' || e.NODE_ENV === 'test', {
+    message: 'queue workers may only be switched off in test',
+    path: ['QUEUE_WORKERS'],
+  })
+  .transform((e) => ({ ...e, QUEUE_PREFIX: e.QUEUE_PREFIX ?? 'clickco' }));
 export type Env = z.infer<typeof EnvSchema>;
 
 export const ENV = Symbol('ENV');

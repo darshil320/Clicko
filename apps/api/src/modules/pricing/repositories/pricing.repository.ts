@@ -245,6 +245,14 @@ export class PricingRepository {
     };
   }
 
+  /** emergency_multipliers.auto_refund_minutes_before for one band of a (possibly superseded) ruleset. */
+  async autoRefundMinutes(rulesetId: string, band: EmergencyBand): Promise<number | null> {
+    const [row] = await this.sql<{ minutes: number | null }[]>`
+      SELECT auto_refund_minutes_before AS minutes FROM emergency_multipliers
+      WHERE ruleset_id = ${rulesetId} AND band = ${band}`;
+    return row?.minutes ?? null;
+  }
+
   async findPromo(code: string): Promise<PromoRecord | null> {
     const [p] = await this.sql<
       {

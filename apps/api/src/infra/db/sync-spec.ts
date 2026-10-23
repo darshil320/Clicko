@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { applySpecPatches } from './spec-patches';
 
-// Regenerates migrations 0001/0002 from the specification files. Never hand-edit them.
+// Regenerates migrations 0001–0004 from the specification files. Never hand-edit them.
 const ROOT = join(__dirname, '../../../../..');
 const MIGRATIONS = join(__dirname, 'migrations');
 
@@ -16,4 +16,8 @@ writeFileSync(
   join(MIGRATIONS, '0003_booking_consent.sql'),
   readFileSync(join(ROOT, 'docs/schema-addenda/0003-booking-consent.sql'), 'utf8'),
 );
-process.stdout.write('Migrations 0001–0003 regenerated from docs/.\n');
+writeFileSync(
+  join(MIGRATIONS, '0004_outbox_backoff.sql'),
+  readFileSync(join(ROOT, 'docs/schema-addenda/0004-outbox-backoff.sql'), 'utf8'),
+);
+process.stdout.write('Migrations 0001–0004 regenerated from docs/.\n');

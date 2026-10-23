@@ -3,11 +3,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   AreaStatus,
+  AssignmentStatus,
   BasisPoints,
   Booking,
   BookingStatus,
   City,
   CityTier,
+  DispatchOutcome,
   EmergencyBand,
   Hours,
   MAX_MONEY_PAISE,
@@ -45,6 +47,8 @@ describe('enums mirror docs/clickco-04-schema.sql exactly', () => {
     ['photographer_status', PhotographerStatus],
     ['sla_kind', SlaKind],
     ['staff_role', StaffRole],
+    ['assignment_status', AssignmentStatus],
+    ['dispatch_outcome', DispatchOutcome],
   ] as const)('%s', (sqlName, schema) => {
     expect(schema.options).toEqual(sqlEnum(sqlName));
   });

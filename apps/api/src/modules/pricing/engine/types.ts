@@ -189,6 +189,7 @@ export type RejectionCode =
   | 'NO_TRAVEL_SLAB'
   | 'NO_EMERGENCY_RULE'
   | 'START_IN_PAST'
+  | 'LEAD_TIME_TOO_SHORT'
   | 'PROMO_INACTIVE'
   | 'PROMO_EXPIRED'
   | 'PROMO_NOT_APPLICABLE'

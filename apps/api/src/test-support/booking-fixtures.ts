@@ -2,6 +2,7 @@ import type { CreateBookingRequest } from '@clickco/contracts';
 import type postgres from 'postgres';
 import { BookingsService } from '../modules/bookings/bookings.service';
 import type { BookingView } from '../modules/bookings/bookings.types';
+import { BookingDispatchRepository } from '../modules/bookings/repositories/booking-dispatch.repository';
 import { BookingReadsRepository } from '../modules/bookings/repositories/booking-reads.repository';
 import { BookingsRepository } from '../modules/bookings/repositories/bookings.repository';
 import { computeQuote } from '../modules/pricing/engine';
@@ -78,7 +79,12 @@ export async function quoteFor(
 }
 
 export function bookingsService(sql: postgres.Sql): BookingsService {
-  return new BookingsService(new BookingsRepository(), new BookingReadsRepository(), sql);
+  return new BookingsService(
+    new BookingsRepository(),
+    new BookingReadsRepository(),
+    sql,
+    new BookingDispatchRepository(),
+  );
 }
 
 /** A QUOTED booking for `userId`, created through BookingsService like checkout does. */

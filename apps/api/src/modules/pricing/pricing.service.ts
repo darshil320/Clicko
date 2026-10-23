@@ -1,4 +1,4 @@
-import type { QuoteRequest, QuoteResponse } from '@clickco/contracts';
+import type { EmergencyBand, QuoteRequest, QuoteResponse } from '@clickco/contracts';
 import {
   Inject,
   Injectable,
@@ -11,7 +11,8 @@ import {
   type BookableVenue,
   ServiceabilityService,
 } from '../serviceability/serviceability.service';
-import { computeQuote } from './engine';
+import { computeQuote, noShowIncentivePayout, type PayoutSnapshot } from './engine';
+import { DEFAULT_AUTO_REFUND_MINUTES } from './engine/constants';
 import type { PromoInput, Quote } from './engine/types';
 import { gstStateCode } from './gst-state-codes';
 import { toPriceQuote } from './quote-response';
@@ -72,6 +73,19 @@ export class PricingService {
       });
     }
     return { quote: result.quote, venue: result.venue };
+  }
+
+  /**
+   * How long before the start an unfilled booking is auto-cancelled (ADR-0012 D1), from the
+   * booking's own ruleset — a later ruleset never changes an in-flight booking (Invariant 17).
+   */
+  async autoRefundMinutesBefore(rulesetId: string, band: EmergencyBand): Promise<number> {
+    return (await this.repo.autoRefundMinutes(rulesetId, band)) ?? DEFAULT_AUTO_REFUND_MINUTES;
+  }
+
+  /** What a no-show re-broadcast offers (ADR-0012 D5): 2.0× on the base-service share only. */
+  noShowPayoutPaise(snapshot: PayoutSnapshot): bigint {
+    return noShowIncentivePayout(snapshot);
   }
 
   private async price(

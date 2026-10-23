@@ -255,7 +255,7 @@ describe('Rounding', () => {
 
   it('stays exact past 2^64 at 12 hours × ₹49,999.52/hr × every maximum factor', () => {
     // Expert at a Signature-scale rate · Wedding 1.25 · HOURS_UNDER_3 2.2 · Diwali 1.25 (MAX over
-    // wedding season) · night 1.25 · Saturday 1.10 — Sat 7 Nov 2026 23:00 IST, quoted 1 h ahead.
+    // wedding season) · night 1.25 · Saturday 1.10 — Sat 7 Nov 2026 23:00 IST, quoted 2.5 h ahead.
     const ruleset = withBaseRate(launch(), 'EXPERT', 'TIER_1', 4_999_952n);
     const scheduledStart = ist('2026-11-07T23:00');
     const request = quoteRequest({
@@ -263,7 +263,7 @@ describe('Rounding', () => {
       categoryCode: 'WEDDING',
       hours: 12,
       scheduledStart,
-      now: hoursBefore(scheduledStart, 1),
+      now: hoursBefore(scheduledStart, 2.5),
     });
 
     const quote = quoteOf(computeQuote(request, ruleset));

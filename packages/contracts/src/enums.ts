@@ -78,3 +78,23 @@ export const StaffRole = z.enum([
   'READ_ONLY',
 ]);
 export type StaffRole = z.infer<typeof StaffRole>;
+
+export const AssignmentStatus = z.enum([
+  'ASSIGNED',
+  'EN_ROUTE',
+  'ACTIVE',
+  'COMPLETED',
+  'ABANDONED',
+  'RELEASED',
+]);
+export type AssignmentStatus = z.infer<typeof AssignmentStatus>;
+
+export const DispatchOutcome = z.enum([
+  'PENDING',
+  'ACCEPTED',
+  'DECLINED',
+  'EXPIRED',
+  'CANCELLED',
+  'LOST_RACE',
+]);
+export type DispatchOutcome = z.infer<typeof DispatchOutcome>;

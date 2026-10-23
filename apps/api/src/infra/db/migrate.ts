@@ -122,10 +122,10 @@ export async function runMigrations(
 }
 
 /** The integration suite creates and force-drops databases; never let it near a shared server. */
-export function assertLocalTestDatabase(url: string): void {
+export function assertLocalTestDatabase(url: string, name = 'TEST_DATABASE_URL'): void {
   const host = new URL(url).hostname;
   if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
-    throw new Error(`TEST_DATABASE_URL must point at localhost, got host "${host}"`);
+    throw new Error(`${name} must point at localhost, got host "${host}"`);
   }
 }
 

@@ -40,6 +40,16 @@ export type GatewayEvent =
   | PaymentFailedEvent
   | { readonly kind: 'IGNORED'; readonly eventType: string };
 
+/**
+ * ADR-0012 D4. CAPTURED: the money is ours. DECLINED: definitive — the authorisation no longer
+ * exists at the gateway (lapsed, voided, failed), so it can never be captured. UNKNOWN: anything
+ * else (timeout, 5xx, still authorised after an error) — retry later, never act on it.
+ */
+export type CaptureResult = 'CAPTURED' | 'DECLINED' | 'UNKNOWN';
+
+/** RELEASED: nothing is held any more. CAPTURED: the gateway captured it — do not release. */
+export type ReleaseResult = 'RELEASED' | 'CAPTURED' | 'UNKNOWN';
+
 export interface PaymentGatewayPort {
   readonly name: GatewayName;
   /** The :provider segment of POST /payments/webhooks/:provider. */
@@ -55,6 +65,15 @@ export interface PaymentGatewayPort {
   verifyWebhookSignature(rawBody: Buffer, signature: string | undefined): boolean;
   /** Only called after the signature verified. Throws on a malformed payload. */
   parseWebhook(rawBody: Buffer): GatewayEvent;
-  /** Captures an authorised payment (S5: on photographer acceptance). */
-  capture(providerPaymentId: string, amountPaise: bigint): Promise<void>;
+  /**
+   * Captures an authorised payment (on photographer acceptance, ADR-0010). Never throws: after
+   * any error the gateway is asked what happened. Idempotent: an already captured payment is
+   * CAPTURED. Callers serialise capture/release per payment (AuthHoldsService lock).
+   */
+  capture(providerPaymentId: string, amountPaise: bigint): Promise<CaptureResult>;
+  /**
+   * Releases an authorised payment in full — but only after confirming at the gateway that it is
+   * not captured. Never throws. Idempotent: already released/refunded is RELEASED.
+   */
+  releaseAuthorization(providerPaymentId: string, amountPaise: bigint): Promise<ReleaseResult>;
 }

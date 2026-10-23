@@ -6,7 +6,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from './app.module';
 import { CLOCK } from './common/clock';
 import { seedLaunchCities } from './infra/db/seed';
+import { JobRegistry } from './infra/queues/job-registry';
+import { JOB_SCHEDULER } from './infra/queues/job-scheduler';
+import { QueueWorkers } from './infra/queues/queue-workers';
 import { SMS_PORT, type SmsPort } from './modules/auth/sms/sms.port';
+import { NO_QUEUE_WORKERS } from './test-support/e2e-app';
+import { RecordingScheduler } from './test-support/recording-scheduler';
 import { createScratchDb, type ScratchDb, TEST_DATABASE_URL } from './test-support/scratch-db';
 
 // Loose JSON view for assertions; response shapes are pinned by the contracts tests.
@@ -25,11 +30,15 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
   let app: INestApplication;
   let base: string;
   const sms = new CapturingSms();
+  const scheduler = new RecordingScheduler();
   // Controllable clock: lets a test step past OTP cooldowns without sleeping.
   let now = new Date();
   const advance = (ms: number) => {
     now = new Date(now.getTime() + ms);
   };
+
+  /** OTP SMS go out as a queued job (ADR-0012 D8); run the due ones like a worker would. */
+  const sendQueuedSms = () => scheduler.runDue(app.get(JobRegistry), now);
 
   const call = async (method: string, path: string, body?: unknown, token?: string) => {
     const res = await fetch(`${base}${path}`, {
@@ -40,7 +49,9 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    return { status: res.status, json: (await res.json()) as Json };
+    const result = { status: res.status, json: (await res.json()) as Json };
+    if (path === '/auth/otp/request') await sendQueuedSms();
+    return result;
   };
 
   const login = async (phone: string) => {
@@ -62,11 +73,16 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
       PORT: '0',
       DATABASE_URL: db.url,
       REDIS_URL: 'redis://localhost:6380',
+      QUEUE_WORKERS: 'off',
       JWT_ACCESS_SECRET: 'e2e-access-secret-'.padEnd(40, 'x'),
       OTP_HASH_PEPPER: 'e2e-otp-pepper-'.padEnd(40, 'y'),
       SMS_ADAPTER: 'console',
     });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(QueueWorkers)
+      .useValue(NO_QUEUE_WORKERS)
+      .overrideProvider(JOB_SCHEDULER)
+      .useValue(scheduler)
       .overrideProvider(SMS_PORT)
       .useValue(sms)
       .overrideProvider(CLOCK)
@@ -103,6 +119,10 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
     const first = res.json.data.refreshToken;
     const rotated = await call('POST', '/auth/refresh', { refreshToken: first });
     expect(rotated.status).toBe(200);
+    // Inside the 30 s grace a replay is a client retry: refused, nobody logged out.
+    expect((await call('POST', '/auth/refresh', { refreshToken: first })).status).toBe(401);
+    advance(31_000);
+    // After it, a replay is theft: every session of the user is revoked.
     expect((await call('POST', '/auth/refresh', { refreshToken: first })).status).toBe(401);
     expect(
       (await call('POST', '/auth/refresh', { refreshToken: rotated.json.data.refreshToken }))

@@ -40,6 +40,8 @@ function harness(claim: ClaimResult, opts: { header?: string | undefined; body?:
   };
   const ctx = {
     switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    // No @Idempotent({ ttlMs }) metadata on this handler: the default TTL applies.
+    getHandler: () => function route() {},
   } as unknown as ExecutionContext;
   const interceptor = new IdempotencyInterceptor(store as unknown as IdempotencyStore, () => NOW);
   return { store, req, res, ctx, interceptor };
@@ -87,12 +89,12 @@ describe('IdempotencyInterceptor (G-34)', () => {
     const out = await lastValueFrom(await h.interceptor.intercept(h.ctx, handler));
     expect(out).toEqual(body);
     expect(h.store.claim).toHaveBeenCalledWith({
-      key: 'user-1:key-0001-abcd',
+      key: 'USER:user-1:key-0001-abcd',
       scope: 'POST /bookings',
       requestHash: requestHash('POST', '/bookings', { tier: 'PROFESSIONAL' }),
       now: NOW,
     });
-    expect(h.store.complete).toHaveBeenCalledWith('user-1:key-0001-abcd', 201, body, NOW);
+    expect(h.store.complete).toHaveBeenCalledWith('USER:user-1:key-0001-abcd', 201, body, NOW);
     expect(h.store.release).not.toHaveBeenCalled();
   });
 
@@ -128,7 +130,7 @@ describe('IdempotencyInterceptor (G-34)', () => {
     const failing: CallHandler = { handle: () => throwError(() => new Error('boom')) };
     const obs = await h.interceptor.intercept(h.ctx, failing);
     await expect(lastValueFrom(obs)).rejects.toThrow('boom');
-    expect(h.store.release).toHaveBeenCalledWith('user-1:key-0001-abcd');
+    expect(h.store.release).toHaveBeenCalledWith('USER:user-1:key-0001-abcd');
     expect(h.store.complete).not.toHaveBeenCalled();
   });
 

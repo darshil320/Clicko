@@ -17,6 +17,7 @@ import {
   SERVICEABILITY_REPOSITORY,
   type ServiceabilityRepository,
 } from './repositories/serviceability.repository';
+import type { AreaLabel } from './serviceability.types';
 
 export interface BookableVenue {
   readonly pincode: string;
@@ -143,5 +144,18 @@ export class ServiceabilityService {
 
   cityNames(cityIds: readonly string[]): Promise<Map<string, string>> {
     return this.repo.cityNames(cityIds);
+  }
+
+  /**
+   * Dispatch's venue fallback when a booking has no geocoded point (ADR-0010): the pincode
+   * centroid, else the city centre. An opaque geography value (hex EWKB); null for an unknown pincode.
+   */
+  async venueFallbackPoint(pincode: string): Promise<string | null> {
+    const points = await this.repo.venuePoints(pincode);
+    return points ? (points.centroid ?? points.cityCentre) : null;
+  }
+
+  areaLabels(pincodes: readonly string[]): Promise<Map<string, AreaLabel>> {
+    return this.repo.areaLabels(pincodes);
   }
 }

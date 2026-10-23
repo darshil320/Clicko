@@ -19,6 +19,7 @@ interface PaymentRow {
   status: PaymentStatus;
   amount_paise: string;
   captured_paise: string;
+  gateway_fee_paise: string;
   provider: GatewayName;
   provider_order_id: string | null;
   provider_payment_id: string | null;
@@ -35,6 +36,7 @@ const toRecord = (r: PaymentRow): PaymentRecord => ({
   status: r.status,
   amountPaise: BigInt(r.amount_paise),
   capturedPaise: BigInt(r.captured_paise),
+  gatewayFeePaise: BigInt(r.gateway_fee_paise),
   provider: r.provider,
   providerOrderId: r.provider_order_id,
   providerPaymentId: r.provider_payment_id,
@@ -81,6 +83,36 @@ export class PaymentsRepository {
     return row ? toRecord(row) : null;
   }
 
+  /** No lock: the webhook path locks the booking first, then the payment (ADR-0012 D4). */
+  async findByOrder(
+    db: Db,
+    provider: GatewayName,
+    providerOrderId: string,
+  ): Promise<PaymentRecord | null> {
+    const [row] = await db<PaymentRow[]>`
+      SELECT * FROM payments WHERE provider = ${provider} AND provider_order_id = ${providerOrderId}
+      ORDER BY created_at DESC LIMIT 1`;
+    return row ? toRecord(row) : null;
+  }
+
+  /** Money still held as captured on a booking (refund candidates). */
+  async capturedForBooking(db: Db, bookingId: string): Promise<PaymentRecord[]> {
+    const rows = await db<PaymentRow[]>`
+      SELECT * FROM payments
+      WHERE booking_id = ${bookingId} AND status IN ('CAPTURED', 'PARTIALLY_REFUNDED')
+        AND captured_paise > refunded_paise
+      ORDER BY created_at`;
+    return rows.map(toRecord);
+  }
+
+  /** A fee reported by a webhook after dispatch recorded the capture. Only once. */
+  async recordFee(tx: Tx, id: string, feePaise: bigint): Promise<boolean> {
+    const rows = await tx`
+      UPDATE payments SET gateway_fee_paise = ${pg(feePaise)}
+      WHERE id = ${id} AND gateway_fee_paise = 0 RETURNING id`;
+    return rows.length === 1;
+  }
+
   async lockByOrder(
     tx: Tx,
     provider: GatewayName,
@@ -109,6 +141,38 @@ export class PaymentsRepository {
              method = ${d.method}, vpa_or_last4 = ${d.vpaOrLast4},
              invoice_id = coalesce(${d.invoiceId}::uuid, invoice_id)
        WHERE id = ${id}`;
+  }
+
+  /** The authorise-only payment still holding the client's money for this booking (<3h emergency). */
+  async heldForBooking(db: Db, bookingId: string): Promise<PaymentRecord | null> {
+    const [row] = await db<PaymentRow[]>`
+      SELECT * FROM payments
+      WHERE booking_id = ${bookingId} AND is_auth_only AND status = 'AUTHORIZED'
+      ORDER BY created_at DESC LIMIT 1`;
+    return row ? toRecord(row) : null;
+  }
+
+  async lockById(tx: Tx, id: string): Promise<PaymentRecord | null> {
+    const [row] = await tx<PaymentRow[]>`SELECT * FROM payments WHERE id = ${id} FOR UPDATE`;
+    return row ? toRecord(row) : null;
+  }
+
+  /** Capture of a hold: method/VPA were recorded at authorisation and stay. */
+  async markAuthCaptured(
+    tx: Tx,
+    id: string,
+    d: { capturedPaise: bigint; capturedAt: Date; invoiceId: string | null },
+    from: 'AUTHORIZED' | 'AUTH_RELEASED',
+  ): Promise<void> {
+    await tx`
+      UPDATE payments
+         SET status = 'CAPTURED', captured_paise = ${pg(d.capturedPaise)}, captured_at = ${d.capturedAt},
+             invoice_id = coalesce(${d.invoiceId}::uuid, invoice_id)
+       WHERE id = ${id} AND status = ${from}`;
+  }
+
+  async markAuthReleased(tx: Tx, id: string): Promise<void> {
+    await tx`UPDATE payments SET status = 'AUTH_RELEASED' WHERE id = ${id} AND status = 'AUTHORIZED'`;
   }
 
   async markAuthorized(

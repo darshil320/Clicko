@@ -14,6 +14,9 @@ import { catchError } from 'rxjs/operators';
 import { CLOCK, type Clock } from '../clock';
 import { IdempotencyStore } from './idempotency.store';
 
+/** Set by @Idempotent({ ttlMs }) (string literal: importing the decorator would be a cycle). */
+const TTL_METADATA = 'clickco:idempotency-ttl-ms';
+
 const HEADER = 'idempotency-key';
 const KEY_FORMAT = /^[A-Za-z0-9._:-]{8,128}$/;
 
@@ -23,7 +26,7 @@ interface IdempotentRequest {
   readonly route?: { readonly path?: string };
   readonly headers: Record<string, string | string[] | undefined>;
   readonly body?: unknown;
-  readonly subject?: { readonly id: string };
+  readonly subject?: { readonly kind: string; readonly id: string };
 }
 
 interface IdempotentResponse {
@@ -73,12 +76,16 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const http = context.switchToHttp();
     const req = http.getRequest<IdempotentRequest>();
     const res = http.getResponse<IdempotentResponse>();
-    const key = `${req.subject?.id ?? 'anonymous'}:${readKey(req.headers[HEADER])}`;
+    // Scoped by subject kind and id: a USER and a PHOTOGRAPHER can never share a key.
+    const owner = req.subject ? `${req.subject.kind}:${req.subject.id}` : 'anonymous';
+    const key = `${owner}:${readKey(req.headers[HEADER])}`;
+    const ttlMs: unknown = Reflect.getMetadata(TTL_METADATA, context.getHandler());
     const claim = await this.store.claim({
       key,
       scope: `${req.method} ${req.route?.path ?? req.path}`,
       requestHash: requestHash(req.method, req.path, req.body),
       now: this.clock(),
+      ...(typeof ttlMs === 'number' ? { ttlMs } : {}),
     });
 
     if (claim.kind === 'REPLAY') {

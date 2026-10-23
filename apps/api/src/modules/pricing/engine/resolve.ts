@@ -1,6 +1,10 @@
 /** doc 05 §3 steps 3–8: validate the request and resolve every rate and factor. */
 import type { EmergencyBand, PlanTier } from '@clickco/contracts';
-import { DEFAULT_MIN_HALF_HOURS } from './constants';
+import {
+  DEFAULT_AUTO_REFUND_MINUTES,
+  DEFAULT_MIN_HALF_HOURS,
+  MIN_FILL_WINDOW_MINUTES,
+} from './constants';
 import {
   resolveEmergencyBand,
   resolveNightBps,
@@ -68,7 +72,10 @@ export function resolveInputs(request: PricingRequest, ruleset: Ruleset): Outcom
   return ok({ baseRate, halfHours: duration.value, upliftBps });
 }
 
-/** Emergency from lead time; surge, night and weekend from the IST wall clock at the start. */
+/**
+ * Emergency from lead time; surge, night and weekend from the IST wall clock at the start. A lead
+ * shorter than the band's auto-cancel point + 30 min is refused: nobody could be found in time.
+ */
 export function resolveFactors(
   request: PricingRequest,
   ruleset: Ruleset,
@@ -77,6 +84,15 @@ export function resolveFactors(
   const emergency = ruleset.emergency.find((e) => e.band === band);
   if (emergency === undefined) {
     return reject('NO_EMERGENCY_RULE', `No emergency rule for band ${band}`);
+  }
+  const minLeadMinutes =
+    (emergency.autoRefundMinutesBefore ?? DEFAULT_AUTO_REFUND_MINUTES) + MIN_FILL_WINDOW_MINUTES;
+  const leadMs = request.scheduledStart.getTime() - request.now.getTime();
+  if (leadMs < minLeadMinutes * 60_000) {
+    return reject(
+      'LEAD_TIME_TOO_SHORT',
+      `Book at least ${minLeadMinutes} minutes before the shoot`,
+    );
   }
   const ist = toIst(request.scheduledStart);
   return ok({
