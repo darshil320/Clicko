@@ -4,6 +4,7 @@ packages:
 # Packages allowed to run install scripts (pnpm blocks all others).
 allowBuilds:
   esbuild: true
+  msgpackr-extract: true # optional native speed-up used by bullmq
 # pnpm 11 holds back releases younger than its minimum age; these pins were
 # reviewed at scaffold time (21 Oct 2026).
 minimumReleaseAgeExclude:

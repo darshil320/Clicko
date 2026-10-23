@@ -51,14 +51,14 @@ This is the file every future session should read before touching bookings, disp
 
 ## 2. Booking state machine — transition table
 
-T0 for all SLA purposes is **`actual_check_out`** (the CHECKED_OUT transition), **never** booking creation. The delivery clock *pauses* (not restarts) while a booking sits in `BALANCE_PENDING`, resuming when the balance clears — this is equivalent to, and implements, T&C §5.1's "whichever is later" framing without a second anchor timestamp.
+Amended by ADR-0011 (re-dispatch, escalation exit, authorise-only invoicing). T0 for all SLA purposes is **`actual_check_out`** (the CHECKED_OUT transition), **never** booking creation. The delivery clock *pauses* (not restarts) while a booking sits in `BALANCE_PENDING`, resuming when the balance clears — this is equivalent to, and implements, T&C §5.1's "whichever is later" framing without a second anchor timestamp.
 
 | From | To | Trigger | Actor | Side effects | Emitted event |
 |---|---|---|---|---|---|
 | — | DRAFT | Client starts a booking | USER | Draft booking row created | `booking.drafted` |
 | DRAFT | QUOTED | Pricing engine resolves a quote | SYSTEM | `booking_price_snapshots` seq 1 written; `quote_expires_at` = now+15min | `booking.quoted` |
 | QUOTED | ADVANCE_PENDING | Client proceeds to pay | USER | Razorpay order created | `booking.advance_pending` |
-| ADVANCE_PENDING | CONFIRMED | Advance payment captured (or authorised, for <3h emergency) | SYSTEM (webhook) | `payments` row captured/authorized; invoice issued for the advance | `booking.confirmed` |
+| ADVANCE_PENDING | CONFIRMED | Advance payment captured (or authorised, for <3h emergency) | SYSTEM (webhook) | `payments` row captured/authorized; invoice issued for the advance when captured (an authorise-only payment issues no invoice until capture on acceptance — ADR-0011) | `booking.confirmed` |
 | CONFIRMED | DISPATCHING | Dispatch cascade begins | SYSTEM | `dispatch_rounds` wave 1 opened (or single broadcast wave for emergency) | `booking.dispatching` |
 | DISPATCHING | ASSIGNED | A photographer accepts | PHOTOGRAPHER | `assignments` row created; Redis lock + Postgres exclusion constraint claim the slot; for HOURS_UNDER_3, payment captured now | `booking.assigned` |
 | ASSIGNED | EN_ROUTE | Photographer starts travelling (T-60m) | PHOTOGRAPHER | Live location sharing begins | `booking.en_route` |
@@ -73,12 +73,14 @@ T0 for all SLA purposes is **`actual_check_out`** (the CHECKED_OUT transition), 
 | BALANCE_PENDING | DELIVERED | Balance payment cleared | SYSTEM (webhook) | Delivery links generated and issued (never by the photographer); delivery clock resumes/completes; `deliveries.released_at`, `raw_expires_at`=+7d, `jpeg_expires_at`=+30d set | `booking.delivered` |
 | DELIVERED | CLOSED | +30 days elapse | SYSTEM | Auto-close; RAW already purged at +7d if not sooner | `booking.closed` |
 | *(any pre-shoot state)* | CANCELLED_CLIENT | Client cancels | USER | Refund per T&C §3.1/§3.2/§3.3 ladder | `booking.cancelled_client` |
-| *(any pre-shoot state)* | CANCELLED_PRO | Photographer cancels after acceptance | PHOTOGRAPHER / SYSTEM | Re-dispatch attempted; penalty logged against photographer | `booking.cancelled_pro` |
-| ASSIGNED / EN_ROUTE | PRO_NO_SHOW | No CHECKED_IN by scheduled_start+15min, unfilled after escalation | SYSTEM | SMS/call → ops alert (+5min) → emergency broadcast (2.0×) → full refund + ₹500 credit if unfilled; photographer penalty (warning/7-day deactivation/removal by occurrence count) | `booking.pro_no_show` |
+| ASSIGNED / EN_ROUTE | DISPATCHING | Photographer cancels after acceptance, or no-show escalation re-broadcasts (ADR-0011) | PHOTOGRAPHER / SYSTEM | Assignment RELEASED (cancel) or ABANDONED (no-show); penalty logged; fresh dispatch round (no-show: emergency broadcast at 2.0× incentive) | `booking.redispatching` |
+| DISPATCHING | CANCELLED_PRO | Re-dispatch after a photographer cancellation fails, or an unfilled <3h emergency reaches T-90 min | SYSTEM | Full refund / authorisation released | `booking.cancelled_pro` |
+| DISPATCHING | PRO_NO_SHOW | No-show re-broadcast (see ASSIGNED/EN_ROUTE → DISPATCHING) found no replacement | SYSTEM | SMS/call → ops alert (+5min) → emergency broadcast (2.0×) → full refund + ₹500 credit if unfilled; photographer penalty (warning/7-day deactivation/removal by occurrence count) | `booking.pro_no_show` |
 | CHECKED_IN / IN_PROGRESS | ACCESS_DENIED | Venue access denied/withdrawn | PHOTOGRAPHER (reports) / STAFF (confirms) | 50% of booking value charged; booking treated as completed | `booking.access_denied` |
 | IN_PROGRESS | UNSAFE_SITE | Photographer reasonably believes the environment is unsafe | PHOTOGRAPHER (notifies ops first) | Ops-approved abort; partial charge; files captured so far delivered on full payment | `booking.unsafe_site` |
 | UPLOADING / PROCESSING / QA | DATA_LOSS | Verified complete or partial loss of shoot data before delivery | STAFF (confirms) | Complete loss → full client refund + full photographer payout (capped at 2 incidents/photographer/year); partial loss → pro-rata client refund | `booking.data_loss` |
-| DELIVERED (or earlier) | QUALITY_ESCALATION | Client flags a quality issue | USER | Routed to `quality_escalations` / Quality Manager queue; photographer paid in full regardless; 3 escalations → tier review | `booking.quality_escalation` |
+| DELIVERED | QUALITY_ESCALATION | Client flags a quality issue | USER | Routed to `quality_escalations` / Quality Manager queue; photographer paid in full regardless; 3 escalations → tier review | `booking.quality_escalation` |
+| QUALITY_ESCALATION | CLOSED | Quality Manager resolves the escalation (reshoot / free edit / partial credit / no action) | STAFF | Remedy applied; reshoot is a new booking (`quality_escalations.reshoot_booking_id`) | `booking.closed` |
 | BALANCE_PENDING | ABANDONED | Balance unpaid for 30 days | SYSTEM | Booking closed; all media permanently purged; no refund of advance | `booking.abandoned` |
 
 ---
