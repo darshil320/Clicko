@@ -32,6 +32,8 @@ export interface CheckpointStore {
   remove(sessionId: string): Promise<void>;
   /** This photographer's unfinished uploads for a booking (newest first). */
   forBooking(photographerId: string, bookingId: string): Promise<Checkpoint[]>;
+  /** Sign-out on a shared machine (security review L8). The server state still allows resuming. */
+  removeForPhotographer(photographerId: string): Promise<void>;
 }
 
 export function withPartDone(
@@ -79,6 +81,11 @@ export class MemoryCheckpointStore implements CheckpointStore {
     return [...this.items.values()]
       .filter((c) => c.photographerId === photographerId && c.bookingId === bookingId)
       .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async removeForPhotographer(photographerId: string) {
+    for (const [id, c] of this.items)
+      if (c.photographerId === photographerId) this.items.delete(id);
   }
 }
 
@@ -136,6 +143,16 @@ export class IndexedDbCheckpointStore implements CheckpointStore {
     return all
       .filter((c) => c.photographerId === photographerId && c.bookingId === bookingId)
       .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async removeForPhotographer(photographerId: string): Promise<void> {
+    const all = (await request((await this.store('readonly')).getAll())) as Checkpoint[];
+    const store = await this.store('readwrite');
+    await Promise.all(
+      all
+        .filter((c) => c.photographerId === photographerId)
+        .map((c) => request(store.delete(c.sessionId))),
+    );
   }
 }
 

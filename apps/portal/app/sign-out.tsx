@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  loadSession,
-  onSessionChange,
-  type PortalSession,
-  saveSession,
-} from '../src/shared/session';
+import { browserCheckpointStore } from '../src/features/upload/checkpoints';
+import { signOut } from '../src/shared/api';
+import { loadSession, onSessionChange, type PortalSession } from '../src/shared/session';
 
-/** Shown when signed in; clears the tab's session (upload checkpoints stay in IndexedDB). */
+/**
+ * Shown when signed in. Signing out revokes the session on the server and clears this
+ * photographer's upload checkpoints from the browser (shared machines, security review L8).
+ * Closing the tab instead keeps the checkpoints for a quick resume.
+ */
 export function SignOut() {
   const [session, setSession] = useState<PortalSession | null>(null);
   useEffect(() => {
@@ -22,8 +23,11 @@ export function SignOut() {
       <button
         type="button"
         className="link"
-        onClick={() => {
-          saveSession(null);
+        onClick={async () => {
+          await browserCheckpointStore()
+            .removeForPhotographer(session.photographer.id)
+            .catch(() => undefined);
+          await signOut();
           window.location.assign('/login');
         }}
       >

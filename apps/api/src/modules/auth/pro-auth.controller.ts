@@ -83,4 +83,12 @@ export class ProAuthController {
     }
     return ok(pair);
   }
+
+  /** Sign-out: the refresh token stops working at once (security review M7). Always 200. */
+  @Post('logout')
+  @HttpCode(200)
+  async logout(@Body(new ZodValidationPipe(RefreshBody)) body: RefreshBody) {
+    await this.tokens.revoke(body.refreshToken);
+    return ok({ loggedOut: true });
+  }
 }

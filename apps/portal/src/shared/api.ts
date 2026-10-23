@@ -1,10 +1,11 @@
 import { ApiError, unwrapEnvelope } from '@clickco/api-client';
 import { TokenPair } from '@clickco/contracts';
 import type { z } from 'zod';
+import { resolveApiUrl } from './security-headers';
 import { loadSession, saveSession, updateTokens } from './session';
 
 /** Public base URL of the API (not a secret). */
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+export const API_URL = resolveApiUrl(process.env.NEXT_PUBLIC_API_URL, false);
 
 export interface RequestSpec<T> {
   readonly method: 'GET' | 'POST' | 'PUT';
@@ -124,3 +125,19 @@ export const errorMessage = (error: unknown): string =>
     : error instanceof Error
       ? error.message
       : 'Something went wrong';
+
+/** Sign-out revokes the refresh token server-side first (security review M7); best-effort. */
+export async function signOut(): Promise<void> {
+  const current = loadSession();
+  saveSession(null);
+  if (!current) return;
+  await send(
+    {
+      method: 'POST',
+      path: '/pro/auth/logout',
+      schema: TokenPair,
+      json: { refreshToken: current.refreshToken },
+    },
+    null,
+  ).catch(() => undefined);
+}

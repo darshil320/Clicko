@@ -188,6 +188,15 @@ describe.runIf(TEST_DATABASE_URL)(
       const refreshed = await e2e.call('POST', '/pro/auth/refresh', { body: { refreshToken } });
       expect(refreshed.status).toBe(200);
       expect(refreshed.json.data.refreshToken).not.toBe(refreshToken);
+
+      // Sign-out revokes the session server-side (security review M7).
+      const current = refreshed.json.data.refreshToken as string;
+      const out = await e2e.call('POST', '/pro/auth/logout', { body: { refreshToken: current } });
+      expect(out.json.data).toEqual({ loggedOut: true });
+      const after = await e2e.call('POST', '/pro/auth/refresh', {
+        body: { refreshToken: current },
+      });
+      expect(after.status).toBe(401);
     });
 
     it('a client OTP cannot open a photographer session', async () => {
