@@ -1,1 +1,1 @@
-{ "extends": "@clickco/config/tsconfig/test.json" }
+{ "extends": "./tsconfig.json" }

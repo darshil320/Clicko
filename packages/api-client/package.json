@@ -14,7 +14,10 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run --passWithNoTests"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@clickco/contracts": "workspace:*",
+    "zod": "4.6.7"
+  },
   "devDependencies": {
     "@clickco/config": "workspace:*"
   }

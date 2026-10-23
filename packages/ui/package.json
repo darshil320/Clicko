@@ -5,17 +5,39 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@clickco/contracts": "workspace:*",
+    "@clickco/design-tokens": "workspace:*"
+  },
+  "peerDependencies": {
+    "lucide-react-native": "1.61.0",
+    "nativewind": "4.2.7",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-css-interop": "0.2.7",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-svg": "15.15.4"
+  },
   "devDependencies": {
-    "@clickco/config": "workspace:*"
+    "@clickco/config": "workspace:*",
+    "@types/react": "19.2.18",
+    "lucide-react-native": "1.61.0",
+    "nativewind": "4.2.7",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-css-interop": "0.2.7",
+    "react-native-reanimated": "4.3.1",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-svg": "15.15.4",
+    "react-native-worklets": "0.8.3",
+    "tailwindcss": "3.4.19"
   }
 }

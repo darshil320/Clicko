@@ -1,1 +1,5 @@
-{ "extends": "@clickco/config/tsconfig/library.json" }
+{
+  "extends": "@clickco/config/tsconfig/library.json",
+  "compilerOptions": { "lib": ["ES2023", "DOM"] },
+  "exclude": ["${configDir}/src/**/*.test.ts", "${configDir}/src/__tests__"]
+}
