@@ -2,6 +2,28 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-24 · Sprints 6 (API) and 7, security review closed
+**Shipped**
+- S6 on-site API: en-route, geofenced check-in/out (150 m; fallback points accepted unverified),
+  offline queue with a device-time floor, extensions (client approve/decline, 1-h blocks, max 4),
+  waiting time, client non-attendance, access-denied/unsafe-site reports, no-show ladder
+  (alert +15, escalate +20, penalty + re-broadcast), earnings
+- S7 media: StoragePort (local disk; Drive stub), resumable chunked uploads with per-part and
+  whole-file SHA-256, reconcile → PROCESSING, JPEG export (darktable or dev passthrough) → QA,
+  integrity audit, quota monitor; upload portal (apps/portal, :3002)
+- Security review of S6–S7: 3 high, 9 medium, 8 low. All fixed or decided (ADR-0015), including
+  file-signature checks, an isolated darktable environment, storage reservation plus an idle-session
+  reaper, a nonce CSP on the portal, server-side photographer sign-out, and deploy env guards
+- Tests: API 858 · portal 29 · contracts 58 · client 80 · ui 38 · api-client 24 · web 119
+
+**Decisions:** ADR-0013 (on-site), ADR-0014 (media), ADR-0015 (security review).
+
+**Housekeeping:** the Mac's disk was full (124 MiB free; `ENOSPC` broke a build). I dropped 15
+leaked scratch test databases. 2 GiB is free now; Darshil should free more (npm cache 5.4 GB,
+Docker build cache 1.5 GB).
+
+**Next:** S8 delivery + SLA machine · the Pro app frontend (S6, Expo) · S9–10 admin panel
+
 ## 2026-10-23 · Sprints 3, 4 (v0), 5 and marketing site
 **Shipped**
 - S3 bookings + payments: state machine with outbox, server re-pricing + snapshot, sandbox/Razorpay gateways,
