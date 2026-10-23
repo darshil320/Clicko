@@ -16,6 +16,7 @@ import {
 } from '../../infra/storage/storage.port';
 import { BookingsService } from '../bookings/bookings.service';
 import { SYSTEM_ACTOR } from '../bookings/bookings.types';
+import { runExportLoop } from './export/export-loop';
 import {
   JPEG_EXPORT_PORT,
   type JpegExportPort,
@@ -32,7 +33,9 @@ export const PLACEHOLDER_SUFFIX = '.export-pending.jpg';
 
 export type ExportOutcome =
   | { readonly kind: 'NOT_PROCESSING'; readonly status: string | null }
-  | { readonly kind: 'EXPORTED'; readonly exported: number; readonly movedToQa: boolean };
+  | { readonly kind: 'EXPORTED'; readonly exported: number; readonly movedToQa: boolean }
+  /** Some RAWs failed: the rest are exported, the booking stays PROCESSING, the job retries. */
+  | { readonly kind: 'INCOMPLETE'; readonly exported: number; readonly failed: number };
 
 /**
  * The `media.jpeg-export` job (ADR-0014 D4): every verified RAW of a PROCESSING booking gets a
@@ -58,19 +61,13 @@ export class JpegExportService {
     if (booking?.status !== 'PROCESSING') {
       return { kind: 'NOT_PROCESSING', status: booking?.status ?? null };
     }
-    let exported = 0;
-    for (;;) {
-      const batch = await this.assets.rawWithoutExport(
-        this.sql,
-        bookingId,
-        MEDIA_CONFIG.exportBatch,
-      );
-      if (batch.length === 0) break;
-      for (const raw of batch) {
-        await this.exportOne(booking, raw);
-        exported += 1;
-      }
-    }
+    const { exported, failed } = await runExportLoop<MediaAssetRecord>({
+      nextBatch: (exclude) =>
+        this.assets.rawWithoutExport(this.sql, bookingId, MEDIA_CONFIG.exportBatch, exclude),
+      exportOne: (raw) => this.exportOne(booking, raw),
+      onFailure: (raw, error) => this.alertFailure(bookingId, raw, error),
+    });
+    if (failed.length > 0) return { kind: 'INCOMPLETE', exported, failed: failed.length };
     return { kind: 'EXPORTED', exported, movedToQa: await this.moveToQa(bookingId) };
   }
 
@@ -83,13 +80,7 @@ export class JpegExportService {
         await this.storage.openObject(raw.storageObjectId),
         createWriteStream(inputPath),
       );
-      let result: JpegExportResult;
-      try {
-        result = await this.exporter.exportRaw({ inputPath, outputPath });
-      } catch (error) {
-        await this.alertFailure(booking.bookingId, raw, error);
-        throw error;
-      }
+      const result: JpegExportResult = await this.exporter.exportRaw({ inputPath, outputPath });
       const fileName = `${frameStem(raw.originalFilename)}${result.isPlaceholder ? PLACEHOLDER_SUFFIX : '.jpg'}`;
       const stored = await this.storage.putObject(
         {

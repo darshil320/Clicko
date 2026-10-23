@@ -10,6 +10,7 @@ import {
   missingParts,
   type SessionDoc,
   type SessionFileDoc,
+  stagedFiles,
   unverifiedFiles,
 } from '../session-doc';
 
@@ -86,6 +87,19 @@ describe('session document (upload state machine)', () => {
     expect(states[0]?.receivedParts.map((p) => p.partNumber)).toEqual([1, 2]);
     expect(states[0]?.status).toBe('PENDING');
   });
+
+  it('the reaper reclaims only PENDING files holding parts (security review M5)', () => {
+    const d = doc();
+    expect(stagedFiles(d)).toEqual([]);
+    const staged: SessionDoc = {
+      ...d,
+      files: {
+        raw1: { ...fileOf(d, 'raw1'), parts: { '1': 'a'.repeat(64) } },
+        jpg1: { ...fileOf(d, 'jpg1'), parts: { '1': 'b'.repeat(64) }, status: 'VERIFIED' },
+      },
+    };
+    expect(stagedFiles(staged).map(([id]) => id)).toEqual(['raw1']);
+  });
 });
 
 describe('reconcileSession (declared vs received)', () => {
@@ -156,6 +170,14 @@ describe('capacity (doc 02 §6: refuse past 85 % of the daily ceiling)', () => {
     expect(capacityProblem({ ...usage, dailyLimitBytes: null, usedBytes: 500 }, 501)).toBe(
       'STORAGE_FULL',
     );
+  });
+
+  it('reserves what other open sessions still have to send (security review M5)', () => {
+    const local = { ...usage, dailyLimitBytes: null };
+    expect(capacityProblem(local, 600, 400)).toBeNull();
+    expect(capacityProblem(local, 600, 401)).toBe('STORAGE_FULL');
+    expect(capacityProblem(usage, 450, 400)).toBeNull();
+    expect(capacityProblem(usage, 451, 400)).toBe('STORAGE_DAILY_CEILING');
   });
 
   it('does not overflow on a 5 TB drive', () => {

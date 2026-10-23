@@ -99,9 +99,13 @@ export function partCountFor(sizeBytes: number, partSizeBytes: number): number {
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
+/** Names an object already has: as a key of the session document they would shadow it (L2). */
+const RESERVED_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype).concat('prototype'));
+
 export const ClientFileId = z
   .string()
-  .regex(/^[A-Za-z0-9_-]{1,64}$/, 'must be 1–64 of A–Z a–z 0–9 _ -');
+  .regex(/^[A-Za-z0-9_-]{1,64}$/, 'must be 1–64 of A–Z a–z 0–9 _ -')
+  .refine((id) => !RESERVED_KEYS.has(id), 'is a reserved name');
 export type ClientFileId = z.infer<typeof ClientFileId>;
 
 /** Lower-case hex SHA-256. */

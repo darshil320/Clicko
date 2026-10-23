@@ -381,18 +381,47 @@ export class LocalDiskAdapter implements StoragePort {
     }
     for (const name of names) {
       if (!UUID.test(name)) continue;
-      try {
-        used += (await stat(this.dir('objects', name))).size;
-      } catch (error) {
-        if (!isMissing(error)) throw error;
-      }
+      used += await this.sizeOf(this.dir('objects', name));
     }
     return {
-      usedBytes: used,
+      usedBytes: used + (await this.stagedBytes()),
       limitBytes: this.options.limitBytes,
       dailyUploadedBytes: await this.budget.uploadedLast24h(this.adapterId),
       dailyLimitBytes: this.options.dailyLimitBytes,
     };
+  }
+
+  /** Parts waiting in staging count as used disk (security review M5). */
+  private async stagedBytes(): Promise<number> {
+    let sessions: string[] = [];
+    try {
+      sessions = await readdir(this.dir('sessions'));
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+    }
+    let total = 0;
+    for (const id of sessions) {
+      if (!UUID.test(id)) continue;
+      let parts: string[] = [];
+      try {
+        parts = await readdir(this.dir('sessions', id));
+      } catch (error) {
+        if (!isMissing(error)) throw error;
+      }
+      for (const part of parts) {
+        if (/^part-\d+$/.test(part)) total += await this.sizeOf(this.dir('sessions', id, part));
+      }
+    }
+    return total;
+  }
+
+  private async sizeOf(path: string): Promise<number> {
+    try {
+      return (await stat(path)).size;
+    } catch (error) {
+      if (isMissing(error)) return 0;
+      throw error;
+    }
   }
 
   // ── delivery links (issued by S8; dev links are not served anywhere) ──────

@@ -82,6 +82,8 @@ export function describeStoragePortContract(
     });
 
     it('assembles parts sent out of order and verifies the whole-file SHA-256', async () => {
+      // Measured before staging: staged parts may already count as used (local disk does, M5).
+      const before = await h.port.getUsage();
       const s = await h.port.createUploadSession(input());
       for (const n of [3, 1, 4, 2]) await put(s.sessionId, n);
       const listed = await h.port.listParts(s.sessionId);
@@ -92,7 +94,6 @@ export function describeStoragePortContract(
         sha256: sha256(parts[3] as Buffer),
       });
 
-      const before = await h.port.getUsage();
       const stored = await h.port.completeUpload(s.sessionId, sha256(content));
       expect(stored).toMatchObject({
         bookingId,

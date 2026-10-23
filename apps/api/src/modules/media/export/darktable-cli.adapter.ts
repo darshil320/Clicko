@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, open, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { matchesFileSignature, SIGNATURE_PREFIX_BYTES } from '../file-signature';
 import {
   JpegExportError,
   type JpegExportInput,
@@ -10,14 +11,26 @@ import {
 } from './jpeg-export.port';
 
 export interface DarktableOptions {
-  /** DARKTABLE_CLI_PATH (default `darktable-cli`, resolved on PATH). */
+  /** DARKTABLE_CLI_PATH (default `darktable-cli`, resolved on `searchPath`). */
   readonly binary: string;
+  /** The child's PATH; defaults to the system directories. */
+  readonly searchPath?: string;
   readonly timeoutMs: number;
   /** JPEG quality 1–100. */
   readonly quality: number;
 }
 
 const STDERR_LIMIT = 4_096;
+const SYSTEM_PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin';
+
+/**
+ * Security review H3: darktable parses untrusted RAW files, so it inherits none of the API's
+ * environment (database URL, signing keys, provider secrets) — only a PATH, a throwaway HOME and
+ * a locale. Isolation proper (own image, no network, memory/CPU limits) is the worker's deployment.
+ */
+export function darktableEnv(home: string, searchPath = SYSTEM_PATH): NodeJS.ProcessEnv {
+  return { PATH: searchPath, HOME: home, TMPDIR: home, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' };
+}
 
 /** Width/height from the first SOFn marker of a JPEG header, or nulls if it cannot be read. */
 export function jpegDimensions(header: Buffer): {
@@ -59,9 +72,13 @@ export class DarktableCliAdapter implements JpegExportPort {
   constructor(private readonly options: DarktableOptions) {}
 
   async exportRaw(input: JpegExportInput): Promise<JpegExportResult> {
+    const header = await readHeader(input.inputPath, SIGNATURE_PREFIX_BYTES);
+    if (!matchesFileSignature(input.inputPath, header)) {
+      throw new JpegExportError('The input does not look like the RAW format its name claims');
+    }
     const configDir = await mkdtemp(join(tmpdir(), 'clickco-darktable-'));
     try {
-      await this.run([
+      await this.run(configDir, [
         input.inputPath,
         input.outputPath,
         '--hq',
@@ -88,9 +105,10 @@ export class DarktableCliAdapter implements JpegExportPort {
     }
   }
 
-  private run(args: readonly string[]): Promise<void> {
+  private run(home: string, args: readonly string[]): Promise<void> {
     return new Promise((resolve, reject) => {
       const child = spawn(this.options.binary, args, {
+        env: darktableEnv(home, this.options.searchPath),
         stdio: ['ignore', 'ignore', 'pipe'],
         timeout: this.options.timeoutMs,
         killSignal: 'SIGKILL',

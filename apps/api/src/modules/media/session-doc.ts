@@ -121,3 +121,13 @@ export function unverifiedFiles(doc: SessionDoc): string[] {
     .filter(([, f]) => f.status !== 'VERIFIED')
     .map(([id]) => id);
 }
+
+/**
+ * Security review M5: PENDING files holding staged parts — what an idle session's reaper reclaims
+ * (the parts are dropped and the file restarts; verified files are never touched).
+ */
+export function stagedFiles(doc: SessionDoc): ReadonlyArray<readonly [string, SessionFileDoc]> {
+  return Object.entries(doc.files).filter(
+    ([, f]) => f.status === 'PENDING' && Object.keys(f.parts).length > 0,
+  );
+}

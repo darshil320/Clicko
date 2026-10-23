@@ -22,6 +22,7 @@ import { UploadSessionsRepository } from './repositories/upload-sessions.reposit
 import { UploadBookings } from './upload-bookings';
 import { UploadJobsService } from './upload-jobs.service';
 import { UploadPartsService } from './upload-parts.service';
+import { UploadReaperService } from './upload-reaper.service';
 import { UploadSessionsService } from './upload-sessions.service';
 
 export function createJpegExporter(env: Env): JpegExportPort {
@@ -63,8 +64,9 @@ export function createJpegExporter(env: Env): JpegExportPort {
     JpegExportService,
     IntegrityAuditService,
     QuotaMonitorService,
+    UploadReaperService,
     MediaSubscribers,
   ],
-  exports: [JpegExportService, IntegrityAuditService, QuotaMonitorService],
+  exports: [JpegExportService, IntegrityAuditService, QuotaMonitorService, UploadReaperService],
 })
 export class MediaModule {}

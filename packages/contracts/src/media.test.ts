@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   AssetKind,
+  ClientFileId,
   CreateUploadSessionBody,
   countFrames,
   fileExtension,
@@ -71,6 +72,16 @@ describe('file names', () => {
     expect(UploadFileName.safeParse('a\u0000.jpg').success).toBe(false);
     expect(UploadFileName.safeParse('.DS_Store').success).toBe(false);
     expect(UploadFileName.safeParse('x'.repeat(201)).success).toBe(false);
+  });
+});
+
+describe('client file ids (security review L2)', () => {
+  it('accepts portal-style ids and refuses object-prototype names', () => {
+    expect(ClientFileId.safeParse('raw-1').success).toBe(true);
+    expect(ClientFileId.safeParse('f_0001').success).toBe(true);
+    for (const id of ['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString']) {
+      expect(ClientFileId.safeParse(id).success, id).toBe(false);
+    }
   });
 });
 

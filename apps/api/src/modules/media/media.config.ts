@@ -22,6 +22,10 @@ export const MEDIA_CONFIG = {
   auditDetailLimit: 20,
   /** One darktable-cli run per file may take this long before it is killed. */
   darktableTimeoutMs: 120_000,
+  /** An open session idle this long has its staged parts reclaimed (security review M5). */
+  idleSessionReclaimHours: 24,
+  /** Sessions looked at per reaper run. */
+  reaperBatch: 100,
 } as const;
 
 /** Where a new upload session may open (ADR-0014 D2). */

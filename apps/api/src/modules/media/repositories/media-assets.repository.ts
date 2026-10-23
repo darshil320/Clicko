@@ -96,12 +96,21 @@ export class MediaAssetsRepository {
     return rows.flatMap((r) => (r.folder ? [{ folder: r.folder, bytes: Number(r.bytes) }] : []));
   }
 
-  /** Verified RAW originals that have no derived JPEG yet (the export worklist), oldest first. */
-  async rawWithoutExport(db: Db, bookingId: string, limit: number): Promise<MediaAssetRecord[]> {
+  /**
+   * Verified RAW originals that have no derived JPEG yet (the export worklist), by file name.
+   * `exclude`: files that already failed in this run (security review M6).
+   */
+  async rawWithoutExport(
+    db: Db,
+    bookingId: string,
+    limit: number,
+    exclude: readonly string[] = [],
+  ): Promise<MediaAssetRecord[]> {
     const rows = await db<Row[]>`
       SELECT ${db.unsafe(COLUMNS)} FROM media_assets r
       WHERE r.booking_id = ${bookingId} AND r.kind = 'RAW_PHOTO' AND r.purged_at IS NULL
         AND r.checksum_verified_at IS NOT NULL
+        AND NOT (r.id = ANY(${db.array([...exclude])}::uuid[]))
         AND NOT EXISTS (SELECT 1 FROM media_assets d WHERE d.derived_from_asset_id = r.id)
       ORDER BY r.original_filename, r.id
       LIMIT ${limit}`;

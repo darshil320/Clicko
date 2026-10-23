@@ -9,7 +9,7 @@ import { insertPhotographer } from '../../../test-support/photographer-fixtures'
 import { TEST_DATABASE_URL } from '../../../test-support/scratch-db';
 import { IntegrityAuditService } from '../integrity-audit.service';
 import { QuotaMonitorService } from '../quota-monitor.service';
-import { checkedOutBooking, fakeBytes, md5, sha256 } from './media-fixtures';
+import { checkedOutBooking, fakeBytes, fakeFile, md5, SIGNATURES, sha256 } from './media-fixtures';
 
 const NOW = new Date('2026-11-10T06:30:00.000Z');
 const MIB = 1024 * 1024;
@@ -18,10 +18,12 @@ const PRO = '+919825077001';
 const OTHER_PRO = '+919825077002';
 const CLIENT = '+919700077001';
 
-const RAW = fakeBytes(20 * MIB, 1); // 3 parts: 8 + 8 + 4 MiB
-const JPEG_1 = fakeBytes(150_000, 2);
-const JPEG_2 = fakeBytes(90_000, 3);
-const STRAY = fakeBytes(40_000, 4);
+const RAW = fakeFile(20 * MIB, 1, SIGNATURES.CR3); // 3 parts: 8 + 8 + 4 MiB
+const JPEG_1 = fakeFile(150_000, 2, SIGNATURES.JPEG);
+const JPEG_2 = fakeFile(90_000, 3, SIGNATURES.JPEG);
+const STRAY = fakeFile(40_000, 4, SIGNATURES.JPEG);
+/** The same size as STRAY but not a JPEG: a renamed file. */
+const NOT_A_JPEG = fakeBytes(40_000, 4);
 
 const manifest = [
   {
@@ -233,6 +235,15 @@ describe.runIf(TEST_DATABASE_URL)(
         details: { sessionId: strayId },
       });
 
+      // Content, not the name (security review M8): a renamed file is dropped and the file reset.
+      const renamed = await uploadWhole(strayId, 'stray', NOT_A_JPEG);
+      expect(renamed.status).toBe(422);
+      expect(renamed.json.error).toMatchObject({
+        code: 'FILE_CONTENT_MISMATCH',
+        details: { clientFileId: 'stray' },
+      });
+      const reset = await e2e.call('GET', `/pro/upload-sessions/${strayId}`, { token: proToken });
+      expect(reset.json.data.files[0]).toMatchObject({ status: 'PENDING', receivedParts: [] });
       const done = await uploadWhole(strayId, 'stray', STRAY);
       expect(done.status).toBe(200);
       const [asset] = await e2e.db.sql<{ storage_object_id: string }[]>`

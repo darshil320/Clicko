@@ -10,6 +10,7 @@ import { OnsiteTimersProcessor } from './onsite-timers.processor';
 import { OtpSmsProcessor } from './otp-sms.processor';
 import { OutboxPublishProcessor } from './outbox-publish.processor';
 import { QuotaMonitorProcessor } from './quota-monitor.processor';
+import { UploadReaperProcessor } from './upload-reaper.processor';
 
 /** Every BullMQ processor. They register with infra/queues' JobRegistry at module init. */
 @Module({
@@ -22,6 +23,7 @@ import { QuotaMonitorProcessor } from './quota-monitor.processor';
     JpegExportProcessor,
     IntegrityAuditProcessor,
     QuotaMonitorProcessor,
+    UploadReaperProcessor,
   ],
 })
 export class JobsModule {}

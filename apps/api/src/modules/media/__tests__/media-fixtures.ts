@@ -19,6 +19,19 @@ export function fakeBytes(size: number, seed: number): Buffer {
   return b;
 }
 
+/** First bytes of real files, so the content check (security review M8) accepts the fakes. */
+export const SIGNATURES = {
+  CR3: Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypcrx ', 'latin1')]),
+  JPEG: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+} as const;
+
+/** `fakeBytes` that start with a file signature (same size). */
+export function fakeFile(size: number, seed: number, signature: Buffer): Buffer {
+  const b = fakeBytes(size, seed);
+  signature.copy(b, 0);
+  return b;
+}
+
 const WALK: readonly BookingStatus[] = ['EN_ROUTE', 'CHECKED_IN', 'IN_PROGRESS', 'CHECKED_OUT'];
 
 /**

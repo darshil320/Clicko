@@ -18,7 +18,11 @@ export class JpegExportProcessor implements OnModuleInit {
   onModuleInit(): void {
     this.registry.register(JOB.MEDIA_JPEG_EXPORT, {
       process: async (data: JobData) => {
-        await this.exporter.exportBooking(Data.parse(data).bookingId);
+        const outcome = await this.exporter.exportBooking(Data.parse(data).bookingId);
+        // Each failed RAW has its own ops alert; the retry only re-attempts those (M6).
+        if (outcome.kind === 'INCOMPLETE') {
+          throw new Error(`${outcome.failed} RAW file(s) failed to export; will retry`);
+        }
       },
     });
   }

@@ -150,6 +150,24 @@ export class UploadSessionsRepository {
     }
   }
 
+  /** Bytes the open sessions have declared but not yet delivered (the capacity reservation, M5). */
+  async outstandingBytes(db: Db): Promise<number> {
+    const [row] = await db<{ n: string }[]>`
+      SELECT coalesce(sum(greatest(declared_bytes - received_bytes, 0)), 0)::text AS n
+      FROM upload_sessions WHERE status IN ('OPEN', 'UPLOADING')`;
+    return Number(row?.n ?? 0);
+  }
+
+  /** Open sessions with no activity since `before`, longest idle first (the reaper, M5). */
+  async idleOpen(db: Db, before: Date, limit: number): Promise<UploadSessionRecord[]> {
+    const rows = await db<Row[]>`
+      SELECT ${db.unsafe(COLUMNS)} FROM upload_sessions
+      WHERE status IN ('OPEN', 'UPLOADING') AND last_activity_at < ${before}
+      ORDER BY last_activity_at, id
+      LIMIT ${limit}`;
+    return rows.map(toRecord);
+  }
+
   /** A checksum mismatch: the file starts again on a new storage session with no parts. */
   async restartFile(
     db: Db,

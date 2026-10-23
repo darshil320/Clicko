@@ -8,9 +8,15 @@ import { JpegExportError } from '../export/jpeg-export.port';
 import { PLACEHOLDER_NOTE, placeholderJpeg } from '../export/placeholder-jpeg';
 
 let dir: string;
+let raw: string;
+
+/** A file that starts like a Canon CR3 (ISO box `ftypcrx `); the rest does not matter here. */
+const CR3_HEADER = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypcrx ', 'latin1')]);
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'clickco-export-test-'));
+  raw = join(dir, 'in.cr3');
+  await writeFile(raw, Buffer.concat([CR3_HEADER, Buffer.alloc(64)]));
 });
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -63,12 +69,12 @@ describe('DarktableCliAdapter (with a stand-in binary)', () => {
       timeoutMs: 10_000,
       quality: 92,
     }).exportRaw({
-      inputPath: join(dir, 'in.cr3'),
+      inputPath: raw,
       outputPath: out,
     });
     expect(result).toMatchObject({ widthPx: 1, heightPx: 1, isPlaceholder: false });
     const args = (await readFile(argsFile, 'utf8')).trim().split('\n');
-    expect(args.slice(0, 2)).toEqual([join(dir, 'in.cr3'), out]);
+    expect(args.slice(0, 2)).toEqual([raw, out]);
     expect(args).toEqual(
       expect.arrayContaining([
         '--apply-custom-presets',
@@ -89,28 +95,62 @@ describe('DarktableCliAdapter (with a stand-in binary)', () => {
       quality: 92,
     });
     await expect(
-      missing.exportRaw({ inputPath: 'a', outputPath: join(dir, 'x1.jpg') }),
+      missing.exportRaw({ inputPath: raw, outputPath: join(dir, 'x1.jpg') }),
     ).rejects.toThrow(/not found/);
     const failing = await script('fail.sh', 'echo "corrupt raw" >&2; exit 3');
     await expect(
       new DarktableCliAdapter({ binary: failing, timeoutMs: 5_000, quality: 92 }).exportRaw({
-        inputPath: 'a',
+        inputPath: raw,
         outputPath: join(dir, 'x2.jpg'),
       }),
     ).rejects.toThrow(/exited 3: corrupt raw/);
     const silent = await script('silent.sh', 'exit 0');
     await expect(
       new DarktableCliAdapter({ binary: silent, timeoutMs: 5_000, quality: 92 }).exportRaw({
-        inputPath: 'a',
+        inputPath: raw,
         outputPath: join(dir, 'x3.jpg'),
       }),
     ).rejects.toBeInstanceOf(JpegExportError);
     const slow = await script('slow.sh', 'sleep 5');
     await expect(
       new DarktableCliAdapter({ binary: slow, timeoutMs: 200, quality: 92 }).exportRaw({
-        inputPath: 'a',
+        inputPath: raw,
         outputPath: join(dir, 'x4.jpg'),
       }),
     ).rejects.toThrow(/killed/);
+  });
+
+  it('gives the child none of the API environment (security review H3)', async () => {
+    const envFile = join(dir, 'env.txt');
+    const sample = join(dir, 'sample-env.jpg');
+    await writeFile(sample, placeholderJpeg('env stand-in'));
+    const fake = await script('env-darktable.sh', `env > "${envFile}"\ncp "${sample}" "$2"`);
+    process.env.CLICKCO_TEST_SECRET = 'must-not-leak';
+    try {
+      await new DarktableCliAdapter({ binary: fake, timeoutMs: 10_000, quality: 92 }).exportRaw({
+        inputPath: raw,
+        outputPath: join(dir, 'env.jpg'),
+      });
+    } finally {
+      delete process.env.CLICKCO_TEST_SECRET;
+    }
+    const env = await readFile(envFile, 'utf8');
+    expect(env).not.toContain('must-not-leak');
+    expect(env).not.toMatch(/DATABASE_URL|JWT_|RAZORPAY|OTP_HASH/);
+    expect(env).toMatch(/^LANG=C\.UTF-8$/m);
+  });
+
+  it('refuses a file that is not the RAW it claims to be, without running darktable', async () => {
+    const marker = join(dir, 'ran.txt');
+    const fake = await script('never.sh', `touch "${marker}"`);
+    const renamed = join(dir, 'renamed.cr3');
+    await writeFile(renamed, '#!/bin/sh\necho pwned\n');
+    await expect(
+      new DarktableCliAdapter({ binary: fake, timeoutMs: 5_000, quality: 92 }).exportRaw({
+        inputPath: renamed,
+        outputPath: join(dir, 'x5.jpg'),
+      }),
+    ).rejects.toThrow(/does not look like/);
+    await expect(readFile(marker)).rejects.toThrow();
   });
 });

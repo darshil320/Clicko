@@ -8,6 +8,8 @@ export const QUEUE = {
   AUTH: 'auth',
   ONSITE: 'onsite',
   MEDIA: 'media',
+  /** JPEG export only: CPU-bound, kept off the queue the monitors and the reaper run on. */
+  MEDIA_EXPORT: 'media-export',
 } as const;
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
@@ -34,6 +36,8 @@ export const JOB = {
   MEDIA_INTEGRITY_AUDIT: 'media.integrity-audit',
   /** Repeatable (15 min): storage usage sample + 60/75/90 % alerts (ADR-0014 D5). */
   MEDIA_QUOTA_MONITOR: 'media.quota-monitor',
+  /** Repeatable (hourly): reclaims staged parts of upload sessions idle for 24 h (security review M5). */
+  MEDIA_UPLOAD_REAPER: 'media.upload-reaper',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -46,9 +50,10 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.ONSITE_NO_SHOW_CHECK]: QUEUE.ONSITE,
   [JOB.ONSITE_EXTENSION_EXPIRY]: QUEUE.ONSITE,
   [JOB.ONSITE_SWEEP]: QUEUE.ONSITE,
-  [JOB.MEDIA_JPEG_EXPORT]: QUEUE.MEDIA,
+  [JOB.MEDIA_JPEG_EXPORT]: QUEUE.MEDIA_EXPORT,
   [JOB.MEDIA_INTEGRITY_AUDIT]: QUEUE.MEDIA,
   [JOB.MEDIA_QUOTA_MONITOR]: QUEUE.MEDIA,
+  [JOB.MEDIA_UPLOAD_REAPER]: QUEUE.MEDIA,
 };
 
 export interface JobOptions {
@@ -76,6 +81,7 @@ export const REPEATABLE_JOBS: readonly RepeatableJob[] = [
   { job: JOB.ONSITE_SWEEP, everyMs: 60_000 },
   { job: JOB.MEDIA_INTEGRITY_AUDIT, everyMs: 7 * 24 * 3_600_000 },
   { job: JOB.MEDIA_QUOTA_MONITOR, everyMs: 15 * 60_000 },
+  { job: JOB.MEDIA_UPLOAD_REAPER, everyMs: 60 * 60_000 },
 ];
 
 /** The outbox is drained by one job at a time; dispatch timers may overlap (they lock rows). */
@@ -84,6 +90,7 @@ export const WORKER_CONCURRENCY: Readonly<Record<QueueName, number>> = {
   [QUEUE.DISPATCH]: 4,
   [QUEUE.AUTH]: 4,
   [QUEUE.ONSITE]: 4,
-  // JPEG export is CPU-bound (darktable): two at a time per worker.
   [QUEUE.MEDIA]: 2,
+  // JPEG export is CPU-bound (darktable): two at a time per worker.
+  [QUEUE.MEDIA_EXPORT]: 2,
 };

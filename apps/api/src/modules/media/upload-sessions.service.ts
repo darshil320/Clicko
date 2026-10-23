@@ -185,8 +185,9 @@ export class UploadSessionsService {
     } catch (error) {
       throw toHttpError(error);
     }
+    const reserved = await this.sessions.outstandingBytes(this.sql);
     const now = this.clock();
-    const code = capacityProblem(usage, declaredBytes);
+    const code = capacityProblem(usage, declaredBytes, reserved);
     if (code === null) return;
     const full = code === 'STORAGE_FULL';
     await this.sql.begin((tx) =>

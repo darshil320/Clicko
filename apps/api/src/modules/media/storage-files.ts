@@ -1,8 +1,10 @@
 import { fileExtension, type UploadFileKind } from '@clickco/contracts';
 import { HttpException } from '@nestjs/common';
+import { yearMonthIst } from '../../infra/storage/folder-layout';
 import { StorageError, StorageNotConfiguredError } from '../../infra/storage/storage.errors';
-import type { StorageKind } from '../../infra/storage/storage.port';
+import type { CreateUploadSessionInput, StorageKind } from '../../infra/storage/storage.port';
 import { storageUnavailable, unavailable } from './http-errors';
+import type { UploadBookingFacts } from './media.types';
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.cr2': 'image/x-canon-cr2',
@@ -23,6 +25,30 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 
 export const contentTypeFor = (name: string): string =>
   CONTENT_TYPES[fileExtension(name)] ?? 'application/octet-stream';
+
+/** The StoragePort session for one manifest file (opened at session start, and on a restart). */
+export function storageSessionInput(
+  booking: UploadBookingFacts,
+  file: {
+    readonly folder: string;
+    readonly name: string;
+    readonly sizeBytes: number;
+    readonly kind: UploadFileKind;
+  },
+  partSizeBytes: number,
+): CreateUploadSessionInput {
+  return {
+    bookingId: booking.bookingId,
+    bookingRef: booking.reference,
+    yearMonth: yearMonthIst(booking.scheduledStart),
+    relativePath: `${file.folder}/${file.name}`,
+    fileName: file.name,
+    sizeBytes: file.sizeBytes,
+    contentType: contentTypeFor(file.name),
+    kind: storageKindOf(file.kind),
+    partSizeBytes,
+  };
+}
 
 export function storageKindOf(kind: UploadFileKind): StorageKind {
   switch (kind) {

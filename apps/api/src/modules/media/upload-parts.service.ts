@@ -1,9 +1,12 @@
-import type { CompleteUploadFileResponse, UploadPartResponse } from '@clickco/contracts';
+import {
+  type CompleteUploadFileResponse,
+  fileExtension,
+  type UploadPartResponse,
+} from '@clickco/contracts';
 import { HttpException, Inject, Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
-import { yearMonthIst } from '../../infra/storage/folder-layout';
 import {
   ChecksumMismatchError,
   MissingPartsError,
@@ -17,12 +20,13 @@ import {
   type StoragePort,
   type StoredObject,
 } from '../../infra/storage/storage.port';
+import { matchesFileSignature, readPrefix } from './file-signature';
 import { badRequest, conflict, fileNotFound, sessionNotFound, unprocessable } from './http-errors';
 import type { UploadSessionRecord } from './media.types';
 import { MediaAssetsRepository } from './repositories/media-assets.repository';
 import { UploadSessionsRepository } from './repositories/upload-sessions.repository';
 import { expectedPartSize, missingParts, type SessionFileDoc } from './session-doc';
-import { contentTypeFor, storageKindOf, toHttpError } from './storage-files';
+import { storageSessionInput, toHttpError } from './storage-files';
 import { UploadBookings } from './upload-bookings';
 
 export interface IncomingPart {
@@ -62,7 +66,8 @@ export class UploadPartsService {
   private async openFile(photographerId: string, sessionId: string, fileId: string) {
     const session = await this.sessions.findForPhotographer(this.sql, sessionId, photographerId);
     if (!session) throw sessionNotFound();
-    const file = session.doc.files[fileId];
+    // Own keys only: an id like `constructor` must never resolve to a prototype member (L2).
+    const file = Object.hasOwn(session.doc.files, fileId) ? session.doc.files[fileId] : undefined;
     if (!file) throw fileNotFound();
     return { session, file };
   }
@@ -172,6 +177,7 @@ export class UploadPartsService {
       throw failure.error;
     }
 
+    await this.assertContentMatches(session, fileId, file, stored);
     try {
       return await this.commitVerified(photographerId, session, fileId, file, sha256, stored);
     } catch (error) {
@@ -181,6 +187,34 @@ export class UploadPartsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Security review M8: the stored bytes must look like the format the name claims before the
+   * file is kept, delivered or exported. A mismatch drops the object and resets the file.
+   */
+  private async assertContentMatches(
+    session: UploadSessionRecord,
+    fileId: string,
+    file: SessionFileDoc,
+    stored: StoredObject,
+  ): Promise<void> {
+    let header: Buffer;
+    try {
+      header = await readPrefix(await this.storage.openObject(stored.objectId));
+    } catch (error) {
+      await this.storage.permanentlyDelete([stored.objectId]).catch(() => undefined);
+      await this.restartFile(session, fileId, file);
+      throw toHttpError(error);
+    }
+    if (matchesFileSignature(file.name, header)) return;
+    await this.storage.permanentlyDelete([stored.objectId]);
+    await this.restartFile(session, fileId, file);
+    throw unprocessable(
+      'FILE_CONTENT_MISMATCH',
+      `${file.name} does not look like a ${fileExtension(file.name).slice(1).toUpperCase()} file — it may be renamed or damaged`,
+      { clientFileId: fileId },
+    );
   }
 
   private alreadyVerified(
@@ -254,17 +288,9 @@ export class UploadPartsService {
   private async restartFile(session: UploadSessionRecord, fileId: string, file: SessionFileDoc) {
     const booking = await this.bookings.one(session.bookingId);
     if (!booking) return;
-    const handle = await this.storage.createUploadSession({
-      bookingId: booking.bookingId,
-      bookingRef: booking.reference,
-      yearMonth: yearMonthIst(booking.scheduledStart),
-      relativePath: `${file.folder}/${file.name}`,
-      fileName: file.name,
-      sizeBytes: file.sizeBytes,
-      contentType: contentTypeFor(file.name),
-      kind: storageKindOf(file.kind),
-      partSizeBytes: session.doc.partSizeBytes,
-    });
+    const handle = await this.storage.createUploadSession(
+      storageSessionInput(booking, file, session.doc.partSizeBytes),
+    );
     const restarted = await this.sessions.restartFile(this.sql, {
       sessionId: session.id,
       fileId,

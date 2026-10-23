@@ -10,16 +10,20 @@ export const exceedsShare = (a: number, b: number, bps: number): boolean =>
 /**
  * Doc 02 §6 / ADR-0014 D1: a new session is refused when the declared bytes do not fit in the
  * remaining storage, or when today's uploads plus the declared bytes pass 85 % of the daily ceiling.
+ * `reservedBytes`: what the other open sessions still have to send (security review M5) — counted
+ * against both limits, so concurrent sessions cannot overcommit the drive.
  */
 export function capacityProblem(
   usage: StorageUsage,
   declaredBytes: number,
+  reservedBytes = 0,
 ): CapacityProblem | null {
-  if (usage.usedBytes + declaredBytes > usage.limitBytes) return 'STORAGE_FULL';
+  const incoming = declaredBytes + reservedBytes;
+  if (usage.usedBytes + incoming > usage.limitBytes) return 'STORAGE_FULL';
   if (
     usage.dailyLimitBytes !== null &&
     exceedsShare(
-      usage.dailyUploadedBytes + declaredBytes,
+      usage.dailyUploadedBytes + incoming,
       usage.dailyLimitBytes,
       MEDIA_CONFIG.dailyCeilingRefuseBps,
     )
