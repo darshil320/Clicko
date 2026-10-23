@@ -2,6 +2,30 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-23 · Sprint 2 — pricing engine (done) · Sprint 3 started
+**Shipped (S2)**
+- Pure pricing engine (doc 05 §3, 12 steps) — bigint paise, one rounding, MAX surge, IST night/weekend,
+  travel by metres, add-ons, promo, GST CGST/SGST vs IGST by place of supply, advance split, payout
+- 231 engine tests covering the full doc 05 §10 matrix, written by a separate agent from the spec without
+  seeing the implementation: zero disagreements with the independently written engine
+- Launch ruleset `2026.10.01` (effective 1 Oct for dry runs) from one fixture shared by tests and DB seed;
+  DB round trip proven exact; snapshot-immutability trigger proven
+- `POST /pricing/quote`; contract-validated responses
+- **Ops console** (`apps/admin`, `pnpm console` → http://localhost:3001): build status with live system
+  checks, pincode checker, quote calculator, booking simulator (S3)
+- Docker restarted; all DB integration + e2e suites now run and pass
+
+**Decisions taken**
+- Ruleset effective 1 Oct 2026 (version 2026.10.01) so pre-launch testing prices correctly
+- Payout = tier share × (base + addons) + travel, exactly doc 05 step 12 (addon-level shares unused in v1)
+- API `subtotalPaise` is pre-discount, discount reported separately (SA-12)
+- Signature returns QUOTE_ONLY before duration validation
+- Console built with token CSS now; moves to shadcn (`@clickco/ui-web`) with the real admin in S9
+
+**Spec findings:** SA-12 (doc 05 §7 example omits surge), SA-13 (no model-release consent column → addendum 0003)
+
+**Run it:** `pnpm db:up && pnpm db:migrate && pnpm db:seed`, then `pnpm api` and `pnpm console`
+
 ## 2026-10-22 · Sprint 1 · session 1 — auth + serviceability
 **Shipped**
 - Phone OTP login: `/auth/otp/request`, `/auth/otp/verify`, `/auth/refresh`, `/auth/logout`, `GET /me`
