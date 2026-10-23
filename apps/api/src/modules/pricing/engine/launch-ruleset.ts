@@ -4,6 +4,7 @@
  * can never disagree.
  */
 import type { CityTier, PlanTier } from '@clickco/contracts';
+import { roundHalfUp } from '@clickco/utils';
 import type { AddonRule, BaseRateRule, FestivalRule, Ruleset, TravelSlabRule } from './types';
 
 export const LAUNCH_RULESET_VERSION = '2026.10.01';
@@ -12,6 +13,14 @@ export const LAUNCH_EFFECTIVE_FROM = '2026-10-01T00:00:00+05:30';
 
 const CITY_TIERS: readonly CityTier[] = ['METRO', 'TIER_1', 'TIER_2', 'TIER_3'];
 const rupees = (r: number): bigint => BigInt(r) * 100n;
+
+/** Waiting time is 60% of the extension hourly (doc 05 §5). */
+const WAITING_SHARE_BPS = 6000n;
+const BPS = 10000n;
+
+export const LAUNCH_GST_RATE_BPS = 1800;
+export const LAUNCH_SAC_CODE = '998383';
+export const LAUNCH_PRICES_INCLUDE_GST = false; // ADR-0005 OD-01
 
 /** Rupees per hour by city tier [METRO, TIER_1, TIER_2, TIER_3] and payout share. */
 const RATE_CARD: ReadonlyArray<readonly [PlanTier, readonly number[], number]> = [
@@ -148,12 +157,18 @@ function travelSlabs(): TravelSlabRule[] {
   ]);
 }
 
+function rateAt(tier: PlanTier, perCityTier: readonly number[], i: number): number {
+  const rate = perCityTier[i];
+  if (rate === undefined) throw new Error(`launch rate card: no ${tier} rate for city tier #${i}`);
+  return rate;
+}
+
 function baseRates(): BaseRateRule[] {
   const priced = RATE_CARD.flatMap(([tier, perCityTier, payoutShareBps]) =>
     CITY_TIERS.map((cityTier, i) => ({
       tier,
       cityTier,
-      ratePerHourPaise: rupees(perCityTier[i] ?? 0),
+      ratePerHourPaise: rupees(rateAt(tier, perCityTier, i)),
       payoutShareBps,
       isQuoteOnly: false,
     })),
@@ -173,9 +188,9 @@ export function launchRuleset(id: string, cityIds: LaunchCityIds): Ruleset {
   return {
     id,
     version: LAUNCH_RULESET_VERSION,
-    pricesIncludeGst: false, // ADR-0005 OD-01
-    gstRateBps: 1800,
-    sacCode: '998383',
+    pricesIncludeGst: LAUNCH_PRICES_INCLUDE_GST,
+    gstRateBps: LAUNCH_GST_RATE_BPS,
+    sacCode: LAUNCH_SAC_CODE,
     baseRates: rates,
     categoryUplifts: CATEGORY_CATALOGUE.map((c) => ({
       categoryCode: c.code,
@@ -244,7 +259,7 @@ export function launchRuleset(id: string, cityIds: LaunchCityIds): Ruleset {
         cityTier: r.cityTier,
         hourlyPaise: r.ratePerHourPaise,
         waitingGraceMinutes: 15,
-        waitingHourlyPaise: (r.ratePerHourPaise * 6000n) / 10000n,
+        waitingHourlyPaise: roundHalfUp(r.ratePerHourPaise * WAITING_SHARE_BPS, BPS),
       })),
     deliverables: [
       { tier: 'BASIC', minHalfHours: 4, isInstantBookable: true },

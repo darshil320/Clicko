@@ -14,23 +14,36 @@ const halfHours = (hours: string): number => Math.round(Number(hours) * 2);
 const isoDate = (d: Date | string): string =>
   typeof d === 'string' ? d : d.toISOString().slice(0, 10);
 
-export type PromoRecord = Omit<PromoInput, 'userRedemptions' | 'userBookingCount'>;
+export type PromoRecord = Omit<
+  PromoInput,
+  'userRedemptions' | 'userBookingCount' | 'totalRedemptions'
+>;
 
 /** Loads a published ruleset into the engine's in-memory model. Read-only. */
 @Injectable()
 export class PricingRepository {
   constructor(@Inject(SQL) private readonly sql: postgres.Sql) {}
 
+  /** For NEW quotes: the effective ruleset, restricted to categories/add-ons currently on sale. */
   async loadCurrent(now: Date): Promise<Ruleset | null> {
     const [row] = await this.sql<{ id: string }[]>`
       SELECT id FROM pricing_rulesets
       WHERE published_at IS NOT NULL AND effective_from <= ${now}
         AND (effective_to IS NULL OR effective_to > ${now})
       ORDER BY effective_from DESC LIMIT 1`;
-    return row ? this.loadById(row.id) : null;
+    return row ? this.loadById(row.id, { activeCatalogueOnly: true }) : null;
   }
 
-  async loadById(id: string): Promise<Ruleset | null> {
+  /**
+   * A ruleset exactly as published. Re-pricing an existing booking (extensions) must use this
+   * WITHOUT the catalogue filter: deactivating a category later must not break bookings priced
+   * under it (Invariant 17).
+   */
+  async loadById(
+    id: string,
+    opts: { activeCatalogueOnly?: boolean } = {},
+  ): Promise<Ruleset | null> {
+    const active = opts.activeCatalogueOnly === true;
     const sql = this.sql;
     const [rs] = await sql<
       {
@@ -67,7 +80,7 @@ export class PricingRepository {
           SELECT tier, city_tier, rate_per_hour_paise, payout_share_bps, is_quote_only FROM base_rates WHERE ruleset_id = ${id}`,
       sql<{ code: string; tier: PlanTier | null; multiplier_bps: number }[]>`
           SELECT c.code, u.tier, u.multiplier_bps FROM category_uplifts u JOIN categories c ON c.id = u.category_id
-          WHERE u.ruleset_id = ${id} AND c.is_active`,
+          WHERE u.ruleset_id = ${id} AND (c.is_active OR NOT ${active})`,
       sql<
         {
           band: EmergencyBand;
@@ -121,7 +134,7 @@ export class PricingRepository {
           requires_airspace_check: boolean;
         }[]
       >`
-          SELECT code, name, min_tier, requires_airspace_check FROM addons WHERE is_active`,
+          SELECT code, name, min_tier, requires_airspace_check FROM addons WHERE is_active OR NOT ${active}`,
       sql<
         {
           code: string;
@@ -244,13 +257,14 @@ export class PricingRepository {
         applies_to_cities: string[] | null;
         first_booking_only: boolean;
         per_user_cap: number;
+        total_redemption_cap: number | null;
         valid_from: Date;
         valid_to: Date;
         is_active: boolean;
       }[]
     >`
       SELECT code, discount_bps, discount_flat_paise, max_discount_paise, min_booking_paise, applies_to_tiers,
-             applies_to_cities, first_booking_only, per_user_cap, valid_from, valid_to, is_active
+             applies_to_cities, first_booking_only, per_user_cap, total_redemption_cap, valid_from, valid_to, is_active
       FROM promo_codes WHERE upper(code) = upper(${code})`;
     if (!p) return null;
     return {
@@ -263,6 +277,7 @@ export class PricingRepository {
       appliesToCityIds: p.applies_to_cities,
       firstBookingOnly: p.first_booking_only,
       perUserCap: p.per_user_cap,
+      totalRedemptionCap: p.total_redemption_cap,
       validFrom: p.valid_from,
       validTo: p.valid_to,
       isActive: p.is_active,

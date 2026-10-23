@@ -150,11 +150,15 @@ export interface PromoInput {
   readonly appliesToCityIds: readonly string[] | null;
   readonly firstBookingOnly: boolean;
   readonly perUserCap: number;
+  /** promo_codes.total_redemption_cap; null = unlimited. */
+  readonly totalRedemptionCap?: number | null;
   readonly validFrom: Date;
   readonly validTo: Date;
   readonly isActive: boolean;
   /** Times this user has already redeemed the code. */
   readonly userRedemptions: number;
+  /** Redemptions across all users (needed only when totalRedemptionCap is set). */
+  readonly totalRedemptions?: number;
   /** Bookings the user already has (for firstBookingOnly). */
   readonly userBookingCount: number;
 }

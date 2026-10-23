@@ -61,6 +61,18 @@ describe.runIf(TEST_DATABASE_URL)('pricing ruleset in Postgres', () => {
     expect(await repo.loadCurrent(new Date('2026-09-01T00:00:00Z'))).toBeNull();
   });
 
+  it('hides a deactivated category from new quotes but not from the ruleset as published', async () => {
+    await db.sql`UPDATE categories SET is_active = false WHERE code = 'REAL_ESTATE'`;
+    try {
+      const current = await repo.loadCurrent(new Date('2026-11-15T00:00:00Z'));
+      expect(current?.categoryUplifts.some((u) => u.categoryCode === 'REAL_ESTATE')).toBe(false);
+      const published = await repo.loadById(current?.id ?? '');
+      expect(published?.categoryUplifts.some((u) => u.categoryCode === 'REAL_ESTATE')).toBe(true);
+    } finally {
+      await db.sql`UPDATE categories SET is_active = true WHERE code = 'REAL_ESTATE'`;
+    }
+  });
+
   it('seeding twice changes nothing', async () => {
     expect(await seedLaunchRuleset(db.sql)).toEqual({ created: false });
   });

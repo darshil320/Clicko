@@ -3,9 +3,15 @@ import {
   ADDON_CATALOGUE,
   CATEGORY_CATALOGUE,
   LAUNCH_EFFECTIVE_FROM,
+  LAUNCH_GST_RATE_BPS,
+  LAUNCH_PRICES_INCLUDE_GST,
   LAUNCH_RULESET_VERSION,
+  LAUNCH_SAC_CODE,
   launchRuleset,
 } from '../../../modules/pricing/engine/launch-ruleset';
+
+const hhmm = (minute: number): string =>
+  `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 
 /** What each tier promises (doc 01 Screen 2, v0.2 §10/G-13, ADR-0005: photos only at launch). */
 const DELIVERABLES = [
@@ -81,7 +87,8 @@ export async function seedLaunchRuleset(sql: postgres.Sql): Promise<{ created: b
     };
     const [rs] = await tx<{ id: string }[]>`
       INSERT INTO pricing_rulesets (version, label, effective_from, prices_include_gst, gst_rate_bps, sac_code, published_at)
-      VALUES (${LAUNCH_RULESET_VERSION}, 'Launch rate card (doc 05 §5)', ${LAUNCH_EFFECTIVE_FROM}, false, 1800, '998383', now())
+      VALUES (${LAUNCH_RULESET_VERSION}, 'Launch rate card (doc 05 §5)', ${LAUNCH_EFFECTIVE_FROM},
+              ${LAUNCH_PRICES_INCLUDE_GST}, ${LAUNCH_GST_RATE_BPS}, ${LAUNCH_SAC_CODE}, now())
       RETURNING id`;
     if (!rs) throw new Error('seed: ruleset insert returned nothing');
     const r = launchRuleset(rs.id, {
@@ -102,10 +109,15 @@ export async function seedLaunchRuleset(sql: postgres.Sql): Promise<{ created: b
       await tx`INSERT INTO emergency_multipliers (ruleset_id, band, multiplier_bps, capture_on_accept_only, is_guaranteed, auto_refund_minutes_before)
                VALUES (${r.id}, ${e.band}, ${e.multiplierBps}, ${e.captureOnAcceptOnly}, ${e.isGuaranteed}, ${e.autoRefundMinutesBefore})`;
     }
-    await tx`INSERT INTO time_multipliers (ruleset_id, kind, window_start, window_end, multiplier_bps)
-             VALUES (${r.id}, 'NIGHT', '22:00', '06:00', ${r.night?.multiplierBps ?? 10000})`;
-    await tx`INSERT INTO time_multipliers (ruleset_id, kind, iso_dow, multiplier_bps)
-             VALUES (${r.id}, 'WEEKEND', ${r.weekend?.isoDays ?? []}::smallint[], ${r.weekend?.multiplierBps ?? 10000})`;
+    if (r.night) {
+      await tx`INSERT INTO time_multipliers (ruleset_id, kind, window_start, window_end, multiplier_bps)
+               VALUES (${r.id}, 'NIGHT', ${hhmm(r.night.windowStartMinute)}, ${hhmm(r.night.windowEndMinute)},
+                       ${r.night.multiplierBps})`;
+    }
+    if (r.weekend) {
+      await tx`INSERT INTO time_multipliers (ruleset_id, kind, iso_dow, multiplier_bps)
+               VALUES (${r.id}, 'WEEKEND', ${r.weekend.isoDays}::smallint[], ${r.weekend.multiplierBps})`;
+    }
     for (const f of r.festivals) {
       await tx`INSERT INTO festival_calendar (ruleset_id, label, date_from, date_to, city_id, multiplier_bps, is_peak_season)
                VALUES (${r.id}, ${f.label}, ${f.dateFrom}, ${f.dateTo}, ${f.cityId}, ${f.multiplierBps}, ${f.isPeakSeason})`;

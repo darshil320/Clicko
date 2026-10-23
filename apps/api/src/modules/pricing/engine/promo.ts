@@ -37,6 +37,10 @@ function checkEligibility(promo: PromoInput, ctx: PromoContext): Outcome<true> {
   if (promo.userRedemptions >= promo.perUserCap) {
     return reject('PROMO_USAGE_EXCEEDED', `Promo ${promo.code} has already been used`);
   }
+  const cap = promo.totalRedemptionCap ?? null;
+  if (cap !== null && (promo.totalRedemptions ?? 0) >= cap) {
+    return reject('PROMO_USAGE_EXCEEDED', `Promo ${promo.code} is fully redeemed`);
+  }
   return ok(true);
 }
 
