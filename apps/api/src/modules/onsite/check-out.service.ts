@@ -22,6 +22,7 @@ import {
   billingStartsAt,
   clientAbsentOpensAt,
   deliveryDueAt,
+  deviceTimeFloor,
   earliestCheckOutAt,
 } from './rules/timing';
 import { type CheckOutView, checkOutJson, toCheckOutResponse } from './views';
@@ -174,7 +175,7 @@ export class CheckOutService {
       serverNow: now,
       deviceTs: fix.deviceTs ? new Date(fix.deviceTs) : undefined,
       offline: fix.offline,
-      windowStart: ctx.assignment.blockedFrom,
+      windowStart: deviceTimeFloor(ctx.assignment, ctx.booking.scheduledStart),
       after: ctx.assignment.checkInAt ?? undefined,
     });
   }

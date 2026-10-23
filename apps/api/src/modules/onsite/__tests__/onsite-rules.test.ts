@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { bucketEarnings, istPeriodStarts } from '../rules/earnings';
-import { type ExtensionEventInput, extensionLedger } from '../rules/extensions';
+import {
+  type ExtensionEventInput,
+  extensionLedger,
+  extensionRequestBlock,
+} from '../rules/extensions';
 import { decideGeofence } from '../rules/geofence';
-import { isLateReplacement, noShowFirstCheckAt, noShowStep } from '../rules/no-show';
+import {
+  deviceTimeHidLateness,
+  isLateReplacement,
+  noShowFirstCheckAt,
+  noShowStep,
+} from '../rules/no-show';
 import {
   authoritativeTime,
   billingStartsAt,
   clientAbsentOpensAt,
   deliveryDueAt,
+  deviceTimeFloor,
   earliestCheckOutAt,
   onsiteOpensAt,
   waitingElapsedMinutes,
@@ -112,6 +122,35 @@ describe('authoritativeTime (ADR-0013 D5: offline queue, local timestamp)', () =
   it('uses the server time without a device time', () => {
     expect(authoritativeTime({ serverNow, offline: true, windowStart }).at).toEqual(serverNow);
   });
+
+  it('honours a tighter age limit (a check-in may be backdated at most 60 min)', () => {
+    const input = { serverNow, offline: true, windowStart, maxAgeMinutes: 60 };
+    expect(authoritativeTime({ ...input, deviceTs: at(-30) }).at).toEqual(at(-30));
+    expect(authoritativeTime({ ...input, deviceTs: at(-31) })).toEqual({
+      at: serverNow,
+      usedDeviceTime: false,
+    });
+  });
+});
+
+describe('deviceTimeFloor (security review H2)', () => {
+  const blockedFrom = at(-90);
+
+  it('is the calendar block start for an original assignment accepted days ahead', () => {
+    expect(deviceTimeFloor({ blockedFrom, acceptedAt: at(-3 * 24 * 60) }, START)).toEqual(
+      blockedFrom,
+    );
+  });
+
+  it('never lets a device time claim to be before the job was accepted', () => {
+    expect(deviceTimeFloor({ blockedFrom, acceptedAt: at(-20) }, START)).toEqual(at(-20));
+  });
+
+  it('never before the on-site window opens (3 h before the start)', () => {
+    expect(deviceTimeFloor({ blockedFrom: at(-400), acceptedAt: at(-500) }, START)).toEqual(
+      at(-180),
+    );
+  });
 });
 
 describe('billing clock and minimum duration (ADR-0013 D6)', () => {
@@ -125,8 +164,11 @@ describe('billing clock and minimum duration (ADR-0013 D6)', () => {
     expect(earliestCheckOutAt(at(12), 2.5, 2)).toEqual(at(12 + 150 + 120));
   });
 
-  it('adds charged waiting on top of the booked block (never billed twice)', () => {
-    expect(earliestCheckOutAt(START, 2, 1, 25)).toEqual(at(120 + 60 + 25));
+  it('never stops counting waiting at the shoot start: shooting minutes are not waiting', () => {
+    // On-time client: shoot started at the scheduled start, photographer logs at T+50.
+    expect(waitingElapsedMinutes(START, at(50), START)).toBe(0);
+    // Client 20 min late: shoot started at T+20, logged at T+50.
+    expect(waitingElapsedMinutes(START, at(50), at(20))).toBe(20);
   });
 
   it('opens en-route and check-in 3 h before the start', () => {
@@ -210,6 +252,15 @@ describe('no-show ladder (v0.2 §9, ADR-0013 D11)', () => {
       isLateReplacement({ isReplacement: false, checkInAt: at(40), scheduledStart: START }),
     ).toBeNull();
   });
+
+  it('flags a device time that turned a late arrival into an on-time one (security review H2)', () => {
+    const hid = (recordedAt: Date, serverNow: Date) =>
+      deviceTimeHidLateness({ recordedAt, serverNow, scheduledStart: START });
+    expect(hid(at(5), at(40))).toBe(true);
+    expect(hid(at(15), at(16))).toBe(true);
+    expect(hid(at(5), at(15))).toBe(false);
+    expect(hid(at(20), at(40))).toBe(false);
+  });
 });
 
 describe('extensionLedger (pairing requests with their resolutions, ADR-0013 D8)', () => {
@@ -257,6 +308,28 @@ describe('extensionLedger (pairing requests with their resolutions, ADR-0013 D8)
       at(10),
     );
     expect(ledger.requests).toEqual([]);
+  });
+
+  it('a decline starts a 10-minute cooldown; at most 8 requests per shoot (security review L3)', () => {
+    const declined = extensionLedger(
+      [ev('1', 'EXTENSION_REQUESTED', 0), ev('2', 'EXTENSION_DECLINED', 2, 'DECLINED_BY_CLIENT')],
+      at(5),
+    );
+    expect(extensionRequestBlock(declined, at(5))).toEqual({ kind: 'COOLDOWN', until: at(12) });
+    expect(extensionRequestBlock(declined, at(12))).toBeNull();
+    const lapsed = extensionLedger(
+      [ev('1', 'EXTENSION_REQUESTED', 0), ev('2', 'EXTENSION_DECLINED', 10, 'EXPIRED')],
+      at(11),
+    );
+    expect(extensionRequestBlock(lapsed, at(11))).toBeNull();
+    const many = extensionLedger(
+      Array.from({ length: 8 }, (_, i) => [
+        ev(`r${i}`, 'EXTENSION_REQUESTED', i * 30),
+        ev(`d${i}`, 'EXTENSION_DECLINED', i * 30 + 10, 'EXPIRED'),
+      ]).flat(),
+      at(300),
+    );
+    expect(extensionRequestBlock(many, at(300))).toEqual({ kind: 'LIMIT', max: 8 });
   });
 });
 

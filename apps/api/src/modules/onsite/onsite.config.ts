@@ -17,6 +17,8 @@ export const ONSITE_CONFIG = {
   offline: {
     /** An offline device time older than this is not trusted (D5). */
     maxAgeMinutes: 6 * 60,
+    /** A check-in decides lateness and billing start: it is trusted for less (security review H2). */
+    maxCheckInAgeMinutes: 60,
     /** A device clock this far ahead is clamped to the server time; further is ignored. */
     maxFutureSkewMs: 2 * 60_000,
   },
@@ -26,6 +28,10 @@ export const ONSITE_CONFIG = {
     maxApproved: 4,
     /** An unanswered request lapses after this. */
     expiryMinutes: 10,
+    /** After the client declines, the photographer waits this long to ask again (L3). */
+    declineCooldownMinutes: 10,
+    /** Requests per assignment, answered or not (L3). */
+    maxRequests: 8,
   },
   waiting: {
     /** Waiting beyond this is T&C §3.8 non-attendance territory: capped, ops alerted. */

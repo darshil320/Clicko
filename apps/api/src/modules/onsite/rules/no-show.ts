@@ -62,3 +62,17 @@ export function isLateReplacement(a: {
   const lateBy = Math.floor((a.checkInAt.getTime() - a.scheduledStart.getTime()) / MIN);
   return lateBy > ONSITE_CONFIG.lateReplacementGraceMinutes ? lateBy : null;
 }
+
+/**
+ * Security review H2: an offline check-in whose device time is on time while the server received
+ * it after start + 15 min. The device time stands (the photographer may really have had no
+ * signal), but ops reviews it: it is the one case where the photographer's clock decides lateness.
+ */
+export function deviceTimeHidLateness(a: {
+  readonly recordedAt: Date;
+  readonly serverNow: Date;
+  readonly scheduledStart: Date;
+}): boolean {
+  const lateAfter = plus(a.scheduledStart, ONSITE_CONFIG.noShow.alertAfterMinutes);
+  return a.recordedAt <= lateAfter && a.serverNow > lateAfter;
+}

@@ -17,6 +17,8 @@ export interface AuthoritativeTimeInput {
   readonly windowStart: Date;
   /** The event must come strictly after this (a check-out after its check-in). */
   readonly after?: Date | undefined;
+  /** Overrides the default 6 h age limit (a check-in is trusted for at most 60 min). */
+  readonly maxAgeMinutes?: number | undefined;
 }
 
 /**
@@ -31,7 +33,8 @@ export function authoritativeTime(input: AuthoritativeTimeInput): {
   const { serverNow, deviceTs, offline, windowStart, after } = input;
   const server = { at: serverNow, usedDeviceTime: false };
   if (!offline || !deviceTs) return server;
-  const { maxAgeMinutes, maxFutureSkewMs } = ONSITE_CONFIG.offline;
+  const { maxFutureSkewMs } = ONSITE_CONFIG.offline;
+  const maxAgeMinutes = input.maxAgeMinutes ?? ONSITE_CONFIG.offline.maxAgeMinutes;
   if (deviceTs.getTime() > serverNow.getTime() + maxFutureSkewMs) return server;
   const candidate = new Date(Math.min(deviceTs.getTime(), serverNow.getTime()));
   if (candidate < windowStart) return server;
@@ -46,26 +49,33 @@ export function billingStartsAt(checkInAt: Date, scheduledStart: Date): Date {
 }
 
 /**
- * Booked hours, plus approved one-hour extensions, plus CHARGED waiting minutes, from the billing
- * start (ADR-0013 D6/D9): waiting the client pays for is time on top of the booked block, so it is
- * never also taken out of the shoot (no double billing). The free grace is not added back.
+ * Booked hours plus approved one-hour extensions, from the billing start (ADR-0013 D6). Logged
+ * waiting does NOT extend the minimum duration.
  */
 export function earliestCheckOutAt(
   billingStart: Date,
   scheduledHours: number,
   approvedExtensionHours: number,
-  chargedWaitingMinutes = 0,
 ): Date {
   const minutes =
-    Math.round(scheduledHours * 60) +
-    approvedExtensionHours * ONSITE_CONFIG.extension.blockMinutes +
-    chargedWaitingMinutes;
+    Math.round(scheduledHours * 60) + approvedExtensionHours * ONSITE_CONFIG.extension.blockMinutes;
   return plus(billingStart, minutes * MIN);
 }
 
 /** The latest of several instants (the device-time floor). */
 export function latestOf(first: Date, ...rest: readonly Date[]): Date {
   return new Date(Math.max(first.getTime(), ...rest.map((d) => d.getTime())));
+}
+
+/**
+ * Security review H2: the earliest instant an offline device time may claim — the calendar block
+ * start, the acceptance and the on-site opening, whichever is latest.
+ */
+export function deviceTimeFloor(
+  a: { readonly blockedFrom: Date; readonly acceptedAt: Date },
+  scheduledStart: Date,
+): Date {
+  return latestOf(a.blockedFrom, a.acceptedAt, onsiteOpensAt(scheduledStart));
 }
 
 /** En-route and check-in open 3 h before the start. */

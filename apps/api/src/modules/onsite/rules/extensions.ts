@@ -4,6 +4,7 @@
  * resolution answers the latest open request. Expiry is evaluated lazily against `now`.
  */
 import type { ExtensionStatus } from '@clickco/contracts';
+import { ONSITE_CONFIG } from '../onsite.config';
 import { extensionExpiresAt } from './timing';
 
 export const EXTENSION_DECLINE_REASON = {
@@ -11,6 +12,8 @@ export const EXTENSION_DECLINE_REASON = {
   EXPIRED: 'EXPIRED',
   CONFLICT: 'CALENDAR_CONFLICT',
   SHOOT_ENDED: 'SHOOT_ENDED',
+  /** The price changed between request and approval (security review L5). */
+  REPRICED: 'REPRICED',
 } as const;
 export type ExtensionDeclineReason =
   (typeof EXTENSION_DECLINE_REASON)[keyof typeof EXTENSION_DECLINE_REASON];
@@ -30,6 +33,8 @@ export interface ExtensionRequestState {
   readonly amountPaise: bigint;
   readonly status: ExtensionStatus;
   readonly resolvedAt: Date | null;
+  /** Why a DECLINED/EXPIRED request was closed (EXTENSION_DECLINE_REASON); null otherwise. */
+  readonly declineReason: string | null;
 }
 
 export interface ExtensionLedger {
@@ -45,7 +50,8 @@ const resolved = (
   r: ExtensionRequestState,
   status: ExtensionStatus,
   at: Date,
-): ExtensionRequestState => ({ ...r, status, resolvedAt: at });
+  declineReason: string | null,
+): ExtensionRequestState => ({ ...r, status, resolvedAt: at, declineReason });
 
 export function extensionLedger(
   events: readonly ExtensionEventInput[],
@@ -62,6 +68,7 @@ export function extensionLedger(
         amountPaise: e.amountPaise ?? 0n,
         status: 'PENDING',
         resolvedAt: null,
+        declineReason: null,
       });
       openIndex = requests.length - 1;
     } else if (
@@ -76,7 +83,8 @@ export function extensionLedger(
             : e.note === EXTENSION_DECLINE_REASON.EXPIRED
               ? 'EXPIRED'
               : 'DECLINED';
-        requests[openIndex] = resolved(current, status, e.occurredAt);
+        const reason = e.kind === 'EXTENSION_DECLINED' ? e.note : null;
+        requests[openIndex] = resolved(current, status, e.occurredAt, reason);
       }
       openIndex = null;
     }
@@ -92,4 +100,27 @@ export function extensionLedger(
     unresolved,
     approvedCount: shown.filter((r) => r.status === 'APPROVED').length,
   };
+}
+
+export type ExtensionRequestBlock =
+  | { readonly kind: 'COOLDOWN'; readonly until: Date }
+  | { readonly kind: 'LIMIT'; readonly max: number };
+
+/**
+ * Security review L3: the client is not asked again within 10 min of saying no, and a shoot gets
+ * at most 8 requests in all. Only the client's own "no" starts a cooldown (not a lapse, a calendar
+ * conflict or a repricing).
+ */
+export function extensionRequestBlock(
+  ledger: ExtensionLedger,
+  now: Date,
+): ExtensionRequestBlock | null {
+  const { maxRequests, declineCooldownMinutes } = ONSITE_CONFIG.extension;
+  if (ledger.requests.length >= maxRequests) return { kind: 'LIMIT', max: maxRequests };
+  const last = ledger.requests.at(-1);
+  const declinedAt =
+    last?.declineReason === EXTENSION_DECLINE_REASON.CLIENT ? last.resolvedAt : null;
+  if (!declinedAt) return null;
+  const until = new Date(declinedAt.getTime() + declineCooldownMinutes * 60_000);
+  return now < until ? { kind: 'COOLDOWN', until } : null;
 }

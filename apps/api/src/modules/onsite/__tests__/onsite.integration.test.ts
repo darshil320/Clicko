@@ -26,6 +26,7 @@ const START_Y = new Date(NOW.getTime() + 6 * DAY);
 const START_Z = plus(START_Y, 5 * 60); // the photographer's next booking, right after Y's buffer
 const START_W = new Date(NOW.getTime() + 7 * DAY);
 const START_V = new Date(NOW.getTime() + 8 * DAY);
+const START_U = new Date(NOW.getTime() + 9 * DAY);
 
 describe.runIf(TEST_DATABASE_URL)('on-site guards, extensions, waiting, incidents', () => {
   let e2e: E2eApp;
@@ -92,6 +93,7 @@ describe.runIf(TEST_DATABASE_URL)('on-site guards, extensions, waiting, incident
       ['Z', START_Z],
       ['W', START_W],
       ['V', START_V],
+      ['U', START_U],
     ] as const) {
       const booking = await bookAndPay(e2e, userId, start);
       ids[which] = { booking: booking.id, assignment: await acceptOffer(e2e, proA, booking.id) };
@@ -266,6 +268,13 @@ describe.runIf(TEST_DATABASE_URL)('on-site guards, extensions, waiting, incident
       const before = await bookingRow('Y');
       const [blockBefore] = await e2e.db.sql<{ blocked_until: Date }[]>`
         SELECT blocked_until FROM assignments WHERE id = ${assignmentOf('Y')}`;
+      // The client said no at +81: the photographer may ask again 10 minutes later (L3).
+      const tooSoon = await request();
+      expect(tooSoon.json.error).toMatchObject({
+        code: 'EXTENSION_COOLDOWN',
+        details: { retryAt: plus(START_Y, 91).toISOString() },
+      });
+      setNow(e2e, plus(START_Y, 91));
       eventId = (await request()).json.data.eventId;
       const res = await clientCall('Y', `extensions/${eventId}/approve`);
       expect(res.status).toBe(409);
@@ -289,8 +298,9 @@ describe.runIf(TEST_DATABASE_URL)('on-site guards, extensions, waiting, incident
       const sequences: number[] = [];
       for (let i = 0; i < 4; i++) {
         const req = await act(proA, 'W', 'extensions', { hours: 1 });
+        expect(req.status, JSON.stringify(req.json)).toBe(201);
         const ok = await clientCall('W', `extensions/${req.json.data.eventId}/approve`);
-        expect(ok.status).toBe(200);
+        expect(ok.status, JSON.stringify(ok.json)).toBe(200);
         sequences.push(ok.json.data.snapshotSequence);
       }
       expect(sequences).toEqual([2, 3, 4, 5]);
@@ -357,6 +367,36 @@ describe.runIf(TEST_DATABASE_URL)('on-site guards, extensions, waiting, incident
       expect(review?.payload).toMatchObject({
         reason: 'ACCESS_DENIED_CHARGE_50',
         charge_bps: 5000,
+      });
+    });
+  });
+
+  describe('booking U: device time and waiting are bounded (security review H1/H2)', () => {
+    it('a check-in device time that hid a late arrival stands, but goes to ops review', async () => {
+      setNow(e2e, plus(START_U, 25));
+      const deviceTs = plus(START_U, 5).toISOString();
+      const res = await act(proA, 'U', 'check-in', { ...fixAt(0.05, 0), offline: true, deviceTs });
+      expect(res.status).toBe(200);
+      expect(res.json.data).toMatchObject({ checkedInAt: deviceTs });
+      const [review] = await e2e.db.sql<{ payload: Json }[]>`
+        SELECT payload FROM domain_events WHERE aggregate_id = ${bookingOf('U')}
+          AND event_type = 'booking.needs_review'`;
+      expect(review?.payload).toMatchObject({
+        reason: 'OFFLINE_CHECK_IN_TIME',
+        device_check_in_at: deviceTs,
+        server_received_at: plus(START_U, 25).toISOString(),
+      });
+    });
+
+    it('time after the shoot started is never waiting', async () => {
+      setNow(e2e, plus(START_U, 30));
+      expect((await act(proA, 'U', 'start')).status).toBe(200);
+      setNow(e2e, plus(START_U, 90));
+      const res = await act(proA, 'U', 'waiting', { minutes: 40, note: 'Late', ...fixAt(0, 0) });
+      expect(res.status).toBe(422);
+      expect(res.json.error).toMatchObject({
+        code: 'WAITING_EXCEEDS_ELAPSED',
+        details: { elapsedMinutes: 25 },
       });
     });
   });

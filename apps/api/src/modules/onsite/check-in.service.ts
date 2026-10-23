@@ -20,8 +20,9 @@ import type { Tx } from './onsite.types';
 import type { OnsiteContext } from './onsite-context';
 import { OnsiteContextLoader } from './onsite-context';
 import { emitOnce, needsReview } from './onsite-outbox';
-import { isLateReplacement } from './rules/no-show';
-import { authoritativeTime, billingStartsAt, onsiteOpensAt } from './rules/timing';
+import { decideGeofence } from './rules/geofence';
+import { deviceTimeHidLateness, isLateReplacement } from './rules/no-show';
+import { authoritativeTime, billingStartsAt, deviceTimeFloor, onsiteOpensAt } from './rules/timing';
 import { toCheckInResponse } from './views';
 
 const PRE_ARRIVAL = ['ASSIGNED', 'EN_ROUTE'] as const;
@@ -139,7 +140,8 @@ export class CheckInService {
       serverNow: now,
       deviceTs: fix.deviceTs ? new Date(fix.deviceTs) : undefined,
       offline: fix.offline,
-      windowStart: a.blockedFrom,
+      windowStart: deviceTimeFloor(a, ctx.booking.scheduledStart),
+      maxAgeMinutes: ONSITE_CONFIG.offline.maxCheckInAgeMinutes,
     });
     const recorded = recordedFix(fix, time.at);
     if (ctx.booking.status === 'ASSIGNED') {
@@ -168,6 +170,7 @@ export class CheckInService {
     });
     await this.geofence.flagUnverified(tx, ctx, 'CHECK_IN', fence, recorded);
     await this.flagLateReplacement(tx, ctx, time.at);
+    await this.flagDeviceTimeLateness(tx, ctx, time.at, now);
     return {
       kind: 'DONE',
       response: toCheckInResponse({
@@ -223,25 +226,65 @@ export class CheckInService {
     await needsReview(tx, ctx.booking.bookingId, 'LATE_REPLACEMENT_CREDIT_25', checkInAt, details);
   }
 
-  /** D5: the photographer was there, but the no-show escalation already ran — ops reverses it. */
+  /** Security review H2: the device clock made a late arrival on time — ops checks it. */
+  private async flagDeviceTimeLateness(
+    tx: Tx,
+    ctx: OnsiteContext,
+    recordedAt: Date,
+    serverNow: Date,
+  ): Promise<void> {
+    const { scheduledStart } = ctx.booking;
+    if (!deviceTimeHidLateness({ recordedAt, serverNow, scheduledStart })) return;
+    await needsReview(tx, ctx.booking.bookingId, 'OFFLINE_CHECK_IN_TIME', recordedAt, {
+      assignment_id: ctx.assignment.id,
+      photographer_id: ctx.assignment.photographerId,
+      is_replacement: ctx.assignment.isReplacement,
+      device_check_in_at: recordedAt.toISOString(),
+      server_received_at: serverNow.toISOString(),
+      scheduled_start: scheduledStart.toISOString(),
+    });
+  }
+
+  /**
+   * D5: the photographer was there, but the no-show escalation already ran — ops reverses it.
+   * Security review M4: only a plausible claim reaches ops (a device time between the floor and
+   * the release, a fix that passes the fence), and at most one per assignment.
+   */
   private async reportLateOfflineCheckIn(
     tx: Tx,
     ctx: OnsiteContext,
     fix: GeoFix,
     now: Date,
   ): Promise<void> {
+    const a = ctx.assignment;
+    const deviceTs = fix.deviceTs ? new Date(fix.deviceTs) : null;
+    if (!deviceTs || !a.releasedAt || deviceTs > a.releasedAt) return;
+    const time = authoritativeTime({
+      serverNow: now,
+      deviceTs,
+      offline: true,
+      windowStart: deviceTimeFloor(a, ctx.booking.scheduledStart),
+    });
+    if (!time.usedDeviceTime) return;
+    const { distanceM, basis } = await this.assignments.measure(tx, ctx.booking, fix.lat, fix.lng);
+    const decision = decideGeofence({ distanceM, accuracyM: fix.accuracyM, basis });
+    if (decision.kind !== 'ACCEPTED') return;
     await emitOnce(
       tx,
       'assignment.offline_check_in_after_no_show',
       ctx.booking.bookingId,
       now,
-      `${ctx.assignment.id}:${fix.deviceTs ?? 'no-device-time'}`,
+      a.id,
       {
-        assignment_id: ctx.assignment.id,
-        photographer_id: ctx.assignment.photographerId,
-        device_ts: fix.deviceTs ?? null,
+        assignment_id: a.id,
+        photographer_id: a.photographerId,
+        device_ts: deviceTs.toISOString(),
+        released_at: a.releasedAt.toISOString(),
         check_in_location: { lat: fix.lat, lng: fix.lng },
         accuracy_m: fix.accuracyM,
+        distance_m: distanceM,
+        geofence_basis: basis,
+        geofence_verified: decision.verified,
       },
     );
   }

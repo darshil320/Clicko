@@ -149,7 +149,9 @@ describe.runIf(TEST_DATABASE_URL)(
       expect(e2e.scheduler.pending(JOB.ONSITE_NO_SHOW_CHECK)).toEqual([]);
     });
 
-    it('starts the shoot, requests an extension and shows it to the client', async () => {
+    it('starts the shoot once the kitchen is ready (12:40), requests an extension, shows it to the client', async () => {
+      // Waiting is the time from the billing start to the shoot start (ADR-0013 D9).
+      setNow(e2e, new Date(START.getTime() + 40 * MIN));
       const started = await proCall('start');
       expect(started.json.data.bookingStatus).toBe('IN_PROGRESS');
       setNow(e2e, new Date(START.getTime() + 90 * MIN));
@@ -449,6 +451,25 @@ describe.runIf(TEST_DATABASE_URL)(
         SELECT 1 FROM domain_events WHERE aggregate_id = ${booking.id}
           AND event_type = 'assignment.offline_check_in_after_no_show'`;
       expect(rows).toHaveLength(1);
+      // A different device time does not flood ops (once per assignment); a claim after the
+      // release is not plausible and is not reported (security review M4).
+      for (const minutes of [6, 21]) {
+        const again = await e2e.call('POST', `/pro/assignments/${assignmentId}/check-in`, {
+          token: await pro(lateId),
+          idempotencyKey: idemKey(`late-offline-${minutes}`),
+          body: {
+            ...fixAt(0.02, 0, venue),
+            offline: true,
+            deviceTs: new Date(START.getTime() + minutes * MIN).toISOString(),
+          },
+        });
+        expect(again.status).toBe(409);
+      }
+      const [report] = await e2e.db.sql<{ n: number; payload: Json }[]>`
+        SELECT count(*) OVER ()::int AS n, payload FROM domain_events WHERE aggregate_id = ${booking.id}
+          AND event_type = 'assignment.offline_check_in_after_no_show'`;
+      expect(report?.n).toBe(1);
+      expect(report?.payload).toMatchObject({ geofence_verified: true, geofence_basis: 'VENUE' });
     });
 
     it('a replacement who checks in late flags the 25% credit for S8', async () => {

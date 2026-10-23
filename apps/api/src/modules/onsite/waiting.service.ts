@@ -57,9 +57,11 @@ export class WaitingService {
       if (await this.events.firstOfKind(tx, assignmentId, 'WAITING_LOGGED')) {
         throw conflict('WAITING_ALREADY_LOGGED', 'Waiting time is logged once per shoot');
       }
+      // Waiting ends when the shoot starts: minutes spent shooting are never waiting (T&C §2.6).
       const elapsed = waitingElapsedMinutes(
         billingStartsAt(a.checkInAt, ctx.booking.scheduledStart),
         now,
+        ctx.booking.shootStartedAt,
       );
       if (body.minutes > elapsed) {
         throw unprocessable(

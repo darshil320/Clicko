@@ -46,7 +46,8 @@ export type ReviewReason =
   | 'LATE_REPLACEMENT_CREDIT_25'
   | 'ACCESS_DENIED_CHARGE_50'
   | 'UNSAFE_SITE_PARTIAL_CHARGE'
-  | 'CLIENT_NON_ATTENDANCE';
+  | 'CLIENT_NON_ATTENDANCE'
+  | 'OFFLINE_CHECK_IN_TIME';
 
 /** `booking.needs_review`: the S8 money-review queue (ops is alerted on it). Once per reason. */
 export async function needsReview(

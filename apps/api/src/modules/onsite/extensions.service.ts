@@ -23,7 +23,11 @@ import { type OnsiteContext, OnsiteContextLoader } from './onsite-context';
 import { emit } from './onsite-outbox';
 import { OnsiteTimerScheduler } from './onsite-timers';
 import { AssignmentEventsRepository } from './repositories/assignment-events.repository';
-import { EXTENSION_DECLINE_REASON, type ExtensionRequestState } from './rules/extensions';
+import {
+  EXTENSION_DECLINE_REASON,
+  type ExtensionRequestState,
+  extensionRequestBlock,
+} from './rules/extensions';
 import { extensionExpiresAt } from './rules/timing';
 import { toExtensionView } from './views';
 
@@ -32,7 +36,8 @@ const HOURS = 1;
 type Decision =
   | { readonly kind: 'DONE'; readonly response: ExtensionDecisionResponse }
   | { readonly kind: 'EXPIRED' }
-  | { readonly kind: 'CONFLICT' };
+  | { readonly kind: 'CONFLICT' }
+  | { readonly kind: 'REPRICED' };
 
 /**
  * G-16 extensions (ADR-0013 D8): the photographer asks for +1 h, the client approves within
@@ -121,6 +126,12 @@ export class ExtensionsService {
         'The photographer has another booking right after this one, so the extension was declined',
       );
     }
+    if (outcome.kind === 'REPRICED') {
+      throw conflict(
+        'EXTENSION_REPRICED',
+        'The price of this extension changed — the photographer will send a new request',
+      );
+    }
     return outcome.response;
   }
 
@@ -164,6 +175,18 @@ export class ExtensionsService {
         `A booking can be extended at most ${ONSITE_CONFIG.extension.maxApproved} times`,
       );
     }
+    const block = extensionRequestBlock(ledger, now);
+    if (block?.kind === 'COOLDOWN') {
+      throw conflict('EXTENSION_COOLDOWN', 'The client just declined — wait before asking again', {
+        retryAt: block.until.toISOString(),
+      });
+    }
+    if (block?.kind === 'LIMIT') {
+      throw conflict(
+        'EXTENSION_REQUEST_LIMIT',
+        `At most ${block.max} extension requests per shoot`,
+      );
+    }
     const charge = await this.priceOf(ctx);
     const event = await this.events.insert(tx, {
       assignmentId,
@@ -191,6 +214,7 @@ export class ExtensionsService {
       amountPaise: charge.totalPaise,
       status: 'PENDING',
       resolvedAt: null,
+      declineReason: null,
     };
     return {
       view: toExtensionView(state, charge, ids(ctx)),
@@ -251,8 +275,10 @@ export class ExtensionsService {
     now: Date,
   ): Promise<Decision> {
     const charge = await this.priceOf(ctx);
+    // Never charge a price the client was not shown: decline it; the photographer asks again (L5).
     if (charge.totalPaise !== request.amountPaise) {
-      throw new Error(`Extension ${request.eventId} reprices differently from its request`);
+      await this.records.decline(tx, ctx, request, 'REPRICED', SYSTEM_ACTOR, now);
+      return { kind: 'REPRICED' };
     }
     const block = await this.assignments.extendBlock(
       tx,

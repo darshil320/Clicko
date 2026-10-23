@@ -157,3 +157,12 @@ S8: delivery links, `purge_after`, RAW/JPEG purge, SLA clocks, QA desk and the `
 Drive adapter + `drive` queue. Virus scan (v0.2 §4) and corrupt-RAW detection beyond darktable's own failure.
 Proof-shot upload from the Pro app (`PROOF_SHOT`, single file through `putObject`). Multi-instance staging
 (LocalDisk/Drive staging assume one API volume, ADR-0008).
+
+
+## Carried forward from the Sprint 6–7 domain review
+- **Unsafe-site delivery (T&C §8.3)** — files captured before a safety stop are delivered on full payment.
+  UNSAFE_SITE is terminal and not uploadable today. Sprint 8 adds `UNSAFE_SITE → UPLOADING` to DOMAIN §2
+  (staff-confirmed) before building delivery, so the T&C promise has a path.
+- The 25% late-replacement credit and 50% access-denied charge are only review metadata today; when S8
+  computes them they move into `pricing/engine` with the rates on the ruleset.
+- Client-absent bookings can also carry a waiting charge — decide in the S8 non-attendance money review.
