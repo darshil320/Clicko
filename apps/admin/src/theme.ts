@@ -32,6 +32,7 @@ input,select{background:${v('surface-overlay')};color:${v('text-primary')};borde
 button{background:${v('accent-default')};color:${v('text-on-accent')};border:0;border-radius:${px(radius.md)};
   height:40px;padding:0 ${px(space[5])};font-weight:600;cursor:pointer}
 button:disabled{opacity:.5;cursor:wait}
+button.link{background:none;color:${v('accent-default')};height:auto;padding:0;font-weight:400;text-decoration:underline}
 table{width:100%;border-collapse:collapse}
 td,th{padding:${px(space[2])} ${px(space[3])};border-bottom:1px solid ${v('border-subtle')};text-align:left}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
