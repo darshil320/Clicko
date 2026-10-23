@@ -2,6 +2,29 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-23 · Sprint 4 v0 — client app (pre-approved by Darshil; Figma gate waived for v0)
+**Shipped**
+- `packages/api-client`: typed fetch SDK over `@clickco/contracts` — envelope unwrap + contract validation,
+  typed `ApiError`, bearer token, single-flight refresh-on-401, Idempotency-Key helpers (22 tests)
+- `packages/ui`: the ten doc 01 §6 primitives + S4 foundations (Text, Icon, Skeleton, Checkbox, Switch, Screen),
+  NativeWind classes from the token preset only (38 tests). Shipped as TS source.
+- `apps/client`: Expo SDK 56 + expo-router, NativeWind 4, TanStack Query, Zustand + MMKV, RHF + zod.
+  Screens 1–6 on the live API (sign-in, Home, Plan, Configurator, Review, sandbox Pay, Confirmed, Bookings,
+  Booking detail); Screens 7–10 are status-driven placeholders in Booking detail (79 tests)
+- Design tokens preset gained `min-h-tap` / `h-button` / `h-input` / `tracking-micro` (derived from `layout`)
+- `formatINR` no longer uses `Intl` (Hermes-safe; identical output)
+- Verified on web: sign-in (dev OTP) → pincode 395007 → configurator live quote → review → pay → simulate →
+  confirmed → booking detail, against the real API. Native bundles compile; not run on a device (no Xcode here)
+
+**Needs action**
+- API `CORS_ORIGINS` must include `http://localhost:8081` (Expo web) — apps/api/.env
+- Tier palette, photography imagery and the Figma pass (design-verifier) — B16 still open
+- Security review (S4, no CRITICAL): fixed refresh-on-429 sign-outs, cross-tab token sync, draft/cache
+  cleared on session end, dev endpoints refused outside `__DEV__`, UUID-checked paths, Android backup off.
+  **Launch blockers:** refresh token at rest is plain MMKV/localStorage (→ Keychain via expo-secure-store or
+  an MMKV encryption key; web → HttpOnly cookie); API refresh-token rotation ignores its grace window;
+  release builds must require an https `EXPO_PUBLIC_API_URL`; T&C version is still `v2-draft`
+
 ## 2026-10-23 · Sprint 2 — pricing engine (done) · Sprint 3 started
 **Shipped (S2)**
 - Pure pricing engine (doc 05 §3, 12 steps) — bigint paise, one rounding, MAX surge, IST night/weekend,
