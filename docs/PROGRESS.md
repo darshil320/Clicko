@@ -2,6 +2,23 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-23 · Sprints 3, 4 (v0), 5 and marketing site
+**Shipped**
+- S3 bookings + payments: state machine with outbox, server re-pricing + snapshot, sandbox/Razorpay gateways,
+  signed replay-safe webhooks, GST advance invoices, balanced ledger, idempotency keys
+- S4 v0 client app (Expo, web + phone bundles) for Screens 1–6 on live data; `@clickco/ui`, `@clickco/api-client`
+- S5 dispatch: outbox publisher, PostGIS eligibility + ranking, 4-wave cascade, emergency broadcast, first-accept-wins,
+  unfilled auto-cancel at T-90 for every band, photographer OTP + offers/accept/decline/cancel, re-dispatch + penalties,
+  ops alerts, async OTP SMS (sealed job payloads)
+- Marketing site (apps/web): home, cities, 3 hubs, 21 city×category pages, sitemap, JSON-LD, waitlist
+- Console: booking simulator + dispatch desk; full journey verified live in the browser (book → pay → dispatch → accept)
+- Tests: API 650 · client 80 · ui 38 · api-client 24 · web 119 · contracts 41 · others green
+
+**Decisions:** ADR-0011 (state machine), ADR-0012 (dispatch review: unfilled auto-cancel all bands, lead-time floor,
+capture outcomes, no-show incentive on base share, penalties, async OTP, outbox backoff). SA-14 (3–8h not guaranteed).
+
+**Next:** S6 Pro app + check-in/out/extensions/no-show detector · S7 upload portal + StoragePort · S8 delivery + SLA
+
 ## 2026-10-23 · Sprint 4 v0 — client app (pre-approved by Darshil; Figma gate waived for v0)
 **Shipped**
 - `packages/api-client`: typed fetch SDK over `@clickco/contracts` — envelope unwrap + contract validation,

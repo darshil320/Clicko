@@ -25,6 +25,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
             <a href="/serviceability">Pincode checker</a>
             <a href="/pricing">Quote calculator</a>
             <a href="/bookings">Booking simulator</a>
+            <a href="/dispatch">Dispatch desk</a>
           </aside>
           <main>{children}</main>
         </div>

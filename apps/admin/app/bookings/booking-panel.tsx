@@ -116,6 +116,11 @@ export function BookingPanel({
         </p>
       ) : null}
       {error ? <p className="err">{error}</p> : null}
+      {['CONFIRMED', 'DISPATCHING', 'ASSIGNED'].includes(b.status) ? (
+        <p>
+          <a href={`/dispatch?booking=${b.id}`}>Open in the dispatch desk →</a>
+        </p>
+      ) : null}
 
       <h2>Timeline</h2>
       <table>

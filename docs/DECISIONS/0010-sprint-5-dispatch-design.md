@@ -56,3 +56,20 @@ Payout shown = snapshot `expected_payout_paise`.
 ## Dev data
 `db:seed:dev` (development only): verified demo photographers in all three cities with categories, gear,
 metrics and base locations, so the console's dispatch desk can run a full cascade.
+
+## Addendum (23 Oct 2026, with ADR-0012)
+- **Wave numbers are booking-wide.** `dispatch_rounds` is unique on `(booking_id, wave)`, so a
+  re-dispatch continues the numbering (a replacement run after wave 2 starts at wave 3). A *run* is
+  the rounds after the last `FILLED` one; "not already offered this booking" means **not offered in
+  the current run** — a photographer who declined the first search may be offered the replacement,
+  except one whose assignment on this booking was released or abandoned.
+- **Radius sentinel.** A city-wide wave (cascade wave 4, every broadcast) records `radius_km = 100`
+  (NOT NULL column); each photographer's own `service_radius_km` is the real limit.
+- **Empty waves** are recorded (`candidate_count = 0`) and closed at once; the cascade moves straight on.
+- **Emergency auto-refund generalised** by ADR-0012 D1: every band is auto-cancelled at
+  `scheduled_start − auto_refund_minutes_before` (90 at launch) → `CANCELLED_PRO` reason `UNFILLED`
+  (was `UNFILLED_EMERGENCY`, HOURS_UNDER_3 only). The job is `dispatch.deadline`.
+- **Accept step 3** runs from the `booking.assigned` outbox event (crash-safe), with the outcomes,
+  lease and lock order of ADR-0012 D3/D4. A declined capture cancels to `CANCELLED_CLIENT`.
+- **No-show incentive** applies to the base-service payout share only (ADR-0012 D5).
+- **Exhaustion** of a replacement run ends the booking (ADR-0012 D6).

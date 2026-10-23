@@ -64,8 +64,11 @@ export const ROADMAP: readonly Sprint[] = [
     title: 'Client app booking flow',
     dates: '23 – 27 Nov',
     state: 'in-progress',
-    shipped: [],
-    note: 'v0 built from the doc 01 screen specs (web + phones); visual pass when Figma Wave 1 lands',
+    shipped: [
+      'Expo app v0 (web + iOS/Android bundles): sign-in → pincode → live prices → configure → review → pay → confirmed',
+      '16 RN primitives from design tokens · typed API SDK',
+    ],
+    note: 'Visual pass when Figma Wave 1 lands',
   },
   {
     id: 'S5',
@@ -91,7 +94,13 @@ export const ROADMAP: readonly Sprint[] = [
     state: 'planned',
     shipped: [],
   },
-  { id: 'S12', title: 'Launch prep', dates: '18 – 22 Jan', state: 'planned', shipped: [] },
+  {
+    id: 'S12',
+    title: 'Launch prep',
+    dates: '18 – 22 Jan',
+    state: 'in-progress',
+    shipped: ['Marketing site: home, cities, 24 SEO pages, sitemap, JSON-LD, waitlist form'],
+  },
 ];
 
 export const WAITING_ON_OWNER: readonly string[] = [
