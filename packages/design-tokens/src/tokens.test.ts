@@ -78,4 +78,12 @@ describe('derived outputs', () => {
     expect(theme.spacing['4']).toBe('16px');
     expect(theme.borderRadius.lg).toBe('16px');
   });
+
+  it('exposes the layout sizes and micro tracking derived from tokens', () => {
+    const theme = tailwindPreset.theme.extend;
+    expect(theme.minHeight.tap).toBe('44px');
+    expect(theme.height.button).toBe('52px');
+    expect(theme.height.input).toBe('52px');
+    expect(theme.letterSpacing.micro).toBe('0.06em');
+  });
 });

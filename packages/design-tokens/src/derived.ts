@@ -1,6 +1,13 @@
-import { color, radius, space, typography } from './tokens.js';
+import { color, layout, radius, space, typography } from './tokens.js';
 
 const px = (n: number): string => `${n}px`;
+
+/** Component sizes from `layout` (DESIGN.md §Components / §Accessibility), e.g. `min-h-tap`, `h-button`. */
+const sizes = {
+  tap: px(layout.minTapTarget),
+  button: px(layout.buttonHeight),
+  input: px(layout.inputHeight),
+} as const;
 
 function mapValues<T, U>(obj: Record<string, T>, fn: (v: T) => U): Record<string, U> {
   return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fn(v)]));
@@ -38,6 +45,11 @@ export const tailwindPreset = {
         px(s.size),
         { lineHeight: px(s.lineHeight), fontWeight: s.weight },
       ]),
+      letterSpacing: { micro: `${typography.microTrackingEm}em` },
+      height: sizes,
+      minHeight: sizes,
+      width: { tap: sizes.tap },
+      minWidth: { tap: sizes.tap },
     },
   },
 } as const;

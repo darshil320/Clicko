@@ -65,6 +65,15 @@ describe('formatINR', () => {
     expect(formatINR(0n)).toBe('₹0');
   });
 
+  it('groups thousands, lakhs and crores without Intl', () => {
+    expect(formatINR(99900n)).toBe('₹999');
+    expect(formatINR(100000n)).toBe('₹1,000');
+    expect(formatINR(1000000n)).toBe('₹10,000');
+    expect(formatINR(1200000000n)).toBe('₹1,20,00,000');
+    expect(formatINR(10000000000n)).toBe('₹10,00,00,000');
+    expect(formatINR(1200000050n, { showPaise: true })).toBe('₹1,20,00,000.50');
+  });
+
   it('accepts a safe-integer number of paise', () => {
     expect(formatINR(1003000)).toBe('₹10,030');
   });

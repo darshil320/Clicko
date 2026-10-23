@@ -49,7 +49,19 @@ export function fromPaiseBigint(value: bigint): number {
   return Number(value);
 }
 
-const INDIAN_GROUPING = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+/**
+ * Indian digit grouping on a non-negative integer: last three digits, then pairs
+ * (12000000 → "1,20,00,000"). Pure string work — no Intl — so it behaves the same
+ * on Node, browsers and Hermes, whose Intl.NumberFormat does not reliably take bigint.
+ */
+function groupIndian(value: bigint): string {
+  const digits = value.toString();
+  if (digits.length <= 3) return digits;
+  const head = digits.slice(0, -3);
+  const tail = digits.slice(-3);
+  const pairs = head.replace(/\B(?=(\d{2})+$)/g, ',');
+  return `${pairs},${tail}`;
+}
 
 export interface FormatINROptions {
   /** Show the two paise digits (₹16,908.22). Default false: rounds half-up to the rupee. */
@@ -71,7 +83,7 @@ export function formatINR(paise: bigint | number, options: FormatINROptions = {}
   if (options.showPaise) {
     const rupees = magnitude / 100n;
     const fraction = (magnitude % 100n).toString().padStart(2, '0');
-    return `${sign}₹${INDIAN_GROUPING.format(rupees)}.${fraction}`;
+    return `${sign}₹${groupIndian(rupees)}.${fraction}`;
   }
-  return `${sign}₹${INDIAN_GROUPING.format(roundHalfUp(magnitude, 100n))}`;
+  return `${sign}₹${groupIndian(roundHalfUp(magnitude, 100n))}`;
 }
