@@ -11,3 +11,10 @@ export interface VenuePoints {
   readonly centroid: string | null;
   readonly cityCentre: string;
 }
+
+/** A fallback venue point and which one it is (the geocoded venue itself is the bookings row). */
+export interface VenueFallback {
+  /** Geography text (hex EWKB). */
+  readonly point: string;
+  readonly basis: 'PINCODE_CENTROID' | 'CITY_CENTRE';
+}

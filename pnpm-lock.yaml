@@ -234,6 +234,40 @@ importers:
         specifier: 56.0.21
         version: 56.0.21(@babel/core@7.29.7)(@babel/runtime@7.29.10)(expo@56.0.24)(react-refresh@0.14.2)
 
+  apps/portal:
+    dependencies:
+      '@clickco/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
+      '@clickco/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@clickco/design-tokens':
+        specifier: workspace:*
+        version: link:../../packages/design-tokens
+      next:
+        specifier: 16.4.2
+        version: 16.4.2(@types/node@22.20.5)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react:
+        specifier: 19.3.1
+        version: 19.3.1
+      react-dom:
+        specifier: 19.3.1
+        version: 19.3.1(react@19.3.1)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@clickco/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+
   apps/web:
     dependencies:
       '@clickco/design-tokens':

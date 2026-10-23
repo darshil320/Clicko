@@ -3,6 +3,7 @@ import { Contact, GalleryRecipient } from './booking.js';
 import { IsoDateTime, Pincode, Uuid } from './common.js';
 import { BookingStatus, EmergencyBand, PlanTier } from './enums.js';
 import { Hours, MoneyPaise } from './money.js';
+import { BookingCharge, BookingPendingExtension } from './onsite.js';
 import { AddonCode, PriceQuote } from './pricing.js';
 
 /**
@@ -94,11 +95,17 @@ export const InvoiceView = z.object({
   issuedAt: IsoDateTime,
 });
 
-/** GET /bookings/:id — owner only. */
+/**
+ * GET /bookings/:id — owner only. `pendingExtensions` (awaiting the client's approval) and `charges`
+ * (approved extensions, waiting time) arrive with on-site operations (ADR-0013); optional so older
+ * consumers keep parsing.
+ */
 export const BookingDetail = z.object({
   booking: BookingSummary,
   timeline: z.array(BookingTimelineEntry),
   invoices: z.array(InvoiceView),
+  pendingExtensions: z.array(BookingPendingExtension).optional(),
+  charges: z.array(BookingCharge).optional(),
 });
 export type BookingDetail = z.infer<typeof BookingDetail>;
 

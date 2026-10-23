@@ -3,6 +3,7 @@ import type postgres from 'postgres';
 import { BookingsService } from '../modules/bookings/bookings.service';
 import type { BookingView } from '../modules/bookings/bookings.types';
 import { BookingDispatchRepository } from '../modules/bookings/repositories/booking-dispatch.repository';
+import { BookingOnsiteRepository } from '../modules/bookings/repositories/booking-onsite.repository';
 import { BookingReadsRepository } from '../modules/bookings/repositories/booking-reads.repository';
 import { BookingsRepository } from '../modules/bookings/repositories/bookings.repository';
 import { computeQuote } from '../modules/pricing/engine';
@@ -84,6 +85,7 @@ export function bookingsService(sql: postgres.Sql): BookingsService {
     new BookingReadsRepository(),
     sql,
     new BookingDispatchRepository(),
+    new BookingOnsiteRepository(),
   );
 }
 

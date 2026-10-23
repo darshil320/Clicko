@@ -1,5 +1,6 @@
 import type {
   BookingStatus,
+  CityTier,
   CreateBookingRequest,
   EmergencyBand,
   PlanTier,
@@ -148,4 +149,60 @@ export interface AssignmentBookingDetail extends OfferBookingSummary {
   readonly venueAddress: string;
   readonly venueLandmark: string | null;
   readonly specialRequirements: string | null;
+}
+
+/** What snapshot 1 froze for pricing an on-site charge (ADR-0013 D8/D9). */
+export interface ChargeBasis {
+  readonly tier: PlanTier;
+  readonly cityTier: CityTier;
+  readonly categoryCode: string;
+  /** GST state code of the venue (place of supply). */
+  readonly placeOfSupply: string;
+  readonly payoutShareBps: number;
+}
+
+/** A booking as the on-site flow decides on it (read under the booking lock). */
+export interface OnsiteBookingFacts {
+  readonly bookingId: string;
+  readonly reference: string;
+  readonly status: BookingStatus;
+  readonly userId: string;
+  readonly scheduledStart: Date;
+  readonly scheduledEnd: Date;
+  readonly scheduledHours: number;
+  readonly venuePincode: string;
+  /** Geography text (hex EWKB) or null until geocoded (S11). */
+  readonly venueLocation: string | null;
+  readonly rulesetId: string;
+  readonly totalPaise: bigint;
+  readonly advancePaise: bigint;
+  readonly balancePaise: bigint;
+  /** Snapshot 1 total — the booking value before any on-site charge. */
+  readonly quoteTotalPaise: bigint;
+  /** When the booking last entered IN_PROGRESS (the shoot start); null before. */
+  readonly shootStartedAt: Date | null;
+  readonly actualCheckIn: Date | null;
+  readonly actualCheckOut: Date | null;
+  readonly slaT0: Date | null;
+  readonly deliveryDueAt: Date | null;
+  /** The RUSH_24H add-on promises delivery in 24 h instead of 48 h. */
+  readonly hasRushDelivery: boolean;
+  readonly chargeBasis: ChargeBasis;
+}
+
+/** A sequence 2+ snapshot: an approved extension or a waiting charge. */
+export interface BookingChargeRecord {
+  readonly sequence: number;
+  readonly kind: 'EXTENSION' | 'WAITING';
+  readonly minutes: number;
+  /** The assignment event the charge settles (breakdown.assignmentEventId). */
+  readonly assignmentEventId: string | null;
+  readonly taxablePaise: bigint;
+  readonly gstPaise: bigint;
+  readonly cgstPaise: bigint;
+  readonly sgstPaise: bigint;
+  readonly igstPaise: bigint;
+  readonly totalPaise: bigint;
+  readonly expectedPayoutPaise: bigint;
+  readonly computedAt: Date;
 }

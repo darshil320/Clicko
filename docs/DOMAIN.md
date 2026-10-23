@@ -51,7 +51,7 @@ This is the file every future session should read before touching bookings, disp
 
 ## 2. Booking state machine — transition table
 
-Amended by ADR-0011 (re-dispatch, escalation exit, authorise-only invoicing) and ADR-0012 (deadline for every band, declined capture, replacement exhaustion). T0 for all SLA purposes is **`actual_check_out`** (the CHECKED_OUT transition), **never** booking creation. The delivery clock *pauses* (not restarts) while a booking sits in `BALANCE_PENDING`, resuming when the balance clears — this is equivalent to, and implements, T&C §5.1's "whichever is later" framing without a second anchor timestamp.
+Amended by ADR-0011 (re-dispatch, escalation exit, authorise-only invoicing), ADR-0012 (deadline for every band, declined capture, replacement exhaustion) and ADR-0013 (billing start, client non-attendance). T0 for all SLA purposes is **`actual_check_out`** (the CHECKED_OUT transition), **never** booking creation. The delivery clock *pauses* (not restarts) while a booking sits in `BALANCE_PENDING`, resuming when the balance clears — this is equivalent to, and implements, T&C §5.1's "whichever is later" framing without a second anchor timestamp.
 
 | From | To | Trigger | Actor | Side effects | Emitted event |
 |---|---|---|---|---|---|
@@ -62,10 +62,10 @@ Amended by ADR-0011 (re-dispatch, escalation exit, authorise-only invoicing) and
 | CONFIRMED | DISPATCHING | Dispatch cascade begins | SYSTEM | `dispatch_rounds` wave 1 opened (or single broadcast wave for emergency) | `booking.dispatching` |
 | DISPATCHING | ASSIGNED | A photographer accepts | PHOTOGRAPHER | `assignments` row created; Redis lock + Postgres exclusion constraint claim the slot; for HOURS_UNDER_3, the held payment is captured right after (from `booking.assigned`; invoice + ledger at capture) | `booking.assigned` |
 | ASSIGNED | EN_ROUTE | Photographer starts travelling (T-60m) | PHOTOGRAPHER | Live location sharing begins | `booking.en_route` |
-| EN_ROUTE | CHECKED_IN | Geofenced check-in (≤150m of venue) | PHOTOGRAPHER | `assignments.check_in_at`/location/accuracy written (immutable once set); billing clock starts | `booking.checked_in` |
+| EN_ROUTE | CHECKED_IN | Geofenced check-in (≤150m of venue; ADR-0013 D3 for un-geocoded venues) | PHOTOGRAPHER | `assignments.check_in_at`/location/accuracy written (immutable once set); billing clock starts at max(check-in, scheduled start) — T&C §2.6 (ADR-0013 D6); a check-in from ASSIGNED walks through EN_ROUTE first | `booking.checked_in` |
 | CHECKED_IN | IN_PROGRESS | Shoot begins | PHOTOGRAPHER / SYSTEM | — | `booking.in_progress` |
 | IN_PROGRESS | EXTENSION_REQUESTED → EXTENSION_APPROVED | Photographer requests +1hr; client approves | PHOTOGRAPHER, then USER | `assignment_events` EXTENSION_REQUESTED/APPROVED; `booking_price_snapshots` seq 2+ written; balance invoice updated | `assignment.extension_requested`, `assignment.extension_approved` |
-| IN_PROGRESS | CHECKED_OUT | Geofenced check-out, minimum duration elapsed | PHOTOGRAPHER | `assignments.check_out_at` written (immutable); **`sla_t0` set here**; all `sla_clocks` armed | `booking.checked_out` |
+| IN_PROGRESS | CHECKED_OUT | Geofenced check-out, minimum duration elapsed — or client non-attendance reported ≥60 min after the start, without the minimum (T&C §3.8, ADR-0013 D12; reached CHECKED_IN → IN_PROGRESS → CHECKED_OUT) | PHOTOGRAPHER | `assignments.check_out_at` written (immutable); **`sla_t0` set here**; all `sla_clocks` armed | `booking.checked_out` |
 | CHECKED_OUT | UPLOADING | Upload session opens on the web portal | PHOTOGRAPHER | `upload_sessions` row OPEN | `booking.uploading` |
 | UPLOADING | PROCESSING | Upload verified complete | SYSTEM | RAW→JPEG batch export worker starts | `booking.processing` |
 | PROCESSING | QA | JPEG export complete | SYSTEM | File-count/corruption check queued for ops | `booking.qa` |

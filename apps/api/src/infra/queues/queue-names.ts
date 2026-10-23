@@ -6,6 +6,8 @@ export const QUEUE = {
   OUTBOX: 'outbox',
   DISPATCH: 'dispatch',
   AUTH: 'auth',
+  ONSITE: 'onsite',
+  MEDIA: 'media',
 } as const;
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
@@ -20,6 +22,18 @@ export const JOB = {
   DISPATCH_SWEEP: 'dispatch.sweep',
   /** Immediate: sends an OTP SMS off the request path (ADR-0012 D8). */
   AUTH_OTP_SMS: 'auth.otp-sms',
+  /** Delayed: start + 15 min (alert) / + 20 min (escalate) without a check-in (ADR-0013 D11). */
+  ONSITE_NO_SHOW_CHECK: 'onsite.no-show-check',
+  /** Delayed: an extension request's 10 minutes are up (ADR-0013 D8). */
+  ONSITE_EXTENSION_EXPIRY: 'onsite.extension-expiry',
+  /** Repeatable: re-runs no-show checks whose job was lost. */
+  ONSITE_SWEEP: 'onsite.sweep',
+  /** Immediate: RAW → JPEG export for a PROCESSING booking, then → QA (ADR-0014 D4). */
+  MEDIA_JPEG_EXPORT: 'media.jpeg-export',
+  /** Repeatable (weekly): declared vs stored vs provider file counts per booking (ADR-0014 D5). */
+  MEDIA_INTEGRITY_AUDIT: 'media.integrity-audit',
+  /** Repeatable (15 min): storage usage sample + 60/75/90 % alerts (ADR-0014 D5). */
+  MEDIA_QUOTA_MONITOR: 'media.quota-monitor',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -29,6 +43,12 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.DISPATCH_DEADLINE]: QUEUE.DISPATCH,
   [JOB.DISPATCH_SWEEP]: QUEUE.DISPATCH,
   [JOB.AUTH_OTP_SMS]: QUEUE.AUTH,
+  [JOB.ONSITE_NO_SHOW_CHECK]: QUEUE.ONSITE,
+  [JOB.ONSITE_EXTENSION_EXPIRY]: QUEUE.ONSITE,
+  [JOB.ONSITE_SWEEP]: QUEUE.ONSITE,
+  [JOB.MEDIA_JPEG_EXPORT]: QUEUE.MEDIA,
+  [JOB.MEDIA_INTEGRITY_AUDIT]: QUEUE.MEDIA,
+  [JOB.MEDIA_QUOTA_MONITOR]: QUEUE.MEDIA,
 };
 
 export interface JobOptions {
@@ -40,6 +60,8 @@ export interface JobOptions {
 export const JOB_OPTIONS: Partial<Readonly<Record<JobName, JobOptions>>> = {
   // An OTP lives 5 minutes: 2 s, 4 s, 8 s, 16 s, then give up (logged; the code expires).
   [JOB.AUTH_OTP_SMS]: { attempts: 5, backoffMs: 2_000 },
+  // A failed export (corrupt RAW, missing darktable) alerts ops on the first failure: 30 s … 8 min.
+  [JOB.MEDIA_JPEG_EXPORT]: { attempts: 5, backoffMs: 30_000 },
 };
 
 export interface RepeatableJob {
@@ -51,6 +73,9 @@ export interface RepeatableJob {
 export const REPEATABLE_JOBS: readonly RepeatableJob[] = [
   { job: JOB.OUTBOX_PUBLISH, everyMs: 2_000 },
   { job: JOB.DISPATCH_SWEEP, everyMs: 30_000 },
+  { job: JOB.ONSITE_SWEEP, everyMs: 60_000 },
+  { job: JOB.MEDIA_INTEGRITY_AUDIT, everyMs: 7 * 24 * 3_600_000 },
+  { job: JOB.MEDIA_QUOTA_MONITOR, everyMs: 15 * 60_000 },
 ];
 
 /** The outbox is drained by one job at a time; dispatch timers may overlap (they lock rows). */
@@ -58,4 +83,7 @@ export const WORKER_CONCURRENCY: Readonly<Record<QueueName, number>> = {
   [QUEUE.OUTBOX]: 1,
   [QUEUE.DISPATCH]: 4,
   [QUEUE.AUTH]: 4,
+  [QUEUE.ONSITE]: 4,
+  // JPEG export is CPU-bound (darktable): two at a time per worker.
+  [QUEUE.MEDIA]: 2,
 };

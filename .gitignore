@@ -15,3 +15,5 @@ coverage/
 out/
 next-env.d.ts
 .playwright-mcp/
+# local media storage (STORAGE_ADAPTER=local, ADR-0014)
+.storage/

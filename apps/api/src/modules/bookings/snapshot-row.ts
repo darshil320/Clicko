@@ -1,6 +1,7 @@
 /** Pure mappings from the engine's Quote to the rows written at DRAFT → QUOTED. */
-import { toBreakdownJson } from '../pricing/engine';
+import { type OnsiteCharge, toBreakdownJson } from '../pricing/engine';
 import type { Quote } from '../pricing/engine/types';
+import type { ChargeBasis } from './bookings.types';
 
 export interface SnapshotRow {
   readonly rulesetId: string;
@@ -88,4 +89,48 @@ export function toAddonRows(
     }
     return { addonId, quantity, amountPaise: line.amountPaise };
   });
+}
+
+/**
+ * booking_price_snapshots sequence 2+: ONLY the delta of one on-site charge (ADR-0013 D8/D9) on the
+ * booking's own ruleset, with neutral emergency/surge/night/weekend factors (DOMAIN §5 rule 7).
+ * `base_amount_paise` is the taxable value, so the snapshot CHECKs hold in either GST mode.
+ */
+export function toChargeSnapshotRow(
+  charge: OnsiteCharge,
+  basis: ChargeBasis,
+  breakdown: Record<string, unknown>,
+  sequence: number,
+  computedAt: Date,
+): SnapshotRow {
+  if (sequence < 2) throw new RangeError('toChargeSnapshotRow: charges start at sequence 2');
+  return {
+    rulesetId: charge.rulesetId,
+    rulesetVersion: charge.rulesetVersion,
+    sequence,
+    tier: basis.tier,
+    cityTier: basis.cityTier,
+    categoryCode: basis.categoryCode,
+    hours: charge.hours,
+    baseRatePerHourPaise: charge.baseRatePerHourPaise,
+    categoryUpliftBps: charge.categoryUpliftBps,
+    emergencyMultiplierBps: 10_000,
+    surgeMultiplierBps: 10_000,
+    nightMultiplierBps: 10_000,
+    weekendMultiplierBps: 10_000,
+    baseAmountPaise: charge.snapshotBasePaise,
+    addonsAmountPaise: 0n,
+    travelAmountPaise: 0n,
+    discountAmountPaise: 0n,
+    taxableAmountPaise: charge.taxablePaise,
+    gstRateBps: charge.gst.rateBps,
+    gstAmountPaise: charge.gstAmountPaise,
+    totalAmountPaise: charge.totalPaise,
+    pricesIncludeGst: charge.pricesIncludeGst,
+    payoutShareBps: charge.payoutShareBps,
+    expectedPayoutPaise: charge.expectedPayoutPaise,
+    breakdown,
+    promoCode: null,
+    computedAt,
+  };
 }

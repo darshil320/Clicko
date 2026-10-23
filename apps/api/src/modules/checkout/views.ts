@@ -1,6 +1,8 @@
 /** Domain records → @clickco/contracts wire shapes. Money crosses as integer paise (ADR-0007). */
 import {
+  type BookingCharge,
   BookingDetail,
+  type BookingPendingExtension,
   BookingSummary,
   type PayBookingResponse,
   PayBookingResponse as PayBookingResponseSchema,
@@ -55,11 +57,17 @@ export function toBookingDetail(
   cityName: string,
   timeline: readonly TimelineEntry[],
   invoices: readonly InvoiceRecord[],
+  onsite: {
+    readonly pendingExtensions: readonly BookingPendingExtension[];
+    readonly charges: readonly BookingCharge[];
+  } = { pendingExtensions: [], charges: [] },
 ): BookingDetail {
   return BookingDetail.parse({
     booking: toBookingSummary(view, cityName),
     timeline: timeline.map(toTimelineJson),
     invoices: invoices.map(toInvoiceJson),
+    pendingExtensions: onsite.pendingExtensions,
+    charges: onsite.charges,
   });
 }
 

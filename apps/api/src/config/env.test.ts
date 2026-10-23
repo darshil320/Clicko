@@ -22,6 +22,10 @@ describe('loadEnv', () => {
       CORS_ORIGINS: [],
       PAYMENT_GATEWAY: 'sandbox',
       SANDBOX_WEBHOOK_SECRET: 'clickco-sandbox-webhook-secret-dev-only',
+      STORAGE_ADAPTER: 'local',
+      STORAGE_LOCAL_LIMIT_BYTES: 50 * 1024 ** 3,
+      JPEG_EXPORT_ADAPTER: 'passthrough',
+      DARKTABLE_CLI_PATH: 'darktable-cli',
     });
   });
 
@@ -46,6 +50,8 @@ describe('loadEnv', () => {
       RAZORPAY_KEY_ID: 'rzp_live_x',
       RAZORPAY_KEY_SECRET: 'secret',
       RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
+      STORAGE_ADAPTER: 'drive',
+      JPEG_EXPORT_ADAPTER: 'darktable',
     };
     expect(() => loadEnv({ ...deployed, QUEUE_PREFIX: 'clickco-prod' })).toThrow(/REDIS_URL/);
     expect(() => loadEnv({ ...deployed, REDIS_URL: 'rediss://cache:6380' })).toThrow(
@@ -125,6 +131,8 @@ describe('loadEnv', () => {
         NODE_ENV: 'production',
         REDIS_URL: 'rediss://cache.internal:6380',
         QUEUE_PREFIX: 'clickco-prod',
+        STORAGE_ADAPTER: 'drive',
+        JPEG_EXPORT_ADAPTER: 'darktable',
         ...razorpay,
       });
       expect(env.PAYMENT_GATEWAY).toBe('razorpay');
@@ -154,6 +162,62 @@ describe('loadEnv', () => {
 
     it('rejects an unknown gateway', () => {
       expect(() => loadEnv({ ...valid, PAYMENT_GATEWAY: 'paypal' })).toThrow(/PAYMENT_GATEWAY/);
+    });
+  });
+
+  describe('media storage and JPEG export (ADR-0014)', () => {
+    const prod = {
+      ...valid,
+      NODE_ENV: 'production',
+      SMS_ADAPTER: 'dlt',
+      REDIS_URL: 'rediss://cache:6380',
+      QUEUE_PREFIX: 'clickco-prod',
+      PAYMENT_GATEWAY: 'razorpay',
+      RAZORPAY_KEY_ID: 'rzp_test_key',
+      RAZORPAY_KEY_SECRET: 'rzp-key-secret',
+      RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
+    };
+
+    it('defaults to local disk and the passthrough exporter in development', () => {
+      const env = loadEnv(valid);
+      expect(env.STORAGE_ADAPTER).toBe('local');
+      expect(env.STORAGE_LOCAL_ROOT).toBeUndefined();
+      expect(env.JPEG_EXPORT_ADAPTER).toBe('passthrough');
+      expect(env.STORAGE_DAILY_UPLOAD_LIMIT_BYTES).toBeUndefined();
+    });
+
+    it('refuses local storage and the passthrough exporter in staging and production', () => {
+      for (const NODE_ENV of ['staging', 'production']) {
+        expect(() => loadEnv({ ...prod, NODE_ENV, JPEG_EXPORT_ADAPTER: 'darktable' })).toThrow(
+          /STORAGE_ADAPTER/,
+        );
+        expect(() => loadEnv({ ...prod, NODE_ENV, STORAGE_ADAPTER: 'drive' })).toThrow(
+          /JPEG_EXPORT_ADAPTER/,
+        );
+      }
+      const env = loadEnv({ ...prod, STORAGE_ADAPTER: 'drive', JPEG_EXPORT_ADAPTER: 'darktable' });
+      expect(env).toMatchObject({ STORAGE_ADAPTER: 'drive', JPEG_EXPORT_ADAPTER: 'darktable' });
+    });
+
+    it('coerces byte limits and rejects junk adapters', () => {
+      const env = loadEnv({
+        ...valid,
+        STORAGE_LOCAL_ROOT: '/tmp/clickco',
+        STORAGE_LOCAL_LIMIT_BYTES: '1000',
+        STORAGE_DAILY_UPLOAD_LIMIT_BYTES: '500',
+      });
+      expect(env).toMatchObject({
+        STORAGE_LOCAL_ROOT: '/tmp/clickco',
+        STORAGE_LOCAL_LIMIT_BYTES: 1000,
+        STORAGE_DAILY_UPLOAD_LIMIT_BYTES: 500,
+      });
+      expect(() => loadEnv({ ...valid, STORAGE_ADAPTER: 's3' })).toThrow(/STORAGE_ADAPTER/);
+      expect(() => loadEnv({ ...valid, JPEG_EXPORT_ADAPTER: 'lightroom' })).toThrow(
+        /JPEG_EXPORT_ADAPTER/,
+      );
+      expect(() => loadEnv({ ...valid, STORAGE_LOCAL_LIMIT_BYTES: '-1' })).toThrow(
+        /STORAGE_LOCAL_LIMIT_BYTES/,
+      );
     });
   });
 });

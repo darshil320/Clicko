@@ -8,6 +8,8 @@ import { PhotographersModule } from '../photographers/photographers.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { ServiceabilityModule } from '../serviceability/serviceability.module';
 import { AcceptanceCaptureService } from './acceptance-capture.service';
+import { AssignmentReads } from './assignment-reads.service';
+import { AssignmentsService } from './assignments.service';
 import { DispatchSubscribers } from './dispatch.subscribers';
 import { DispatchDeskService } from './dispatch-desk.service';
 import { DispatchEngine } from './dispatch-engine.service';
@@ -18,18 +20,22 @@ import { OffersService } from './offers.service';
 import { ProAssignmentsController } from './pro-assignments.controller';
 import { ProOffersController } from './pro-offers.controller';
 import { RedispatchService } from './redispatch.service';
+import { AssignmentOnsiteRepository } from './repositories/assignment-onsite.repository';
 import { AssignmentsRepository } from './repositories/assignments.repository';
 import { AttemptsRepository } from './repositories/attempts.repository';
 import { EligibilityRepository } from './repositories/eligibility.repository';
+import { GeofenceRepository } from './repositories/geofence.repository';
 import { RoundsRepository } from './repositories/rounds.repository';
 import { DispatchRunState } from './run-state.service';
 import { DispatchTimerScheduler } from './timer-scheduler';
+import { VenuePoints } from './venue-points';
 
 /**
  * Owns dispatch_rounds, dispatch_attempts and assignments (ADR-0010/0012). Orchestrates bookings
  * (status), payments (capture/release), photographers (pool, penalties), pricing (deadline,
- * incentive) and serviceability (venue fallback); the PostGIS query lives in
- * repositories/eligibility.repository.ts. The dev desk controller is in DevToolsModule.
+ * incentive) and serviceability (venue fallback); the PostGIS queries live in
+ * repositories/ (eligibility, geofence). AssignmentsService is the on-site write path for the
+ * onsite module (ADR-0013 D1). The dev desk controller is in DevToolsModule.
  */
 @Module({
   imports: [
@@ -49,6 +55,10 @@ import { DispatchTimerScheduler } from './timer-scheduler';
     AttemptsRepository,
     AssignmentsRepository,
     EligibilityRepository,
+    AssignmentOnsiteRepository,
+    GeofenceRepository,
+    VenuePoints,
+    AssignmentsService,
     DispatchLock,
     DispatchTimerScheduler,
     DispatchEngine,
@@ -59,7 +69,14 @@ import { DispatchTimerScheduler } from './timer-scheduler';
     AcceptanceCaptureService,
     DispatchDeskService,
     DispatchSubscribers,
+    AssignmentReads,
   ],
-  exports: [DispatchTimersService, RedispatchService, DispatchDeskService],
+  exports: [
+    DispatchTimersService,
+    RedispatchService,
+    DispatchDeskService,
+    AssignmentReads,
+    AssignmentsService,
+  ],
 })
 export class DispatchModule {}

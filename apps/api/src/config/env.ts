@@ -55,6 +55,25 @@ export const EnvSchema = z
     SANDBOX_WEBHOOK_SECRET: unsetIfEmpty(
       z.string().min(16).default('clickco-sandbox-webhook-secret-dev-only'),
     ),
+    // Where media bytes live (ADR-0014). `local` = this machine's disk — development and test only.
+    STORAGE_ADAPTER: unsetIfEmpty(z.enum(['local', 'drive']).default('local')),
+    // Local adapter root (default ./.storage; tests default to the OS temp dir) and its size cap.
+    STORAGE_LOCAL_ROOT: unsetIfEmpty(z.string().min(1).optional()),
+    STORAGE_LOCAL_LIMIT_BYTES: unsetIfEmpty(
+      z.coerce
+        .number()
+        .int()
+        .positive()
+        .default(50 * 1024 ** 3),
+    ),
+    // Rolling-24h upload ceiling for the local adapter (unset = none). Drive's (750 GB) is built in.
+    STORAGE_DAILY_UPLOAD_LIMIT_BYTES: unsetIfEmpty(z.coerce.number().int().positive().optional()),
+    // Shared Drive + service account (PLAN B10): read by the Drive adapter once it is implemented.
+    GOOGLE_DRIVE_SHARED_DRIVE_ID: unsetIfEmpty(z.string().min(1).optional()),
+    GOOGLE_SERVICE_ACCOUNT_JSON_BASE64: unsetIfEmpty(z.string().min(1).optional()),
+    // RAW → JPEG export (v0.2 §3.2). `passthrough` registers placeholders — development and test only.
+    JPEG_EXPORT_ADAPTER: unsetIfEmpty(z.enum(['darktable', 'passthrough']).default('passthrough')),
+    DARKTABLE_CLI_PATH: unsetIfEmpty(z.string().min(1).default('darktable-cli')),
   })
   .refine(
     (e) => e.SMS_ADAPTER !== 'console' || e.NODE_ENV === 'development' || e.NODE_ENV === 'test',
@@ -94,6 +113,14 @@ export const EnvSchema = z
   .refine((e) => e.QUEUE_WORKERS === 'on' || e.NODE_ENV === 'test', {
     message: 'queue workers may only be switched off in test',
     path: ['QUEUE_WORKERS'],
+  })
+  .refine((e) => e.STORAGE_ADAPTER !== 'local' || !DEPLOYED.includes(e.NODE_ENV), {
+    message: 'the local storage adapter is only allowed in development and test',
+    path: ['STORAGE_ADAPTER'],
+  })
+  .refine((e) => e.JPEG_EXPORT_ADAPTER !== 'passthrough' || !DEPLOYED.includes(e.NODE_ENV), {
+    message: 'the passthrough JPEG exporter is only allowed in development and test',
+    path: ['JPEG_EXPORT_ADAPTER'],
   })
   .transform((e) => ({ ...e, QUEUE_PREFIX: e.QUEUE_PREFIX ?? 'clickco' }));
 export type Env = z.infer<typeof EnvSchema>;

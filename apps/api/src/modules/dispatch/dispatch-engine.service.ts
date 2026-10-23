@@ -3,13 +3,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
 import type { DispatchFacts } from '../bookings/bookings.types';
 import { PhotographersService } from '../photographers/photographers.service';
-import { ServiceabilityService } from '../serviceability/serviceability.service';
 import type { DispatchTimer, OfferCandidate, RoundRecord, Tx } from './dispatch.types';
 import { rankCandidates } from './ranking';
 import { AttemptsRepository } from './repositories/attempts.repository';
 import { EligibilityRepository } from './repositories/eligibility.repository';
 import { RoundsRepository } from './repositories/rounds.repository';
 import { DispatchRunState } from './run-state.service';
+import { VenuePoints } from './venue-points';
 import {
   calendarBlock,
   type DispatchMode,
@@ -40,7 +40,7 @@ interface RunContext {
 export class DispatchEngine {
   constructor(
     @Inject(PhotographersService) private readonly photographers: PhotographersService,
-    @Inject(ServiceabilityService) private readonly serviceability: ServiceabilityService,
+    @Inject(VenuePoints) private readonly venues: VenuePoints,
     @Inject(RoundsRepository) private readonly rounds: RoundsRepository,
     @Inject(AttemptsRepository) private readonly attempts: AttemptsRepository,
     @Inject(EligibilityRepository) private readonly eligibility: EligibilityRepository,
@@ -207,11 +207,7 @@ export class DispatchEngine {
 
   /** ADR-0010 fallback chain: geocoded venue → pincode centroid → city centre. */
   private async venuePoint(facts: DispatchFacts): Promise<string> {
-    if (facts.venueLocation) return facts.venueLocation;
-    const fallback = await this.serviceability.venueFallbackPoint(facts.venuePincode);
-    if (!fallback)
-      throw new Error(`Booking ${facts.bookingId} has no venue point to dispatch from`);
-    return fallback;
+    return (await this.venues.resolve(facts)).point;
   }
 
   /**

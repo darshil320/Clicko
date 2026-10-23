@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { IdempotencyModule } from '../../common/idempotency/idempotency.module';
 import { TokenModule } from '../auth/token.module';
 import { BookingsModule } from '../bookings/bookings.module';
+import { OnsiteModule } from '../onsite/onsite.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { ServiceabilityModule } from '../serviceability/serviceability.module';
@@ -22,6 +23,7 @@ import { PaymentWebhooksController } from './payment-webhooks.controller';
     PricingModule,
     BookingsModule,
     PaymentsModule,
+    OnsiteModule,
   ],
   controllers: [CheckoutController, PaymentWebhooksController],
   providers: [CheckoutService, PaymentFlowService],

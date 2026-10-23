@@ -11,6 +11,7 @@ import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
 import { BookingsService } from '../bookings/bookings.service';
 import type { BookingView, PromoUsage } from '../bookings/bookings.types';
+import { OnsiteViewsService } from '../onsite/onsite-views.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PricingService } from '../pricing/pricing.service';
 import { toPriceQuote } from '../pricing/quote-response';
@@ -49,6 +50,7 @@ export class CheckoutService {
     @Inject(ServiceabilityService) private readonly serviceability: ServiceabilityService,
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(OnsiteViewsService) private readonly onsite: OnsiteViewsService,
   ) {}
 
   /**
@@ -91,12 +93,13 @@ export class CheckoutService {
   async detail(userId: string, bookingId: string): Promise<BookingDetail> {
     const view = await this.bookings.findForUser(userId, bookingId);
     if (!view) throw bookingNotFound();
-    const [timeline, invoices, cityName] = await Promise.all([
+    const [timeline, invoices, cityName, extras] = await Promise.all([
       this.bookings.timeline(bookingId),
       this.payments.invoicesForBooking(bookingId),
       this.cityName(view),
+      this.onsite.clientExtras(bookingId),
     ]);
-    return toBookingDetail(view, cityName, timeline, invoices);
+    return toBookingDetail(view, cityName, timeline, invoices, extras);
   }
 
   /** QUOTED / ADVANCE_PENDING → CANCELLED_CLIENT. Later states need the refund ladder (S8). */

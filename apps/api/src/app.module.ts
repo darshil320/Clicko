@@ -13,6 +13,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { DispatchModule } from './modules/dispatch/dispatch.module';
+import { MediaModule } from './modules/media/media.module';
+import { OnsiteModule } from './modules/onsite/onsite.module';
 import { OpsModule } from './modules/ops/ops.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { ServiceabilityModule } from './modules/serviceability/serviceability.module';
@@ -44,6 +46,8 @@ class CoreModule {}
     PricingModule,
     CheckoutModule,
     DispatchModule,
+    OnsiteModule,
+    MediaModule,
     OpsModule,
     JobsModule,
     ...devOnlyModules(process.env.NODE_ENV),

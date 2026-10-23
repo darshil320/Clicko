@@ -6,7 +6,7 @@ import { NEUTRAL_BPS } from './constants';
 import type { PricedTravel } from './travel';
 import type { Quote, QuoteLine } from './types';
 
-const TIER_LABEL: Readonly<Record<PlanTier, string>> = {
+export const TIER_LABEL: Readonly<Record<PlanTier, string>> = {
   BASIC: 'Basic',
   SEMI_PRO: 'Semi-Pro',
   PROFESSIONAL: 'Professional',
@@ -33,7 +33,8 @@ export function categoryName(code: string): string {
 }
 
 /** ₹4,250 for whole rupees, ₹4,250.50 otherwise. */
-const rupees = (paise: bigint): string => formatINR(paise, { showPaise: paise % 100n !== 0n });
+export const rupees = (paise: bigint): string =>
+  formatINR(paise, { showPaise: paise % 100n !== 0n });
 
 export interface LineInput {
   readonly tier: PlanTier;

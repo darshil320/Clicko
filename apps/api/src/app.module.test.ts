@@ -11,6 +11,11 @@ import { PaymentWebhooksController } from './modules/checkout/payment-webhooks.c
 import { DevDispatchController } from './modules/dispatch/dev-dispatch.controller';
 import { ProAssignmentsController } from './modules/dispatch/pro-assignments.controller';
 import { ProOffersController } from './modules/dispatch/pro-offers.controller';
+import { ProUploadsController } from './modules/media/pro-uploads.controller';
+import { ClientExtensionsController } from './modules/onsite/client-extensions.controller';
+import { DevOnsiteController } from './modules/onsite/dev-onsite.controller';
+import { ProEarningsController } from './modules/onsite/pro-earnings.controller';
+import { ProOnsiteController } from './modules/onsite/pro-onsite.controller';
 import { PricingController } from './modules/pricing/pricing.controller';
 import { ServiceabilityController } from './modules/serviceability/serviceability.controller';
 import { UsersController } from './modules/users/users.controller';
@@ -40,9 +45,14 @@ describe('AppModule dependency graph', () => {
     expect(moduleRef.get(ProAuthController)).toBeInstanceOf(ProAuthController);
     expect(moduleRef.get(ProOffersController)).toBeInstanceOf(ProOffersController);
     expect(moduleRef.get(ProAssignmentsController)).toBeInstanceOf(ProAssignmentsController);
+    expect(moduleRef.get(ProOnsiteController)).toBeInstanceOf(ProOnsiteController);
+    expect(moduleRef.get(ProEarningsController)).toBeInstanceOf(ProEarningsController);
+    expect(moduleRef.get(ClientExtensionsController)).toBeInstanceOf(ClientExtensionsController);
+    expect(moduleRef.get(ProUploadsController)).toBeInstanceOf(ProUploadsController);
     // Dev-only routes are not mounted outside NODE_ENV=development (ADR-0012).
     expect(() => moduleRef.get(DevPaymentsController)).toThrow();
     expect(() => moduleRef.get(DevDispatchController)).toThrow();
+    expect(() => moduleRef.get(DevOnsiteController)).toThrow();
     await moduleRef.close();
   });
 
@@ -52,6 +62,7 @@ describe('AppModule dependency graph', () => {
     }).compile();
     expect(moduleRef.get(DevPaymentsController)).toBeInstanceOf(DevPaymentsController);
     expect(moduleRef.get(DevDispatchController)).toBeInstanceOf(DevDispatchController);
+    expect(moduleRef.get(DevOnsiteController)).toBeInstanceOf(DevOnsiteController);
     await moduleRef.close();
   });
 });

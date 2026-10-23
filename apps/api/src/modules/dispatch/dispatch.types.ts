@@ -76,3 +76,36 @@ export type DispatchTimer =
       readonly at: Date;
       readonly rearm?: boolean;
     };
+
+/** Which point a venue location is (ADR-0010 fallback chain; ADR-0013 D3 records it). */
+export type VenueBasis = 'VENUE' | 'PINCODE_CENTROID' | 'CITY_CENTRE';
+
+export interface VenuePoint {
+  /** Geography text (hex EWKB) — opaque outside dispatch/repositories. */
+  readonly point: string;
+  readonly basis: VenueBasis;
+}
+
+/** An assignment with its G-15 check-in/out facts (financial-grade, written once). */
+export interface OnsiteAssignment extends AssignmentRecord {
+  readonly replacedAssignmentId: string | null;
+  readonly checkInAt: Date | null;
+  readonly checkInAccuracyM: number | null;
+  readonly checkInDistanceM: number | null;
+  readonly checkInOffline: boolean;
+  readonly checkInDeviceTs: Date | null;
+  readonly checkOutAt: Date | null;
+  readonly checkOutAccuracyM: number | null;
+  readonly checkOutOffline: boolean;
+  readonly checkOutDeviceTs: Date | null;
+  readonly declaredFrameCount: number | null;
+}
+
+/** One geofenced fix as recorded on the assignment. `location` is EWKT ('SRID=4326;POINT(lng lat)'). */
+export interface RecordedFix {
+  readonly at: Date;
+  readonly location: string;
+  readonly accuracyM: number;
+  readonly offline: boolean;
+  readonly deviceTs: Date | null;
+}

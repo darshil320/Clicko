@@ -10,14 +10,18 @@ import {
 import type postgres from 'postgres';
 import { SQL } from '../../infra/db/db.module';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
+import type { OnsiteCharge } from '../pricing/engine';
 import {
   type AssignmentBookingDetail,
+  type BookingChargeRecord,
   type BookingRow,
   type BookingView,
+  type ChargeBasis,
   type CreateQuotedInput,
   type Db,
   type DispatchFacts,
   type OfferBookingSummary,
+  type OnsiteBookingFacts,
   type PromoUsage,
   type SnapshotTotals,
   SYSTEM_ACTOR,
@@ -26,9 +30,10 @@ import {
   type Tx,
 } from './bookings.types';
 import { BookingDispatchRepository } from './repositories/booking-dispatch.repository';
+import { BookingOnsiteRepository } from './repositories/booking-onsite.repository';
 import { BookingReadsRepository } from './repositories/booking-reads.repository';
 import { BookingsRepository, type NewBooking } from './repositories/bookings.repository';
-import { toAddonRows, toSnapshotRow } from './snapshot-row';
+import { toAddonRows, toChargeSnapshotRow, toSnapshotRow } from './snapshot-row';
 import { assertTransition, eventTypeFor, IllegalTransitionError } from './state-machine';
 
 const NOT_FOUND = { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' };
@@ -78,6 +83,7 @@ export class BookingsService {
     @Inject(BookingReadsRepository) private readonly reads: BookingReadsRepository,
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(BookingDispatchRepository) private readonly dispatchReads: BookingDispatchRepository,
+    @Inject(BookingOnsiteRepository) private readonly onsite: BookingOnsiteRepository,
   ) {}
 
   /** — → DRAFT → QUOTED with snapshot sequence 1 and its add-ons, in the caller's transaction. */
@@ -193,6 +199,78 @@ export class BookingsService {
 
   assignmentDetails(bookingIds: readonly string[]): Promise<AssignmentBookingDetail[]> {
     return this.dispatchReads.assignmentDetails(this.sql, bookingIds);
+  }
+
+  // ── On-site operations (ADR-0013) ──────────────────────────────────────────
+
+  /** Schedule, SLA anchors, totals and the snapshot-1 charge basis. Throws 404 when absent. */
+  async onsiteFacts(db: Db, bookingId: string): Promise<OnsiteBookingFacts> {
+    const facts = await this.onsite.facts(db, bookingId);
+    if (!facts) throw new NotFoundException(NOT_FOUND);
+    return facts;
+  }
+
+  /** bookings.actual_check_in, once (G-15: immutable once written). */
+  async recordCheckIn(tx: Tx, bookingId: string, at: Date): Promise<void> {
+    if (!(await this.onsite.setActualCheckIn(tx, bookingId, at))) {
+      throw new ConflictException({
+        code: 'CHECK_IN_ALREADY_RECORDED',
+        message: 'Already checked in',
+      });
+    }
+  }
+
+  /**
+   * actual_check_out and, from the same value, sla_t0 (Invariant 2), plus delivery_due_at. Once.
+   * The caller then transitions IN_PROGRESS → CHECKED_OUT in the same transaction.
+   */
+  async recordCheckOut(tx: Tx, bookingId: string, at: Date, deliveryDueAt: Date): Promise<void> {
+    if (!(await this.onsite.setCheckOut(tx, bookingId, at, deliveryDueAt))) {
+      throw new ConflictException({
+        code: 'CHECK_OUT_ALREADY_RECORDED',
+        message: 'Already checked out',
+      });
+    }
+  }
+
+  /**
+   * A new snapshot sequence holding only this charge, and total/balance up by its total (the
+   * advance never moves, so advance + balance = total still holds). Caller holds the booking lock.
+   */
+  async addCharge(
+    tx: Tx,
+    bookingId: string,
+    c: {
+      readonly charge: OnsiteCharge;
+      readonly basis: ChargeBasis;
+      readonly breakdown: Record<string, unknown>;
+      readonly computedAt: Date;
+    },
+  ): Promise<number> {
+    const sequence = await this.onsite.nextSequence(tx, bookingId);
+    const row = toChargeSnapshotRow(c.charge, c.basis, c.breakdown, sequence, c.computedAt);
+    await this.onsite.insertSnapshot(tx, bookingId, row);
+    await this.onsite.addToTotals(tx, bookingId, c.charge.totalPaise);
+    return sequence;
+  }
+
+  /** Sequence 2+ snapshots (extensions, waiting) for one booking, in order. */
+  async charges(db: Db, bookingId: string): Promise<BookingChargeRecord[]> {
+    return this.onsite.charges(db, [bookingId]);
+  }
+
+  /** Sum of the extension/waiting payout shares per booking (Pro earnings). */
+  async extraPayouts(bookingIds: readonly string[]): Promise<Map<string, bigint>> {
+    const rows = await this.onsite.charges(this.sql, bookingIds);
+    return rows.reduce(
+      (m, r) => new Map(m).set(r.bookingId, (m.get(r.bookingId) ?? 0n) + r.expectedPayoutPaise),
+      new Map<string, bigint>(),
+    );
+  }
+
+  /** ASSIGNED / EN_ROUTE bookings that started in [startedAfter, startedBefore] (no-show sweep). */
+  awaitingCheckIn(startedAfter: Date, startedBefore: Date, limit: number): Promise<string[]> {
+    return this.onsite.awaitingCheckIn(this.sql, startedAfter, startedBefore, limit);
   }
 
   /** A booking as seen inside the caller's transaction (sees its own uncommitted changes). */

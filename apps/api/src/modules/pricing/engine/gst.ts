@@ -32,6 +32,15 @@ function splitByPlaceOfSupply(gstPaise: bigint, venueStateCode: string): Split {
  * taxable is back-derived; GST is derived by subtraction so nothing is rounded twice.
  */
 export function applyGst(netPaise: bigint, ruleset: Ruleset, venue: ResolvedVenue): Taxed {
+  return applyGstAt(netPaise, ruleset, venue.gstStateCode);
+}
+
+/** applyGst for a charge on an existing booking: the place of supply comes from its snapshot. */
+export function applyGstAt(
+  netPaise: bigint,
+  ruleset: Pick<Ruleset, 'pricesIncludeGst' | 'gstRateBps' | 'sacCode'>,
+  placeOfSupply: string,
+): Taxed {
   const rateBps = BigInt(ruleset.gstRateBps);
   const taxablePaise = ruleset.pricesIncludeGst
     ? roundHalfUp(netPaise * BPS_SCALE, BPS_SCALE + rateBps)
@@ -46,8 +55,8 @@ export function applyGst(netPaise: bigint, ruleset: Ruleset, venue: ResolvedVenu
     gst: {
       rateBps: ruleset.gstRateBps,
       sac: ruleset.sacCode,
-      placeOfSupply: venue.gstStateCode,
-      ...splitByPlaceOfSupply(gstAmountPaise, venue.gstStateCode),
+      placeOfSupply,
+      ...splitByPlaceOfSupply(gstAmountPaise, placeOfSupply),
     },
   };
 }

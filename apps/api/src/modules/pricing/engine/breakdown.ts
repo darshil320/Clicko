@@ -2,7 +2,7 @@ import { fromPaiseBigint } from '@clickco/utils';
 import type { Quote, QuoteLine } from './types';
 
 /** Optional keys are omitted (not set to undefined) so the JSON round-trips deep-equal. */
-function lineJson(line: QuoteLine): Record<string, unknown> {
+export function lineJson(line: QuoteLine): Record<string, unknown> {
   return {
     code: line.code,
     label: line.label,
