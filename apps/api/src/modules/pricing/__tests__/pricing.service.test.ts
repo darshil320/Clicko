@@ -118,4 +118,64 @@ describe('PricingService', () => {
     const quote = await service({ promo }).quote({ ...request, promoCode: 'FIRST200' });
     expect(quote.kind === 'QUOTE' && quote.discountPaise).toBe(20000);
   });
+
+  describe('priceForBooking', () => {
+    const promo: PromoRecord = {
+      code: 'FIRST200',
+      discountBps: null,
+      discountFlatPaise: 20000n,
+      maxDiscountPaise: null,
+      minBookingPaise: 0n,
+      appliesToTiers: null,
+      appliesToCityIds: null,
+      firstBookingOnly: true,
+      perUserCap: 1,
+      totalRedemptionCap: 100,
+      validFrom: new Date('2026-10-01T00:00:00Z'),
+      validTo: new Date('2027-01-01T00:00:00Z'),
+      isActive: true,
+    };
+    const withPromo = { ...request, promoCode: 'FIRST200' };
+    const fresh = { userRedemptions: 0, userBookingCount: 0, totalRedemptions: 0 };
+
+    const codeOf = async (p: Promise<unknown>) => {
+      try {
+        await p;
+      } catch (e) {
+        if (e instanceof HttpException) return (e.getResponse() as { code: string }).code;
+        throw e;
+      }
+      return 'OK';
+    };
+
+    it('returns the engine quote and the resolved venue, priced at the given instant', async () => {
+      const { quote, venue } = await service().priceForBooking(request, NOW, null);
+      expect(quote).toMatchObject({ kind: 'QUOTE', rulesetId: 'rs-1', computedAt: NOW });
+      expect(venue.cityId).toBe(CITY.surat);
+    });
+
+    it("applies the user's real promo usage", async () => {
+      const svc = service({ promo });
+      expect((await svc.priceForBooking(withPromo, NOW, fresh)).quote.discountAmountPaise).toBe(
+        20000n,
+      );
+      expect(
+        await codeOf(svc.priceForBooking(withPromo, NOW, { ...fresh, userBookingCount: 1 })),
+      ).toBe('PROMO_NOT_APPLICABLE');
+      expect(
+        await codeOf(svc.priceForBooking(withPromo, NOW, { ...fresh, userRedemptions: 1 })),
+      ).toBe('PROMO_USAGE_EXCEEDED');
+      expect(
+        await codeOf(svc.priceForBooking(withPromo, NOW, { ...fresh, totalRedemptions: 100 })),
+      ).toBe('PROMO_USAGE_EXCEEDED');
+    });
+
+    it('refuses to book a quote-only tier', async () => {
+      expect(
+        await codeOf(
+          service().priceForBooking({ ...request, tier: 'SIGNATURE', hours: 4 }, NOW, null),
+        ),
+      ).toBe('SIGNATURE_ENQUIRY_ONLY');
+    });
+  });
 });

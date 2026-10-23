@@ -33,6 +33,8 @@ export interface ServiceabilityRepository {
   countForPhoneSince(phone: string, since: Date): Promise<number>;
   /** Idempotent on (phone, pincode, intended date) — the waitlist_dedupe_uq index. */
   insertWaitlist(entry: WaitlistInsert): Promise<void>;
+  /** Display names for city ids (other modules never read the cities table themselves). */
+  cityNames(cityIds: readonly string[]): Promise<Map<string, string>>;
 }
 
 export const SERVICEABILITY_REPOSITORY = Symbol('SERVICEABILITY_REPOSITORY');
@@ -89,5 +91,12 @@ export class PgServiceabilityRepository implements ServiceabilityRepository {
       VALUES (${e.phone}, ${e.fullName}, ${e.pincode}, ${e.cityId}, ${e.cityNameRaw},
               ${e.intendedDate}, ${e.intendedTier})
       ON CONFLICT (phone_e164, pincode, coalesce(intended_date, '1900-01-01')) DO NOTHING`;
+  }
+
+  async cityNames(cityIds: readonly string[]): Promise<Map<string, string>> {
+    if (cityIds.length === 0) return new Map();
+    const rows = await this.sql<{ id: string; name: string }[]>`
+      SELECT id, name FROM cities WHERE id IN ${this.sql([...new Set(cityIds)])}`;
+    return new Map(rows.map((r) => [r.id, r.name]));
   }
 }

@@ -4,7 +4,8 @@ import { AppModule } from './app.module';
 import { ENV, type Env } from './config/env';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: payment webhooks are verified by an HMAC over the exact bytes received.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.enableShutdownHooks();
   const env = app.get<Env>(ENV);
   // Exact hop count so req.ip is the client, not the load balancer (OTP per-IP limits depend on it).

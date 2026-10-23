@@ -7,6 +7,7 @@ import { ENV, loadEnv } from './config/env';
 import { HealthModule } from './health/health.module';
 import { DbModule } from './infra/db/db.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { ServiceabilityModule } from './modules/serviceability/serviceability.module';
 import { UsersModule } from './modules/users/users.module';
@@ -33,6 +34,7 @@ class CoreModule {}
     UsersModule,
     ServiceabilityModule,
     PricingModule,
+    CheckoutModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

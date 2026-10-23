@@ -56,6 +56,10 @@ class FakeRepo implements ServiceabilityRepository {
     );
     if (!dupe) this.entries = [...this.entries, { ...entry, createdAt: NOW }];
   }
+  async cityNames(cityIds: readonly string[]) {
+    const all = [...this.areas.values()].map((a) => a.city);
+    return new Map(all.filter((c) => cityIds.includes(c.id)).map((c) => [c.id, c.name]));
+  }
 }
 
 const statusOf = async (p: Promise<unknown>) => {
@@ -183,10 +187,17 @@ describe('ServiceabilityService.join', () => {
     expect(await service.resolveVenue('395007')).toEqual({
       pincode: '395007',
       cityId: SURAT.id,
+      cityName: SURAT.name,
       cityTier: 'TIER_1',
       state: 'Gujarat',
       travelZone: 0,
     });
+  });
+
+  it('names cities by id for other modules', async () => {
+    expect(await service.cityNames([SURAT.id, 'unknown'])).toEqual(
+      new Map([[SURAT.id, SURAT.name]]),
+    );
   });
 
   it('refuses to resolve a waitlist or unknown pincode for pricing', async () => {

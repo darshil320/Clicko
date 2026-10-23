@@ -72,7 +72,7 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
       .overrideProvider(CLOCK)
       .useValue(() => now)
       .compile();
-    app = moduleRef.createNestApplication();
+    app = moduleRef.createNestApplication({ rawBody: true });
     await app.listen(0);
     base = await app.getUrl();
     base = base.replace('[::1]', 'localhost');

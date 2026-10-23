@@ -21,6 +21,7 @@ import {
 export interface BookableVenue {
   readonly pincode: string;
   readonly cityId: string;
+  readonly cityName: string;
   readonly cityTier: CityTier;
   readonly state: string;
   readonly travelZone: 0 | 1 | 2;
@@ -133,9 +134,14 @@ export class ServiceabilityService {
     return {
       pincode,
       cityId: area.city.id,
+      cityName: area.city.name,
       cityTier: area.city.tier,
       state: area.city.state,
       travelZone: area.travelZone,
     };
+  }
+
+  cityNames(cityIds: readonly string[]): Promise<Map<string, string>> {
+    return this.repo.cityNames(cityIds);
   }
 }
