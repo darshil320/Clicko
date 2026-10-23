@@ -1,13 +1,14 @@
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
-import type { INestApplication } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { Redis } from 'ioredis';
 import { AppModule } from '../app.module';
 import { CLOCK } from '../common/clock';
 import { ENV, type Env, loadEnv } from '../config/env';
 import { DevToolsModule } from '../dev/dev-tools.module';
+import { configureHttpApp } from '../http-app';
 import { seedLaunchCities } from '../infra/db/seed';
 import { seedLaunchRuleset } from '../infra/db/seeds/launch-ruleset.seed';
 import { OutboxPublisher, type PublishTickResult } from '../infra/outbox/outbox-publisher';
@@ -138,7 +139,8 @@ export async function startE2eApp(opts: {
     .useValue(scheduler satisfies JobScheduler);
   if (opts.gateway) builder = builder.overrideProvider(PAYMENT_GATEWAY).useValue(opts.gateway);
   const moduleRef = await builder.compile();
-  const app: INestApplication = moduleRef.createNestApplication({ rawBody: true });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({ rawBody: true });
+  configureHttpApp(app, env);
   await app.listen(0);
   const base = (await app.getUrl()).replace('[::1]', 'localhost');
 

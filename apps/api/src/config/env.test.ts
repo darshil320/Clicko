@@ -52,6 +52,7 @@ describe('loadEnv', () => {
       RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
       STORAGE_ADAPTER: 'drive',
       JPEG_EXPORT_ADAPTER: 'darktable',
+      TRUST_PROXY_HOPS: '1',
     };
     expect(() => loadEnv({ ...deployed, QUEUE_PREFIX: 'clickco-prod' })).toThrow(/REDIS_URL/);
     expect(() => loadEnv({ ...deployed, REDIS_URL: 'rediss://cache:6380' })).toThrow(
@@ -99,6 +100,38 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...valid, TRUST_PROXY_HOPS: 'true' })).toThrow(/TRUST_PROXY_HOPS/);
   });
 
+  describe('when deployed (security review L6)', () => {
+    const deployed = {
+      ...valid,
+      NODE_ENV: 'staging',
+      SMS_ADAPTER: 'dlt',
+      REDIS_URL: 'rediss://cache:6380',
+      QUEUE_PREFIX: 'clickco-staging',
+      PAYMENT_GATEWAY: 'razorpay',
+      RAZORPAY_KEY_ID: 'rzp_test_key',
+      RAZORPAY_KEY_SECRET: 'rzp-key-secret',
+      RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
+      STORAGE_ADAPTER: 'drive',
+      JPEG_EXPORT_ADAPTER: 'darktable',
+    };
+
+    it('the proxy hop count must be explicit (0 behind a load balancer pools every client)', () => {
+      expect(() => loadEnv(deployed)).toThrow(/TRUST_PROXY_HOPS/);
+      expect(loadEnv({ ...deployed, TRUST_PROXY_HOPS: '1' }).TRUST_PROXY_HOPS).toBe(1);
+      expect(loadEnv({ ...deployed, TRUST_PROXY_HOPS: '0' }).TRUST_PROXY_HOPS).toBe(0);
+    });
+
+    it('browser origins must be https', () => {
+      const env = { ...deployed, TRUST_PROXY_HOPS: '1' };
+      expect(() => loadEnv({ ...env, CORS_ORIGINS: 'http://admin.clickco.in' })).toThrow(
+        /CORS_ORIGINS/,
+      );
+      expect(loadEnv({ ...env, CORS_ORIGINS: 'https://admin.clickco.in' }).CORS_ORIGINS).toEqual([
+        'https://admin.clickco.in',
+      ]);
+    });
+  });
+
   it('parses an explicit list of CORS origins and rejects junk', () => {
     expect(
       loadEnv({ ...valid, CORS_ORIGINS: 'http://localhost:3001, https://admin.clickco.in' })
@@ -133,6 +166,7 @@ describe('loadEnv', () => {
         QUEUE_PREFIX: 'clickco-prod',
         STORAGE_ADAPTER: 'drive',
         JPEG_EXPORT_ADAPTER: 'darktable',
+        TRUST_PROXY_HOPS: '1',
         ...razorpay,
       });
       expect(env.PAYMENT_GATEWAY).toBe('razorpay');
@@ -176,6 +210,7 @@ describe('loadEnv', () => {
       RAZORPAY_KEY_ID: 'rzp_test_key',
       RAZORPAY_KEY_SECRET: 'rzp-key-secret',
       RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
+      TRUST_PROXY_HOPS: '1',
     };
 
     it('defaults to local disk and the passthrough exporter in development', () => {

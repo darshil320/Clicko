@@ -34,7 +34,9 @@ export const EnvSchema = z
     // `console` prints OTPs to the server log — development only. `dlt` lands with TRAI DLT approval.
     SMS_ADAPTER: z.enum(['console', 'dlt']),
     // Load-balancer hops in front of the API. Never `true`: that would trust a client-sent X-Forwarded-For.
-    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Required when deployed: a wrong 0 behind a load balancer gives every client one IP (and one
+    // rate-limit bucket).
+    TRUST_PROXY_HOPS: unsetIfEmpty(z.coerce.number().int().min(0).max(5).optional()),
     // Browser origins allowed to call the API (comma-separated exact origins). Empty = none.
     CORS_ORIGINS: z
       .string()
@@ -114,6 +116,14 @@ export const EnvSchema = z
     message: 'queue workers may only be switched off in test',
     path: ['QUEUE_WORKERS'],
   })
+  .refine((e) => !DEPLOYED.includes(e.NODE_ENV) || e.TRUST_PROXY_HOPS !== undefined, {
+    message: 'staging and production must set TRUST_PROXY_HOPS explicitly',
+    path: ['TRUST_PROXY_HOPS'],
+  })
+  .refine(
+    (e) => !DEPLOYED.includes(e.NODE_ENV) || e.CORS_ORIGINS.every((o) => o.startsWith('https://')),
+    { message: 'staging and production allow https origins only', path: ['CORS_ORIGINS'] },
+  )
   .refine((e) => e.STORAGE_ADAPTER !== 'local' || !DEPLOYED.includes(e.NODE_ENV), {
     message: 'the local storage adapter is only allowed in development and test',
     path: ['STORAGE_ADAPTER'],
@@ -122,7 +132,11 @@ export const EnvSchema = z
     message: 'the passthrough JPEG exporter is only allowed in development and test',
     path: ['JPEG_EXPORT_ADAPTER'],
   })
-  .transform((e) => ({ ...e, QUEUE_PREFIX: e.QUEUE_PREFIX ?? 'clickco' }));
+  .transform((e) => ({
+    ...e,
+    QUEUE_PREFIX: e.QUEUE_PREFIX ?? 'clickco',
+    TRUST_PROXY_HOPS: e.TRUST_PROXY_HOPS ?? 0,
+  }));
 export type Env = z.infer<typeof EnvSchema>;
 
 export const ENV = Symbol('ENV');

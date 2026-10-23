@@ -15,6 +15,7 @@ const DEFAULT_CODES: Record<number, string> = {
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   409: 'CONFLICT',
+  413: 'PAYLOAD_TOO_LARGE',
   422: 'UNPROCESSABLE',
   429: 'RATE_LIMITED',
   503: 'UNAVAILABLE',
@@ -32,6 +33,25 @@ function toApiError(exception: HttpException): ApiError {
     };
   }
   return { code: DEFAULT_CODES[status] ?? 'ERROR', message: exception.message };
+}
+
+/** body-parser's client errors (http-errors with `expose`), mapped to a safe code and message. */
+const PARSER_ERRORS: Readonly<Record<string, ApiError>> = {
+  'entity.too.large': { code: 'PAYLOAD_TOO_LARGE', message: 'The request body is too large' },
+  'entity.parse.failed': { code: 'INVALID_JSON', message: 'The request body is not valid JSON' },
+};
+
+function clientParserError(exception: unknown): { status: number; error: ApiError } | null {
+  if (typeof exception !== 'object' || exception === null) return null;
+  const e = exception as { status?: unknown; expose?: unknown; type?: unknown };
+  if (e.expose !== true || typeof e.status !== 'number' || e.status < 400 || e.status > 499) {
+    return null;
+  }
+  const known = typeof e.type === 'string' ? PARSER_ERRORS[e.type] : undefined;
+  return {
+    status: e.status,
+    error: known ?? { code: DEFAULT_CODES[e.status] ?? 'BAD_REQUEST', message: 'Bad request' },
+  };
 }
 
 /** Every error leaves as the standard envelope. Unknown errors never expose internals. */
@@ -52,6 +72,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       res
         .status(exception.getStatus())
         .json({ success: false, data: null, error: toApiError(exception) });
+      return;
+    }
+
+    const parser = clientParserError(exception);
+    if (parser) {
+      res.status(parser.status).json({ success: false, data: null, error: parser.error });
       return;
     }
 
