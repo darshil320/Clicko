@@ -118,3 +118,11 @@ Addendum 0004 (`domain_events.next_attempt_at` + partial index). A failed delive
   the response shape and that `GET /payments/:id` then reports `refunded`, on the test account.
 - Capture idempotency relies on `GET /payments/:id` after a 400; confirm the 400 body for "already
   captured" so the adapter could short-circuit without the extra call.
+
+## Schema-guardian follow-ups (addendum 0004)
+- **Grants:** when the schema §14 grants migration is written, the `domain_events` column grant must be
+  `UPDATE (published_at, publish_attempts, last_error, next_attempt_at)`. Without `next_attempt_at` every failure
+  rolls back the publisher tick and the outbox stalls. (0004 itself stays unchanged — it is applied.)
+- `appendDomainEventOnce` filters on `aggregate_kind` first so it can use `domain_events_aggregate_idx`.
+- Dead letters are parked at `next_attempt_at = 'infinity'`; backoff is measured from the failure time.
+- Index builds on hot tables in future addenda should use `CREATE INDEX CONCURRENTLY` in their own migration.

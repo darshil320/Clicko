@@ -43,8 +43,8 @@ export async function appendDomainEventOnce(
   await tx`SELECT pg_advisory_xact_lock(hashtext(${`outbox:${event.eventType}:${event.dedupeKey}`}))`;
   const [existing] = await tx`
     SELECT 1 FROM domain_events
-    WHERE event_type = ${event.eventType} AND aggregate_id = ${event.aggregateId}
-      AND payload->>'dedupe_key' = ${event.dedupeKey}`;
+    WHERE aggregate_kind = ${event.aggregateKind} AND aggregate_id = ${event.aggregateId}
+      AND event_type = ${event.eventType} AND payload->>'dedupe_key' = ${event.dedupeKey}`;
   if (existing) return false;
   const { dedupeKey, ...rest } = event;
   await appendDomainEvent(tx, { ...rest, payload: { ...event.payload, dedupe_key: dedupeKey } });

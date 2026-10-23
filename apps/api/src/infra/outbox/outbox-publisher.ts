@@ -105,11 +105,15 @@ export class OutboxPublisher {
     now: Date,
   ): Promise<void> {
     const attempts = row.publish_attempts + 1;
+    // Backoff from the moment of failure, not the start of the tick; a dead letter is parked
+    // at 'infinity' so it drops out of the due-index scan instead of being re-read every tick.
+    const deadLettered = attempts >= MAX_PUBLISH_ATTEMPTS;
+    const retryAt = new Date(this.clock().getTime() + backoffMs(attempts));
     await tx`
       UPDATE domain_events
          SET publish_attempts = ${attempts},
              last_error = ${`${failure.subscriber}: ${failure.errorName}`},
-             next_attempt_at = ${new Date(now.getTime() + backoffMs(attempts))}
+             next_attempt_at = CASE WHEN ${deadLettered} THEN 'infinity'::timestamptz ELSE ${retryAt}::timestamptz END
        WHERE id = ${row.id}`;
     if (attempts < MAX_PUBLISH_ATTEMPTS || row.event_type === DEAD_LETTER) return;
     this.logger.error(
