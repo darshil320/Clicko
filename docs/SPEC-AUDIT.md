@@ -30,6 +30,7 @@ BLOCKER = code cannot be written correctly without a decision. MAJOR = will prod
 
 | SA-12 | MINOR | Pricing worked example | `clickco-05-pricing-engine.md` §7 | Found by the S2 engine: the §7 breakdown lists both a Food uplift (11500) and a wedding-season surge (11500) in `factorsApplied`, but its BASE line (977500 = ₹4,250 × 2 × 1.15) applies only one of them. The algorithm in §3 step 9 multiplies both, giving 1124125. §7 also labels the post-discount figure `subtotalPaise`. | Engine follows §3 (both factors). The API's `subtotalPaise` is pre-discount with a separate `discountPaise`. Fix the §7 example in doc 05 v2. |
 | SA-13 | MAJOR | T&C↔Schema coverage | T&C §7.4, v0.2 G-40, DOMAIN Invariant 22, schema §7 | The model-release / minor-consent checkbox is required per booking, opt-in, never defaulted — but `bookings` has no column to record it, so the consent could not be evidenced in a dispute. | Addendum 0003 adds `model_release_consent` + `model_release_consent_at` with a CHECK that a true consent carries its timestamp. |
+| SA-14 | MAJOR | Emergency promise vs T&C | `clickco-05-pricing-engine.md` §5 (`HOURS_3_8` guaranteed = yes), v0.2 §8, T&C §3.7 | Doc 05 marks the 3–8h band as guaranteed; T&C §3.7 says every Emergency booking with less than 8 hours' notice is best-effort with a full refund if unfilled. The customer-facing promise must not exceed the T&C. | Customer copy (web, app) follows the T&C: under 8 hours is best-effort. Ruleset `emergency_multipliers.is_guaranteed` for `HOURS_3_8` to be set false (capture behaviour unchanged: 100% upfront, full refund if unfilled) — applied with the next ruleset fixture change. Fix doc 05 §5 in v2. |
 **Areas checked and found clean** (no findings):
 
 - **A. State machine** — the 24-value `booking_status` enum (schema §1) and the v0.2 §6 lifecycle diagram, including all 8 exception/terminal states (CANCELLED_CLIENT, CANCELLED_PRO, PRO_NO_SHOW, ACCESS_DENIED, UNSAFE_SITE, DATA_LOSS, QUALITY_ESCALATION, ABANDONED), match exactly in both directions. No orphans.
@@ -45,7 +46,7 @@ BLOCKER = code cannot be written correctly without a decision. MAJOR = will prod
 ## Summary
 
 - **BLOCKER: 1** (SA-11, found 21 Oct 2026 by the migration integration test; patched)
-- **MAJOR: 4** (SA-01, SA-02, SA-03, SA-13)
+- **MAJOR: 5** (SA-01, SA-02, SA-03, SA-13, SA-14)
 - **MINOR: 5** (SA-04, SA-05, SA-06, SA-07, SA-12)
 
 No blocking internal contradictions were found — the spec set is unusually well cross-referenced for a first pass (doc 05 explicitly cites doc v0.2 and the T&C by section number in several places, which is why so few real conflicts turned up). The three MAJOR items are all coverage gaps (T&C clauses with no corresponding schema surface, or a latent type-safety gap) rather than the documents disagreeing with each other. None of them require a business decision to fix — they're schema/type additions — which is why none are rated BLOCKER despite being real.
