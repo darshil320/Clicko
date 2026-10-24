@@ -8,6 +8,7 @@ import {
   fontDisplay,
   fx,
   hairline,
+  headerOverlay,
   L,
   label,
   measure,
@@ -85,7 +86,7 @@ main>:not(.page){max-width:${px(measure.prose + L.screenPaddingX * 2)};margin-le
 main>:not(.page):first-child{margin-top:${px(rhythm.mobile)}}
 main>:not(.page):last-child{margin-bottom:${px(rhythm.tablet)}}
 ${mq(bp.lg)}{
-  main>:not(.page):first-child{margin-top:${px(rhythm.tablet)}}
+  main>:not(.page):first-child{margin-top:${px(rhythm.tablet + headerOverlay)}}
   main>:not(.page):last-child{margin-bottom:${px(rhythm.desktop)}}
 }
 main>:not(.page){font-size:${fluid(T.body.size, prose.size)};line-height:${prose.leading}}

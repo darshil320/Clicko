@@ -5,6 +5,7 @@ import {
   fluidType,
   fontDisplay,
   hairline,
+  headerOverlay,
   ICON,
   L,
   label,
@@ -44,7 +45,7 @@ function heroFrameCss(): string {
 .facts strong{color:${v('text-primary')};font-weight:${T.bodyStrong.weight};font-variant-numeric:tabular-nums}
 ${mq(bp.sm)}{.hero{padding-top:${px(S[14])}}.facts{display:flex;flex-wrap:wrap;gap:${px(S[3])} ${px(S[8])}}}
 ${mq(bp.lg)}{
-  .hero{padding-top:${px(S[14] + S[10])};padding-bottom:${px(rhythm.tablet)}}
+  .hero{padding-top:${px(S[14] + S[10] + headerOverlay)};padding-bottom:${px(rhythm.tablet)}}
   .hero-grid{grid-template-columns:minmax(0,11fr) minmax(0,10fr);gap:${px(S[14])}}
 }
 `;

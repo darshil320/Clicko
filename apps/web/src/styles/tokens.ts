@@ -166,6 +166,13 @@ export const bp = { sm: 640, lg: 960 } as const;
 export const mq = (min: number): string => `@media (min-width:${px(min)})`;
 /** Height of the header bar. */
 export const headerHeight = S[14] + S[2];
+/** Desktop: the floating bar's inset from the top of the viewport. */
+export const headerInset = S[4];
+/**
+ * Desktop: the header's whole footprint. The header pulls the page up by this much so the first
+ * band's daylight glow runs behind the floating bar, and that band adds it back to its top padding.
+ */
+export const headerOverlay = headerInset + headerHeight;
 
 /**
  * The hero collage (desktop): a stage height and each frame's box as % of the stage, so the

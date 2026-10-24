@@ -7,6 +7,8 @@ import {
   fx,
   hairline,
   headerHeight,
+  headerInset,
+  headerOverlay,
   L,
   label,
   measure,
@@ -59,10 +61,11 @@ function headerCss(): string {
 ${mq(bp.sm)}{.nav-list{justify-content:flex-start;gap:${px(S[1])}}.nav-list a{${type(T.body)};
   font-weight:${T.bodyStrong.weight};padding:0 ${px(S[3])}}}
 ${mq(bp.lg)}{
-  .site-header{position:sticky;top:0;padding-top:${px(S[4])};background:none;border:0;
+  .site-header{position:sticky;top:0;padding-top:${px(headerInset)};margin-bottom:${px(-headerOverlay)};
+    background:none;border:0;
     -webkit-backdrop-filter:none;backdrop-filter:none;pointer-events:none}
   .site-header .bar{pointer-events:auto;max-width:${px(measure.page)};padding:0 ${px(S[2])} 0 ${px(S[5])};
-    min-height:${px(S[14] + S[2])};border:${hairline()};border-radius:${px(R.full)};box-shadow:${shadow('md')};
+    min-height:${px(headerHeight)};border:${hairline()};border-radius:${px(R.full)};box-shadow:${shadow('md')};
     background:${tint('surface-overlay', fx.glassPercent)};
     -webkit-backdrop-filter:saturate(${fx.glassSaturate}) blur(${px(fx.glassBlur * 2)});
     backdrop-filter:saturate(${fx.glassSaturate}) blur(${px(fx.glassBlur * 2)})}
@@ -108,7 +111,7 @@ ${mq(bp.lg)}{
 .page-hero-grid{display:grid;gap:${px(S[10])};align-items:center}
 .page-hero-grid .photo{max-width:${px(measure.stage)};width:100%}
 ${mq(bp.lg)}{
-  .page-hero{padding-top:${px(S[14])};padding-bottom:${px(rhythm.tablet)}}
+  .page-hero{padding-top:${px(S[14] + headerOverlay)};padding-bottom:${px(rhythm.tablet)}}
   .page-hero-grid{grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:${px(S[14])}}
   .page-hero-grid .photo{justify-self:end;box-shadow:${shadow('photo')}}
 }
