@@ -10,6 +10,7 @@ export const QUEUE = {
   MEDIA: 'media',
   /** JPEG export only: CPU-bound, kept off the queue the monitors and the reaper run on. */
   MEDIA_EXPORT: 'media-export',
+  SLA: 'sla',
 } as const;
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
@@ -38,6 +39,10 @@ export const JOB = {
   MEDIA_QUOTA_MONITOR: 'media.quota-monitor',
   /** Repeatable (hourly): reclaims staged parts of upload sessions idle for 24 h (security review M5). */
   MEDIA_UPLOAD_REAPER: 'media.upload-reaper',
+  /** Delayed: one SLA clock is due (ADR-0016 D6). */
+  SLA_CLOCK_DUE: 'sla.clock-due',
+  /** Repeatable: fires overdue armed clocks whose job was lost. */
+  SLA_SWEEP: 'sla.sweep',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -54,6 +59,8 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.MEDIA_INTEGRITY_AUDIT]: QUEUE.MEDIA,
   [JOB.MEDIA_QUOTA_MONITOR]: QUEUE.MEDIA,
   [JOB.MEDIA_UPLOAD_REAPER]: QUEUE.MEDIA,
+  [JOB.SLA_CLOCK_DUE]: QUEUE.SLA,
+  [JOB.SLA_SWEEP]: QUEUE.SLA,
 };
 
 export interface JobOptions {
@@ -82,6 +89,7 @@ export const REPEATABLE_JOBS: readonly RepeatableJob[] = [
   { job: JOB.MEDIA_INTEGRITY_AUDIT, everyMs: 7 * 24 * 3_600_000 },
   { job: JOB.MEDIA_QUOTA_MONITOR, everyMs: 15 * 60_000 },
   { job: JOB.MEDIA_UPLOAD_REAPER, everyMs: 60 * 60_000 },
+  { job: JOB.SLA_SWEEP, everyMs: 60_000 },
 ];
 
 /** The outbox is drained by one job at a time; dispatch timers may overlap (they lock rows). */
@@ -93,4 +101,5 @@ export const WORKER_CONCURRENCY: Readonly<Record<QueueName, number>> = {
   [QUEUE.MEDIA]: 2,
   // JPEG export is CPU-bound (darktable): two at a time per worker.
   [QUEUE.MEDIA_EXPORT]: 2,
+  [QUEUE.SLA]: 4,
 };

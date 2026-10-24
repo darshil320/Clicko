@@ -15,6 +15,11 @@ const ONSITE_ALERTS: ReadonlyArray<readonly [string, 'HIGH' | 'CRITICAL']> = [
   ['assignment.geofence_unverified', 'HIGH'],
   ['assignment.offline_check_in_after_no_show', 'HIGH'],
   ['booking.needs_review', 'HIGH'],
+  // The SLA machine (ADR-0016 D6, D9).
+  ['sla.breached', 'CRITICAL'],
+  ['sla.red_alert', 'HIGH'],
+  ['sla.milestone_missed', 'HIGH'],
+  ['delivery.qa_failed', 'HIGH'],
 ];
 
 const asValue = (v: unknown): EventValue =>
