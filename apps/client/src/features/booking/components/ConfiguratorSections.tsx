@@ -9,17 +9,6 @@ import { canDecrease, canIncrease, MIN_HOURS } from '../lib/duration';
 import { rupees } from '../lib/quote-view';
 import type { DatePill } from '../lib/schedule';
 
-export function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <View className="gap-3">
-      <Text variant="bodyStrong" accessibilityRole="header">
-        {title}
-      </Text>
-      {children}
-    </View>
-  );
-}
-
 /**
  * A horizontal pill row that brings the selected pill into view the first time it lays out
  * (a default slot such as 11:00 am would otherwise sit off-screen).
@@ -46,7 +35,8 @@ function PillRow<T extends string | number>({
       ref={scroll}
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerClassName="gap-2"
+      className="-mx-5"
+      contentContainerClassName="gap-2 px-5 py-1"
     >
       {items.map((item) => (
         <View key={item} onLayout={item === selected ? reveal : undefined}>
@@ -128,7 +118,7 @@ export function DurationStepper({
   onStep: (direction: 1 | -1) => void;
 }) {
   return (
-    <View className="flex-row items-center gap-3">
+    <View className="flex-row items-center gap-4">
       <Button
         label="−"
         variant="secondary"
@@ -138,8 +128,8 @@ export function DurationStepper({
         accessibilityLabel="Half an hour shorter"
         testID="hours-decrease"
       />
-      <View className="flex-1 items-center">
-        <Text variant="h3" tabular accessibilityLiveRegion="polite" testID="hours-value">
+      <View className="flex-1 items-center gap-1">
+        <Text variant="h2" tabular accessibilityLiveRegion="polite" testID="hours-value">
           {formatHours(hours)}
         </Text>
         <Text variant="caption" tone="tertiary">
@@ -219,7 +209,7 @@ export function AddonList({
   const addons = eligibleAddons(tier);
   if (addons.length === 0) {
     return (
-      <Text variant="caption" tone="tertiary">
+      <Text variant="caption" tone="tertiary" className="py-3">
         Add-ons start from the Semi-Pro tier.
       </Text>
     );

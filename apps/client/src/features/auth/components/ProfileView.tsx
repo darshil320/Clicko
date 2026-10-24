@@ -1,4 +1,4 @@
-import { Avatar, Button, Card, ListRow, Screen, Text } from '@clickco/ui';
+import { Avatar, Button, Card, ListRow, Screen, Section, Text } from '@clickco/ui';
 import { View } from 'react-native';
 import { API_URL, IS_DEV } from '@/shared/config';
 import { userMessage } from '@/shared/errors';
@@ -14,17 +14,11 @@ export function ProfileView() {
   const name = user?.fullName ?? 'Clickco member';
 
   return (
-    <Screen
-      header={
-        <Text variant="h1" accessibilityRole="header" className="pb-2">
-          Profile
-        </Text>
-      }
-    >
-      <Card className="flex-row items-center gap-3">
+    <Screen title="Profile">
+      <Card className="flex-row items-center gap-4">
         <Avatar name={user?.fullName ?? ''} size="lg" />
         <View className="flex-1 gap-1">
-          <Text variant="bodyStrong">{name}</Text>
+          <Text variant="h3">{name}</Text>
           <Text tone="secondary" tabular>
             {user ? formatPhone(user.phone) : ''}
           </Text>
@@ -36,12 +30,14 @@ export function ProfileView() {
         </Text>
       ) : null}
       {IS_DEV ? (
-        <Card>
-          <ListRow title="API" subtitle={API_URL} />
-          <Text variant="caption" tone="tertiary">
-            Development build
-          </Text>
-        </Card>
+        <Section title="Developer">
+          <Card>
+            <ListRow title="API" subtitle={API_URL} />
+            <Text variant="caption" tone="tertiary">
+              Development build
+            </Text>
+          </Card>
+        </Section>
       ) : null}
       <Button
         label="Sign out"

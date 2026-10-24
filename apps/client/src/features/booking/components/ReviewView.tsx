@@ -5,15 +5,18 @@ import {
   Card,
   Checkbox,
   EmptyState,
+  IconTile,
   Input,
   ListRow,
   Screen,
+  Section,
   Skeleton,
   Text,
   TIER_LABEL,
   TierBadge,
 } from '@clickco/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
+import CalendarDays from 'lucide-react-native/icons/calendar-days';
 import Receipt from 'lucide-react-native/icons/receipt';
 import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -31,8 +34,8 @@ import { useBookingDraft } from '../store';
 function Breakdown({ quote }: { quote: PriceQuote }) {
   const view = quoteView(quote);
   return (
-    <>
-      <Card>
+    <Section title="Price">
+      <Card padding="list">
         {view.lines.map((line) => (
           <ListRow
             key={line.key}
@@ -43,7 +46,7 @@ function Breakdown({ quote }: { quote: PriceQuote }) {
           />
         ))}
         {view.factors.length > 0 ? (
-          <Text variant="caption" tone="tertiary" className="pt-2">
+          <Text variant="caption" tone="tertiary" className="py-3">
             Base includes: {view.factors.join(' · ')}
           </Text>
         ) : null}
@@ -54,7 +57,7 @@ function Breakdown({ quote }: { quote: PriceQuote }) {
         <ListRow title={view.gst.label} value={view.gst.amount} divider />
         <ListRow title="Total" value={view.total} emphasis testID="quote-total" />
       </Card>
-      <Card>
+      <Card className="gap-2">
         <ListRow title={view.payNow.label} value={view.payNow.amount} emphasis testID="pay-now" />
         {view.payNow.note ? (
           <Text variant="caption" tone="secondary">
@@ -67,14 +70,14 @@ function Breakdown({ quote }: { quote: PriceQuote }) {
           </Text>
         ) : null}
       </Card>
-    </>
+    </Section>
   );
 }
 
 function TermsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Booking terms in brief">
-      <View className="gap-3">
+      <View className="gap-4">
         <Text tone="secondary">Your advance confirms the booking and reserves a photographer.</Text>
         <Text tone="secondary">
           Photos are delivered as RAW + JPEG within 48 hours of the shoot. Editing is not included.
@@ -138,6 +141,9 @@ export function ReviewView({ locationLabel, onPaymentOpened, onStartOver }: Revi
   return (
     <Screen
       topInset={false}
+      eyebrow="Step 3 of 4"
+      title="Review and pay"
+      titleVariant="h1"
       footer={
         <>
           {checkout.isError ? (
@@ -155,24 +161,24 @@ export function ReviewView({ locationLabel, onPaymentOpened, onStartOver }: Revi
         </>
       }
     >
-      <Text variant="micro" tone="tertiary">
-        Step 3 of 4
-      </Text>
-      <Card className="gap-2">
-        <TierBadge tier={draft.tier} />
-        <Text variant="bodyStrong">
-          {TIER_LABEL[draft.tier]} · {categoryLabel(draft.categoryCode)}
-        </Text>
-        <Text tone="secondary" tabular>
-          {formatDayMonth(draft.dateKey)}, {formatTimeRange(draft.startMinute, draft.hours)}
-        </Text>
-        <Text tone="secondary">{draft.venueAddress.trim() || locationLabel}</Text>
+      <Card className="flex-row gap-4">
+        <IconTile icon={CalendarDays} size="md" />
+        <View className="flex-1 gap-2">
+          <TierBadge tier={draft.tier} />
+          <Text variant="h3">
+            {TIER_LABEL[draft.tier]} · {categoryLabel(draft.categoryCode)}
+          </Text>
+          <Text tone="secondary" tabular>
+            {formatDayMonth(draft.dateKey)}, {formatTimeRange(draft.startMinute, draft.hours)}
+          </Text>
+          <Text tone="secondary">{draft.venueAddress.trim() || locationLabel}</Text>
+        </View>
       </Card>
 
       {quote.isPending ? (
         <Skeleton className="h-56 w-full rounded-lg" />
       ) : quote.isError || !priced ? (
-        <Card className="gap-3">
+        <Card className="gap-4">
           <Text tone="danger">
             {quote.isError ? userMessage(quote.error) : 'This tier is quoted on request.'}
           </Text>
@@ -182,7 +188,7 @@ export function ReviewView({ locationLabel, onPaymentOpened, onStartOver }: Revi
         <Breakdown quote={priced} />
       )}
 
-      <Card className="gap-3">
+      <Section title="Your details">
         <Controller
           control={form.control}
           name="bookerName"
@@ -199,12 +205,12 @@ export function ReviewView({ locationLabel, onPaymentOpened, onStartOver }: Revi
             />
           )}
         />
-        <Text variant="caption" tone="tertiary">
+        <Text variant="caption" tone="tertiary" tabular>
           We'll share updates on {formatPhone(user.phone)}.
         </Text>
-      </Card>
+      </Section>
 
-      <View>
+      <View className="gap-1">
         <Controller
           control={form.control}
           name="acceptTerms"
@@ -218,7 +224,12 @@ export function ReviewView({ locationLabel, onPaymentOpened, onStartOver }: Revi
               label={
                 <Text>
                   I accept the booking terms and cancellation policy.{' '}
-                  <Text tone="accent" onPress={() => setTermsOpen(true)} accessibilityRole="link">
+                  <Text
+                    variant="bodyStrong"
+                    className="underline"
+                    onPress={() => setTermsOpen(true)}
+                    accessibilityRole="link"
+                  >
                     Read them
                   </Text>
                 </Text>

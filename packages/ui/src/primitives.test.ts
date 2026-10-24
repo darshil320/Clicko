@@ -1,5 +1,5 @@
 import { PlanTier } from '@clickco/contracts';
-import { color, tailwindPreset } from '@clickco/design-tokens';
+import { colorLight, lightTailwindPreset } from '@clickco/design-tokens';
 import { describe, expect, it } from 'vitest';
 import { initials } from './avatar.logic';
 import { buttonContainerClass, buttonLabelTone, buttonState } from './button.styles';
@@ -15,7 +15,7 @@ import {
 } from './tones';
 
 const tokenColourNames = new Set(
-  Object.entries(color).flatMap(([group, value]) =>
+  Object.entries(colorLight).flatMap(([group, value]) =>
     typeof value === 'string' ? [group] : Object.keys(value).map((v) => `${group}-${v}`),
   ),
 );
@@ -23,6 +23,15 @@ const tokenColourNames = new Set(
 /** "text-accent-default" / "bg-success/15" / "border-l-text-primary" → the token name. */
 function tokenOf(className: string): string {
   return className.replace(/^(text|bg|border-l|border)-/, '').replace(/\/\d+$/, '');
+}
+
+/** Every colour utility in a class list ("bg-surface-base border-border-subtle") → token names. */
+const NOT_A_COLOUR = /^border(-l)?(-\d+)?$|^border-transparent$/;
+function colourTokensIn(classes: string): string[] {
+  return classes
+    .split(/\s+/)
+    .filter((c) => /^(text|bg|border-l|border)-/.test(c) && !NOT_A_COLOUR.test(c))
+    .map(tokenOf);
 }
 
 describe('cx', () => {
@@ -65,21 +74,28 @@ describe('tones only reference design tokens', () => {
     expect(tokenColourNames.has(tokenOf(className))).toBe(true);
   });
 
-  it.each(Object.entries(BADGE_TONE_CLASS))('badge tone %s', (_tone, { bg }) => {
-    expect(tokenColourNames.has(tokenOf(bg))).toBe(true);
+  it.each(Object.entries(BADGE_TONE_CLASS))('badge tone %s', (_tone, { surface, dot }) => {
+    for (const token of colourTokensIn(`${surface} ${dot}`)) {
+      expect(tokenColourNames.has(token), token).toBe(true);
+    }
   });
 
-  it('resolves every tone to a token colour value', () => {
+  it('resolves every tone to a white-theme token colour value', () => {
     const values = new Set<string>(
-      Object.values(color).flatMap((v): string[] =>
+      Object.values(colorLight).flatMap((v): string[] =>
         typeof v === 'string' ? [v] : Object.values(v),
       ),
     );
     for (const value of Object.values(TONE_COLOR)) expect(values.has(value)).toBe(true);
   });
 
-  it('keeps the preset exposing every colour group the classes use', () => {
-    expect(Object.keys(tailwindPreset.theme.extend.colors)).toEqual(Object.keys(color));
+  it('keeps the light preset exposing every colour group the classes use', () => {
+    expect(Object.keys(lightTailwindPreset.theme.extend.colors)).toEqual(Object.keys(colorLight));
+  });
+
+  it('never offers amber as a foreground (ADR-0017: the accent is a fill)', () => {
+    expect(Object.values(TEXT_TONE_CLASS)).not.toContain('text-accent-default');
+    expect(Object.values(TONE_COLOR)).not.toContain(colorLight.accent.default);
   });
 });
 
@@ -92,9 +108,14 @@ describe('tiers', () => {
     expect(TIER_LABEL.SEMI_PRO).toBe('Semi-Pro');
   });
 
-  it('gives the one accent to Professional only', () => {
-    const accented = PlanTier.options.filter((t) => TIER_TONE[t].text === 'accent');
-    expect(accented).toEqual(['PROFESSIONAL']);
+  it('gives the one accent to Professional only — as a dot and an edge, never as text', () => {
+    const dotted = PlanTier.options.filter((t) => TIER_TONE[t].dot === 'bg-accent-default');
+    const edged = PlanTier.options.filter((t) => TIER_TONE[t].edge === 'accent');
+    expect(dotted).toEqual(['PROFESSIONAL']);
+    expect(edged).toEqual(['PROFESSIONAL']);
+    for (const tier of PlanTier.options) {
+      expect(tokenColourNames.has(tokenOf(TIER_TONE[tier].dot))).toBe(true);
+    }
   });
 });
 
@@ -109,6 +130,8 @@ describe('button styles', () => {
   it('uses the accent surface for primary and hover when pressed', () => {
     expect(buttonContainerClass('primary', 'default', 'default')).toContain('bg-accent-default');
     expect(buttonContainerClass('primary', 'pressed', 'default')).toContain('bg-accent-hover');
+    expect(buttonContainerClass('primary', 'disabled', 'default')).not.toContain('accent');
+    expect(buttonContainerClass('secondary', 'default', 'default')).toContain('bg-surface-base');
     expect(buttonContainerClass('primary', 'default', 'default')).toContain('h-button');
     expect(buttonContainerClass('ghost', 'default', 'compact')).toContain('min-h-tap');
   });

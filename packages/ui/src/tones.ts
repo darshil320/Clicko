@@ -1,12 +1,15 @@
 import type { PlanTier } from '@clickco/contracts';
-import { color } from '@clickco/design-tokens';
+import { palette } from './palette';
 
-/** Foreground tones every primitive shares. Each maps to exactly one colour token. */
+/**
+ * Foreground tones every primitive shares. Each maps to exactly one colour token.
+ * There is deliberately no "accent" foreground: on white the amber accent is a FILL with
+ * text/on-accent on top, never text or an icon stroke (1.8:1 — ADR-0017, DESIGN-LIGHT).
+ */
 export type Tone =
   | 'primary'
   | 'secondary'
   | 'tertiary'
-  | 'accent'
   | 'onAccent'
   | 'success'
   | 'warning'
@@ -17,7 +20,6 @@ export const TEXT_TONE_CLASS: Readonly<Record<Tone, string>> = {
   primary: 'text-text-primary',
   secondary: 'text-text-secondary',
   tertiary: 'text-text-tertiary',
-  accent: 'text-accent-default',
   onAccent: 'text-text-on-accent',
   success: 'text-success',
   warning: 'text-warning',
@@ -27,28 +29,46 @@ export const TEXT_TONE_CLASS: Readonly<Record<Tone, string>> = {
 
 /** For props that need a colour value rather than a class (SVG icons, spinners, switches). */
 export const TONE_COLOR: Readonly<Record<Tone, string>> = {
-  primary: color.text.primary,
-  secondary: color.text.secondary,
-  tertiary: color.text.tertiary,
-  accent: color.accent.default,
-  onAccent: color.text['on-accent'],
-  success: color.success,
-  warning: color.warning,
-  danger: color.danger,
-  emergency: color.emergency.default,
+  primary: palette.text.primary,
+  secondary: palette.text.secondary,
+  tertiary: palette.text.tertiary,
+  onAccent: palette.text['on-accent'],
+  success: palette.success,
+  warning: palette.warning,
+  danger: palette.danger,
+  emergency: palette.emergency.default,
 };
 
-/** Status badge: tinted background + matching text (DESIGN.md §Components). */
+/**
+ * Status badge: a pill with a coloured dot and matching text. Status colours are only
+ * readable as text on solid white (tokens.test.ts), so their pills are white with a hairline;
+ * the accent pill is amber-tinted with dark on-accent text.
+ */
 export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'emergency';
 
-export const BADGE_TONE_CLASS: Readonly<Record<BadgeTone, { bg: string; text: Tone }>> = {
-  neutral: { bg: 'bg-surface-overlay', text: 'secondary' },
-  accent: { bg: 'bg-accent-subtle', text: 'accent' },
-  // DESIGN.md has no *-subtle token for these three; the tint is the token at 15% opacity.
-  success: { bg: 'bg-success/15', text: 'success' },
-  warning: { bg: 'bg-warning/15', text: 'warning' },
-  danger: { bg: 'bg-danger/15', text: 'danger' },
-  emergency: { bg: 'bg-emergency-subtle', text: 'emergency' },
+export interface BadgeStyle {
+  readonly surface: string;
+  readonly text: Tone;
+  readonly dot: string;
+}
+
+const WHITE_PILL = 'bg-surface-base border-border-subtle';
+
+export const BADGE_TONE_CLASS: Readonly<Record<BadgeTone, BadgeStyle>> = {
+  neutral: { surface: WHITE_PILL, text: 'secondary', dot: 'bg-text-tertiary' },
+  accent: {
+    surface: 'bg-accent-subtle border-accent-subtle',
+    text: 'onAccent',
+    dot: 'bg-accent-default',
+  },
+  success: { surface: WHITE_PILL, text: 'success', dot: 'bg-success' },
+  warning: { surface: WHITE_PILL, text: 'warning', dot: 'bg-warning' },
+  danger: { surface: WHITE_PILL, text: 'danger', dot: 'bg-danger' },
+  emergency: {
+    surface: 'bg-emergency-subtle border-emergency-subtle',
+    text: 'emergency',
+    dot: 'bg-emergency-default',
+  },
 };
 
 /** Left-edge accents for cards. */
@@ -73,15 +93,22 @@ export const EDGE_CLASS: Readonly<Record<EdgeTone, string>> = {
 
 /**
  * Tier colours. DESIGN.md says "tier-coloured" but defines no tier palette, so tiers map
- * onto existing tokens until the Figma tier palette lands: the ladder rises from grey to
- * white, Professional (the default recommendation) carries the one accent.
+ * onto existing tokens until the Figma tier palette lands: the label ladder rises from grey to
+ * ink, and Professional (the default recommendation) carries the one accent — as an amber
+ * dot and edge (fills), never amber text.
  */
-export const TIER_TONE: Readonly<Record<PlanTier, { text: Tone; edge: EdgeTone }>> = {
-  BASIC: { text: 'tertiary', edge: 'tertiary' },
-  SEMI_PRO: { text: 'secondary', edge: 'secondary' },
-  PROFESSIONAL: { text: 'accent', edge: 'accent' },
-  EXPERT: { text: 'primary', edge: 'primary' },
-  SIGNATURE: { text: 'primary', edge: 'strong' },
+export interface TierStyle {
+  readonly text: Tone;
+  readonly edge: EdgeTone;
+  readonly dot: string;
+}
+
+export const TIER_TONE: Readonly<Record<PlanTier, TierStyle>> = {
+  BASIC: { text: 'tertiary', edge: 'tertiary', dot: 'bg-text-tertiary' },
+  SEMI_PRO: { text: 'secondary', edge: 'secondary', dot: 'bg-text-secondary' },
+  PROFESSIONAL: { text: 'primary', edge: 'accent', dot: 'bg-accent-default' },
+  EXPERT: { text: 'primary', edge: 'primary', dot: 'bg-text-primary' },
+  SIGNATURE: { text: 'primary', edge: 'strong', dot: 'bg-text-primary' },
 };
 
 export const TIER_LABEL: Readonly<Record<PlanTier, string>> = {

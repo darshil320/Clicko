@@ -1,6 +1,5 @@
 import type { BookingSummary } from '@clickco/contracts';
-import { Text } from '@clickco/ui';
-import { View } from 'react-native';
+import { Section } from '@clickco/ui';
 import { splitBookings } from '@/shared/booking-status';
 import { useBookings } from '../hooks';
 import { BookAgainCard } from './BookingCard';
@@ -13,11 +12,8 @@ export function BookAgain({ onRebook }: { onRebook: (booking: BookingSummary) =>
   );
   if (!last) return null;
   return (
-    <View className="gap-3">
-      <Text variant="h3" accessibilityRole="header">
-        Book again
-      </Text>
+    <Section title="Book again">
       <BookAgainCard booking={last} onRebook={() => onRebook(last)} />
-    </View>
+    </Section>
   );
 }

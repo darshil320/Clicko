@@ -1,5 +1,7 @@
-import { Button, Input, Screen, Text } from '@clickco/ui';
+import { Button, IconTile, Input, Screen, Text } from '@clickco/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
+import Aperture from 'lucide-react-native/icons/aperture';
+import MessageSquareText from 'lucide-react-native/icons/message-square-text';
 import { Controller, useForm } from 'react-hook-form';
 import { View } from 'react-native';
 import { IS_DEV } from '@/shared/config';
@@ -33,12 +35,19 @@ function PhoneStep() {
         />
       }
     >
-      <View className="gap-2 pt-10">
-        <Text variant="display">Clickco</Text>
-        <Text variant="h2">Book a professional photographer</Text>
-        <Text tone="secondary">
-          Sign in with your mobile number. We'll send you a 6-digit code.
-        </Text>
+      <View className="gap-8 pt-10">
+        <View className="flex-row items-center gap-3">
+          <IconTile icon={Aperture} tone="accentSubtle" size="md" shape="circle" />
+          <Text variant="h3" accessibilityRole="header">
+            Clickco
+          </Text>
+        </View>
+        <View className="gap-3">
+          <Text variant="display">Book a professional photographer</Text>
+          <Text tone="secondary">
+            Sign in with your mobile number. We'll send you a 6-digit code.
+          </Text>
+        </View>
       </View>
       <Controller
         control={form.control}
@@ -119,9 +128,16 @@ function CodeStep({
         </>
       }
     >
-      <View className="gap-2 pt-10">
-        <Text variant="h1">Enter the code</Text>
-        <Text tone="secondary">Sent to {formatPhone(phone)}</Text>
+      <View className="gap-3 pt-10">
+        <View className="pb-5">
+          <IconTile icon={MessageSquareText} tone="accentSubtle" size="md" shape="circle" />
+        </View>
+        <Text variant="display" accessibilityRole="header">
+          Enter the code
+        </Text>
+        <Text tone="secondary" tabular>
+          Sent to {formatPhone(phone)}
+        </Text>
       </View>
       <Controller
         control={form.control}
@@ -148,7 +164,7 @@ function CodeStep({
           {userMessage(failure)}
         </Text>
       ) : null}
-      <View className="flex-row flex-wrap gap-2">
+      <View className="flex-row flex-wrap items-center gap-2">
         <Button
           label={waitSeconds > 0 ? `Resend code in ${formatCountdown(waitSeconds)}` : 'Resend code'}
           variant="secondary"

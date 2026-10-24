@@ -1,10 +1,12 @@
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { cx } from './cx';
 import { Icon, type LucideIcon } from './Icon';
 import { Text } from './Text';
 import type { Tone } from './tones';
+import { usePressFeedback } from './usePressFeedback';
 
 export interface ListRowProps {
   readonly title: string;
@@ -38,7 +40,8 @@ export function ListRow({
   accessibilityLabel,
   testID,
 }: ListRowProps) {
-  const [pressed, setPressed] = useState(false);
+  // Rows sit inside cards: they fade on press but never shrink.
+  const feedback = usePressFeedback({ scale: false });
   const content = (
     <>
       {icon ? <Icon icon={icon} tone={iconTone} /> : null}
@@ -51,7 +54,7 @@ export function ListRow({
         ) : null}
       </View>
       {value ? (
-        <Text variant={emphasis ? 'bodyStrong' : 'body'} tone={valueTone} tabular>
+        <Text variant={emphasis ? 'h3' : 'body'} tone={valueTone} tabular>
           {value}
         </Text>
       ) : null}
@@ -61,7 +64,6 @@ export function ListRow({
   const classes = cx(
     'min-h-tap flex-row items-center gap-3 py-3',
     divider && 'border-b border-border-subtle',
-    pressed && 'bg-surface-overlay',
   );
 
   if (!onPress) {
@@ -72,16 +74,20 @@ export function ListRow({
     );
   }
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? [title, subtitle, value].filter(Boolean).join(', ')}
-      onPress={onPress}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      className={classes}
-      testID={testID}
-    >
-      {content}
-    </Pressable>
+    <Animated.View style={feedback.style}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          accessibilityLabel ?? [title, subtitle, value].filter(Boolean).join(', ')
+        }
+        onPress={onPress}
+        onPressIn={feedback.onPressIn}
+        onPressOut={feedback.onPressOut}
+        className={classes}
+        testID={testID}
+      >
+        {content}
+      </Pressable>
+    </Animated.View>
   );
 }

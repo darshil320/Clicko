@@ -4,8 +4,10 @@ import {
   Button,
   Card,
   Icon,
+  IconTile,
   ListRow,
   Screen,
+  Section,
   Skeleton,
   Text,
   TIER_LABEL,
@@ -48,7 +50,7 @@ function CompareSheet({
         );
       })}
       <ListRow title="Signature" subtitle={TIER_COPY.SIGNATURE.gear} value="On request" />
-      <Text variant="caption" tone="tertiary" className="mt-2">
+      <Text variant="caption" tone="tertiary" className="mt-3">
         Prices are for 2 hours, before 18% GST.
       </Text>
     </BottomSheet>
@@ -81,10 +83,13 @@ function PriceBlock({ tier, pincode }: { tier: BookableTier; pincode: string }) 
   const hourly = hourlyRatePaise(quote.data);
   return (
     <View className="gap-1">
-      <Text variant="h2" tabular>
-        {rupees(quote.data.subtotalPaise)} for 2 hours
-      </Text>
-      <Text variant="caption" tone="secondary" tabular>
+      <View className="flex-row flex-wrap items-baseline gap-2">
+        <Text variant="display" tabular>
+          {rupees(quote.data.subtotalPaise)}
+        </Text>
+        <Text tone="secondary">for 2 hours</Text>
+      </View>
+      <Text variant="caption" tone="tertiary" tabular>
         + GST{hourly === null ? '' : ` · extra hours from ${rupees(hourly)}/hr`}
       </Text>
     </View>
@@ -126,34 +131,42 @@ export function PlanDetailView({ tier, pincode, onContinue }: PlanDetailViewProp
       <View
         accessible
         accessibilityLabel={`${TIER_LABEL[tier]} sample photography`}
-        className="-mx-5 -mt-4 aspect-video items-center justify-center bg-surface-raised"
+        className="-mx-5 -mt-4 aspect-video items-center justify-center border-b border-border-subtle bg-surface-raised"
       >
-        <Icon icon={Camera} tone="tertiary" size="large" />
+        <IconTile icon={Camera} size="lg" shape="circle" />
       </View>
-      <View className="gap-2">
+      <View className="gap-3">
         <TierBadge tier={tier} />
-        <Text variant="h1">{TIER_LABEL[tier]}</Text>
+        <Text variant="display" accessibilityRole="header">
+          {TIER_LABEL[tier]}
+        </Text>
         <Text tone="secondary">{copy.tagline}</Text>
       </View>
       {bookable ? (
         <PriceBlock tier={tier} pincode={pincode} />
       ) : (
-        <Text variant="h2">On request</Text>
+        <Text variant="h1">On request</Text>
       )}
 
-      <Card>
-        <Text variant="h3" accessibilityRole="header" className="mb-1">
-          What's included
-        </Text>
-        {copy.included.map((item) => (
-          <ListRow key={item} title={item} icon={Check} iconTone="success" />
-        ))}
-      </Card>
+      <Section title="What's included">
+        <Card padding="list">
+          {copy.included.map((item, i) => (
+            <ListRow
+              key={item}
+              title={item}
+              icon={Check}
+              iconTone="success"
+              divider={i < copy.included.length - 1}
+            />
+          ))}
+        </Card>
+      </Section>
 
-      <Card>
+      <Card padding="list">
         <ListRow
           title="What's not included"
           emphasis
+          divider={showExcluded}
           onPress={() => setShowExcluded((open) => !open)}
           accessory={<Icon icon={showExcluded ? ChevronUp : ChevronDown} tone="tertiary" />}
           accessibilityLabel={

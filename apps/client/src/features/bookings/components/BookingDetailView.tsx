@@ -6,6 +6,7 @@ import {
   EmptyState,
   ListRow,
   Screen,
+  Section,
   Skeleton,
   StatusBadge,
   Text,
@@ -78,21 +79,23 @@ function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) 
 
   return (
     <>
-      <View className="gap-2">
+      <View className="gap-3">
         <View className="flex-row items-center justify-between">
           <StatusBadge label={status.label} tone={status.tone} />
           <TierBadge tier={booking.tier} />
         </View>
-        <Text variant="h1">{categoryLabel(booking.categoryCode)} shoot</Text>
-        <Text variant="caption" tone="tertiary">
+        <Text variant="display" accessibilityRole="header">
+          {categoryLabel(booking.categoryCode)} shoot
+        </Text>
+        <Text variant="caption" tone="tertiary" tabular>
           Booking {booking.reference}
         </Text>
       </View>
 
       {note ? (
-        <Card tone={booking.status === 'BALANCE_PENDING' ? 'warning' : 'default'}>
+        <Card tone={booking.status === 'BALANCE_PENDING' ? 'warning' : 'default'} className="gap-1">
           <Text variant="bodyStrong">{note.title}</Text>
-          <Text variant="caption" tone="secondary" className="mt-1">
+          <Text variant="caption" tone="secondary">
             {note.body}
           </Text>
         </Card>
@@ -107,33 +110,36 @@ function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) 
       ) : null}
 
       {isHalted(booking.status) ? null : (
-        <Card>
-          <JourneyTimeline steps={journey(booking.status)} />
-        </Card>
+        <Section title="Progress">
+          <Card>
+            <JourneyTimeline steps={journey(booking.status)} />
+          </Card>
+        </Section>
       )}
 
-      <Card>
-        <ListRow
-          title="When"
-          value={formatShootWindow(booking.scheduledStart, booking.scheduledHours)}
-          divider
-        />
-        <ListRow title="Duration" value={formatHours(booking.scheduledHours)} divider />
-        <ListRow title="Venue" subtitle={booking.venueAddress} value={booking.cityName} />
-      </Card>
+      <Section title="Details">
+        <Card padding="list">
+          <ListRow
+            title="When"
+            value={formatShootWindow(booking.scheduledStart, booking.scheduledHours)}
+            divider
+          />
+          <ListRow title="Duration" value={formatHours(booking.scheduledHours)} divider />
+          <ListRow title="Venue" subtitle={booking.venueAddress} value={booking.cityName} />
+        </Card>
+      </Section>
 
-      <Card>
-        <ListRow title="Total" value={rupees(booking.totalPaise)} divider />
-        <ListRow title="Paid" value={rupees(booking.amountPaidPaise)} divider />
-        <ListRow title="Balance" value={rupees(booking.balancePaise)} emphasis />
-      </Card>
+      <Section title="Payment">
+        <Card padding="list">
+          <ListRow title="Total" value={rupees(booking.totalPaise)} divider />
+          <ListRow title="Paid" value={rupees(booking.amountPaidPaise)} divider />
+          <ListRow title="Balance" value={rupees(booking.balancePaise)} emphasis />
+        </Card>
+      </Section>
 
       {timeline.length > 0 ? (
-        <View className="gap-2">
-          <Text variant="h3" accessibilityRole="header">
-            Activity
-          </Text>
-          <Card>
+        <Section title="Activity">
+          <Card padding="list">
             {timeline.map((entry, i) => (
               <ListRow
                 key={`${entry.toStatus}-${entry.occurredAt}`}
@@ -144,15 +150,12 @@ function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) 
               />
             ))}
           </Card>
-        </View>
+        </Section>
       ) : null}
 
       {invoices.length > 0 ? (
-        <View className="gap-2">
-          <Text variant="h3" accessibilityRole="header">
-            Tax invoices
-          </Text>
-          <Card>
+        <Section title="Tax invoices">
+          <Card padding="list">
             {invoices.map((invoice, i) => (
               <ListRow
                 key={invoice.invoiceNumber}
@@ -163,7 +166,7 @@ function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) 
               />
             ))}
           </Card>
-        </View>
+        </Section>
       ) : null}
 
       {canCancel(booking.status) ? (
@@ -182,7 +185,7 @@ function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) 
         onClose={() => setConfirmingCancel(false)}
         title="Cancel this booking?"
       >
-        <View className="gap-3">
+        <View className="gap-4">
           <Text tone="secondary">
             Nothing has been charged yet, so there is no fee to cancel now.
           </Text>
@@ -214,11 +217,12 @@ export function BookingDetailView({ bookingId, onPay }: BookingDetailViewProps) 
   return (
     <Screen topInset={false}>
       {detail.isPending ? (
-        <>
+        <View className="gap-4">
+          <Skeleton className="h-6 w-32 rounded-full" />
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-24 w-full rounded-lg" />
           <Skeleton className="h-40 w-full rounded-lg" />
-        </>
+        </View>
       ) : detail.isError ? (
         <EmptyState
           icon={CircleAlert}

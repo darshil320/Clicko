@@ -2,6 +2,7 @@ import {
   Button,
   Card,
   EmptyState,
+  IconTile,
   ListRow,
   Screen,
   Skeleton,
@@ -9,6 +10,8 @@ import {
   Text,
 } from '@clickco/ui';
 import CircleAlert from 'lucide-react-native/icons/circle-alert';
+import FlaskConical from 'lucide-react-native/icons/flask-conical';
+import Wallet from 'lucide-react-native/icons/wallet';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { awaitingPayment, isHalted, statusPresentation } from '@/shared/booking-status';
@@ -53,8 +56,9 @@ export function PaymentView({ bookingId, onConfirmed, onViewBooking }: PaymentVi
   if (detail.isPending) {
     return (
       <Screen topInset={false}>
-        <Skeleton className="h-6 w-full" />
-        <Skeleton className="h-40 w-full rounded-lg" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-48 w-full rounded-lg" />
       </Screen>
     );
   }
@@ -104,15 +108,17 @@ export function PaymentView({ bookingId, onConfirmed, onViewBooking }: PaymentVi
         </>
       }
     >
-      <Text variant="micro" tone="tertiary">
-        Step 4 of 4
-      </Text>
-      <View className="gap-2">
-        <Text variant="h1">Pay to confirm</Text>
+      <View className="gap-3">
+        <Text variant="micro" tone="tertiary">
+          Step 4 of 4
+        </Text>
+        <Text variant="h1" accessibilityRole="header">
+          Pay to confirm
+        </Text>
         <StatusBadge label={status.label} tone={status.tone} />
       </View>
 
-      <Card>
+      <Card padding="list">
         <ListRow title="Booking" value={booking.reference} divider />
         <ListRow
           title="Shoot"
@@ -127,28 +133,34 @@ export function PaymentView({ bookingId, onConfirmed, onViewBooking }: PaymentVi
           testID="amount-due"
         />
         {booking.quoteExpiresAt ? (
-          <Text variant="caption" tone="tertiary">
+          <Text variant="caption" tone="tertiary" className="pb-3" tabular>
             Price held until {formatDateTime(booking.quoteExpiresAt)}.
           </Text>
         ) : null}
       </Card>
 
       {payment && sandbox ? (
-        <Card tone="warning">
-          <Text variant="bodyStrong">Sandbox payment</Text>
-          <Text variant="caption" tone="secondary" className="mt-1">
-            {IS_DEV
-              ? 'Development build: no money moves. "Simulate payment" signs a sandbox webhook exactly like the gateway would.'
-              : 'This server uses the sandbox gateway, which only development builds can complete.'}
-          </Text>
+        <Card tone="warning" className="flex-row gap-4">
+          <IconTile icon={FlaskConical} tone="warning" size="sm" shape="circle" />
+          <View className="flex-1 gap-1">
+            <Text variant="bodyStrong">Sandbox payment</Text>
+            <Text variant="caption" tone="secondary">
+              {IS_DEV
+                ? 'Development build: no money moves. "Simulate payment" signs a sandbox webhook exactly like the gateway would.'
+                : 'This server uses the sandbox gateway, which only development builds can complete.'}
+            </Text>
+          </View>
         </Card>
       ) : payment ? (
-        <Card>
-          <Text variant="bodyStrong">Card and UPI checkout is coming</Text>
-          <Text variant="caption" tone="secondary" className="mt-1">
-            Your booking is held while we finish setting up online payments. Our team will call you
-            to complete it.
-          </Text>
+        <Card className="flex-row gap-4">
+          <IconTile icon={Wallet} size="sm" shape="circle" />
+          <View className="flex-1 gap-1">
+            <Text variant="bodyStrong">Card and UPI checkout is coming</Text>
+            <Text variant="caption" tone="secondary">
+              Your booking is held while we finish setting up online payments. Our team will call
+              you to complete it.
+            </Text>
+          </View>
         </Card>
       ) : null}
     </Screen>

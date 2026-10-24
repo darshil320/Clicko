@@ -4,20 +4,24 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 export type ButtonState = 'default' | 'pressed' | 'disabled';
 export type ButtonSize = 'default' | 'compact';
 
+/**
+ * White theme (DESIGN-LIGHT): primary is the amber fill with on-accent text; secondary is a white
+ * surface on a strong hairline; ghost is text only. Disabled never uses amber.
+ */
 const SURFACE: Readonly<Record<ButtonVariant, Readonly<Record<ButtonState, string>>>> = {
   primary: {
     default: 'bg-accent-default',
     pressed: 'bg-accent-hover',
-    disabled: 'bg-surface-overlay',
+    disabled: 'bg-border-subtle',
   },
   secondary: {
-    default: 'bg-surface-raised border border-border-strong',
-    pressed: 'bg-surface-overlay border border-border-strong',
-    disabled: 'bg-surface-raised border border-border-subtle',
+    default: 'bg-surface-base border border-border-strong',
+    pressed: 'bg-surface-raised border border-border-strong',
+    disabled: 'bg-surface-base border border-border-subtle',
   },
   ghost: {
     default: 'bg-transparent',
-    pressed: 'bg-surface-raised',
+    pressed: 'bg-border-subtle/60',
     disabled: 'bg-transparent',
   },
 };

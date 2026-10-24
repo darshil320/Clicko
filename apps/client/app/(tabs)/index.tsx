@@ -1,4 +1,4 @@
-import { Icon, Screen, Text } from '@clickco/ui';
+import { Icon, Screen } from '@clickco/ui';
 import { useRouter } from 'expo-router';
 import Bell from 'lucide-react-native/icons/bell';
 import { View } from 'react-native';
@@ -17,23 +17,21 @@ export default function HomeRoute() {
   return (
     <Screen
       header={
-        <View className="flex-row items-center justify-between gap-3 pb-2">
-          <Text variant="h2" accessibilityRole="header">
-            Clickco
-          </Text>
-          <View className="flex-row items-center gap-2">
-            <LocationPicker />
+        <View className="flex-row items-center justify-between gap-3">
+          <LocationPicker />
+          <View className="h-tap w-tap items-center justify-center">
             <Icon icon={Bell} tone="secondary" accessibilityLabel="Notifications" />
           </View>
         </View>
       }
+      eyebrow="Clickco"
+      title="Book a photographer"
+      subtitle={
+        location.isDefault
+          ? 'Prices shown for Surat. Set your pincode for exact prices.'
+          : `Professional photographers in ${location.label}`
+      }
     >
-      {location.isDefault ? (
-        <Text variant="caption" tone="tertiary">
-          Prices shown for Surat. Set your pincode for exact prices.
-        </Text>
-      ) : null}
-
       <EmergencyBanner
         onPress={() => {
           startBooking({ tier: 'PROFESSIONAL', pincode: location.pincode, when: 'earliest' });

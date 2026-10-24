@@ -1,15 +1,15 @@
-import { Icon, Text, type Tone } from '@clickco/ui';
+import { IconTile, type IconTileTone, type LucideIcon, Text } from '@clickco/ui';
+import Check from 'lucide-react-native/icons/check';
 import Circle from 'lucide-react-native/icons/circle';
-import CircleCheck from 'lucide-react-native/icons/circle-check';
 import CircleDot from 'lucide-react-native/icons/circle-dot';
 import { View } from 'react-native';
 import type { JourneyStep, StepState } from '@/shared/booking-status';
 
-const STEP_ICON = { done: CircleCheck, current: CircleDot, upcoming: Circle } as const;
-const STEP_TONE: Readonly<Record<StepState, Tone>> = {
-  done: 'primary',
-  current: 'accent',
-  upcoming: 'tertiary',
+/** Done steps are calm green checks; the live step is the amber fill; what's next stays quiet. */
+const STEP_MARK: Readonly<Record<StepState, { icon: LucideIcon; tone: IconTileTone }>> = {
+  done: { icon: Check, tone: 'success' },
+  current: { icon: CircleDot, tone: 'accent' },
+  upcoming: { icon: Circle, tone: 'neutral' },
 };
 const STEP_SUFFIX: Readonly<Record<StepState, string>> = {
   done: 'done',
@@ -24,20 +24,33 @@ export function JourneyTimeline({ steps }: { steps: readonly JourneyStep[] }) {
       {steps.map((step, i) => (
         <View
           key={step.key}
-          className="flex-row gap-3"
+          className="flex-row gap-4"
           accessible
           accessibilityLabel={`${step.label}, ${STEP_SUFFIX[step.state]}`}
         >
           <View className="items-center">
-            <Icon icon={STEP_ICON[step.state]} tone={STEP_TONE[step.state]} />
-            {i < steps.length - 1 ? <View className="h-6 w-px bg-border-strong" /> : null}
+            <IconTile
+              icon={STEP_MARK[step.state].icon}
+              tone={STEP_MARK[step.state].tone}
+              size="sm"
+              shape="circle"
+            />
+            {i < steps.length - 1 ? (
+              <View
+                className={
+                  step.state === 'done' ? 'h-5 w-px bg-success/40' : 'h-5 w-px bg-border-strong'
+                }
+              />
+            ) : null}
           </View>
-          <Text
-            variant={step.state === 'current' ? 'bodyStrong' : 'body'}
-            tone={step.state === 'upcoming' ? 'tertiary' : 'primary'}
-          >
-            {step.label}
-          </Text>
+          <View className="h-8 flex-1 justify-center">
+            <Text
+              variant={step.state === 'current' ? 'bodyStrong' : 'body'}
+              tone={step.state === 'upcoming' ? 'tertiary' : 'primary'}
+            >
+              {step.label}
+            </Text>
+          </View>
         </View>
       ))}
     </View>

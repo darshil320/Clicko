@@ -1,4 +1,4 @@
-import { EmptyState, Screen, Text } from '@clickco/ui';
+import { EmptyState, Screen } from '@clickco/ui';
 import { useRouter } from 'expo-router';
 import LifeBuoy from 'lucide-react-native/icons/life-buoy';
 
@@ -6,13 +6,7 @@ import LifeBuoy from 'lucide-react-native/icons/life-buoy';
 export default function HelpRoute() {
   const router = useRouter();
   return (
-    <Screen
-      header={
-        <Text variant="h1" accessibilityRole="header" className="pb-2">
-          Help
-        </Text>
-      }
-    >
+    <Screen title="Help">
       <EmptyState
         icon={LifeBuoy}
         title="Help centre is on its way"

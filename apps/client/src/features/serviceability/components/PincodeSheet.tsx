@@ -1,6 +1,8 @@
 import type { ServiceabilityResult } from '@clickco/contracts';
-import { BottomSheet, Button, Card, Input, Skeleton, Text } from '@clickco/ui';
+import { BottomSheet, Button, Card, IconTile, Input, Skeleton, Text } from '@clickco/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
+import BellRing from 'lucide-react-native/icons/bell-ring';
+import MapPin from 'lucide-react-native/icons/map-pin';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { View } from 'react-native';
@@ -25,13 +27,16 @@ function ServedResult({ result, onUse }: { result: Bookable; onUse: () => void }
   const label = locationLabel(result);
   return (
     <View className="gap-4">
-      <Card>
-        <Text variant="bodyStrong">We shoot in {label}</Text>
-        <Text variant="caption" tone="secondary" className="mt-1">
-          {result.limitedAvailability || result.status === 'PILOT'
-            ? 'Pilot area — photographers are limited, so book a little ahead.'
-            : 'Photographers are available across this area.'}
-        </Text>
+      <Card className="flex-row gap-4">
+        <IconTile icon={MapPin} tone="success" size="sm" shape="circle" />
+        <View className="flex-1 gap-1">
+          <Text variant="bodyStrong">We shoot in {label}</Text>
+          <Text variant="caption" tone="secondary">
+            {result.limitedAvailability || result.status === 'PILOT'
+              ? 'Pilot area — photographers are limited, so book a little ahead.'
+              : 'Photographers are available across this area.'}
+          </Text>
+        </View>
       </Card>
       <Button label={`Use ${label}`} onPress={onUse} testID="use-location" />
     </View>
@@ -71,11 +76,16 @@ function WaitlistResult({ result }: { result: NotBookable }) {
         ) : null}
       </View>
       {join.isSuccess ? (
-        <Card tone="accent">
-          <Text variant="bodyStrong">You're on the list</Text>
-          <Text variant="caption" tone="secondary" className="mt-1">
-            {user ? `We'll message ${formatPhone(user.phone)} when we start shooting here.` : null}
-          </Text>
+        <Card tone="accent" className="flex-row gap-4">
+          <IconTile icon={BellRing} tone="accent" size="sm" shape="circle" />
+          <View className="flex-1 gap-1">
+            <Text variant="bodyStrong">You're on the list</Text>
+            <Text variant="caption" tone="secondary">
+              {user
+                ? `We'll message ${formatPhone(user.phone)} when we start shooting here.`
+                : null}
+            </Text>
+          </View>
         </Card>
       ) : result.canJoinWaitlist && user ? (
         <>

@@ -19,7 +19,7 @@ export interface AvatarProps {
   readonly size?: AvatarSize;
 }
 
-/** Round, surface/overlay. Photo when available, else initials, else a person glyph. */
+/** Round, on the amber tint. Photo when available, else initials, else a person glyph. */
 export function Avatar({ name, uri, size = 'md' }: AvatarProps) {
   const letters = initials(name);
   return (
@@ -28,18 +28,18 @@ export function Avatar({ name, uri, size = 'md' }: AvatarProps) {
       accessibilityRole="image"
       accessibilityLabel={name}
       className={cx(
-        'items-center justify-center overflow-hidden rounded-full bg-surface-overlay',
+        'items-center justify-center overflow-hidden rounded-full bg-accent-subtle',
         SIZE_CLASS[size],
       )}
     >
       {uri ? (
         <Image source={{ uri }} className={cx('rounded-full', SIZE_CLASS[size])} />
       ) : letters ? (
-        <Text variant={size === 'lg' ? 'h3' : 'caption'} tone="secondary">
+        <Text variant={size === 'lg' ? 'h3' : 'caption'} tone="onAccent">
           {letters}
         </Text>
       ) : (
-        <Icon icon={UserRound} tone="tertiary" />
+        <Icon icon={UserRound} tone="onAccent" />
       )}
     </View>
   );

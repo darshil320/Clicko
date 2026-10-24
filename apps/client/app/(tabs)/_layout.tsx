@@ -1,5 +1,4 @@
-import { color } from '@clickco/design-tokens';
-import { fontFaceFor, Icon, type LucideIcon } from '@clickco/ui';
+import { fontFaceFor, Icon, type LucideIcon, palette } from '@clickco/ui';
 import { Tabs } from 'expo-router/js-tabs';
 import CalendarCheck from 'lucide-react-native/icons/calendar-check';
 import House from 'lucide-react-native/icons/house';
@@ -19,10 +18,14 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: color.surface.base },
-        tabBarStyle: { backgroundColor: color.surface.raised, borderTopColor: color.border.subtle },
-        tabBarActiveTintColor: color.text.primary,
-        tabBarInactiveTintColor: color.text.tertiary,
+        sceneStyle: { backgroundColor: palette.surface.base },
+        // A white bar on a hairline: the scene and the bar read as one calm surface.
+        tabBarStyle: {
+          backgroundColor: palette.surface.base,
+          borderTopColor: palette.border.subtle,
+        },
+        tabBarActiveTintColor: palette.text.primary,
+        tabBarInactiveTintColor: palette.text.tertiary,
         tabBarLabelStyle: { fontFamily: fontFaceFor('micro') },
       }}
     >

@@ -1,8 +1,8 @@
-import { color } from '@clickco/design-tokens';
 import { Platform, Switch as RNSwitch } from 'react-native';
+import { palette } from './palette';
 
 /** react-native-web paints the "on" thumb with its own default unless told otherwise. */
-const WEB_PROPS = Platform.OS === 'web' ? { activeThumbColor: color.text.primary } : {};
+const WEB_PROPS = Platform.OS === 'web' ? { activeThumbColor: palette.surface.base } : {};
 
 export interface SwitchProps {
   readonly value: boolean;
@@ -12,7 +12,7 @@ export interface SwitchProps {
   readonly testID?: string;
 }
 
-/** Platform switch, coloured from tokens: border/strong off, accent on. */
+/** Platform switch, coloured from tokens: a white thumb on border/strong off, the amber fill on. */
 export function Switch({
   value,
   onValueChange,
@@ -28,9 +28,9 @@ export function Switch({
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
-      trackColor={{ false: color.border.strong, true: color.accent.default }}
-      thumbColor={color.text.primary}
-      ios_backgroundColor={color.border.strong}
+      trackColor={{ false: palette.border.strong, true: palette.accent.default }}
+      thumbColor={palette.surface.base}
+      ios_backgroundColor={palette.border.strong}
       {...WEB_PROPS}
       testID={testID}
     />

@@ -1,7 +1,30 @@
-import { useState } from 'react';
-import { Pressable } from 'react-native';
+import { motion } from '@clickco/design-tokens';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import {
+  CHIP_BASE_CLASS,
+  CHIP_SELECTED_OVERLAY_CLASS,
+  chipBorderClass,
+  chipLabelTone,
+  chipRadiusClass,
+  chipShapeClass,
+  chipSublabelTone,
+} from './chip.styles';
 import { cx } from './cx';
+import { elevationStyle } from './elevation';
+import { EASE_OUT } from './motion';
 import { Text } from './Text';
+import { usePressFeedback } from './usePressFeedback';
+
+const TIMING = { duration: motion.fastMs, easing: Easing.bezier(...EASE_OUT) };
+const OVERLAY_FRAME = { ...StyleSheet.absoluteFill, pointerEvents: 'none' as const };
 
 export interface ChipProps {
   readonly label: string;
@@ -14,7 +37,10 @@ export interface ChipProps {
   readonly testID?: string;
 }
 
-/** DESIGN.md §Components: pill, surface/raised; active = accent/subtle bg + accent text. */
+/**
+ * White theme: a white pill on a hairline. Selecting cross-fades in the amber tint with an ink
+ * outline (160 ms; instant with reduced motion). Text stays dark — amber is never the text.
+ */
 export function Chip({
   label,
   sublabel,
@@ -25,37 +51,55 @@ export function Chip({
   testID,
 }: ChipProps) {
   const [pressed, setPressed] = useState(false);
-  const surface = selected
-    ? 'bg-accent-subtle border-accent-subtle'
-    : pressed
-      ? 'bg-surface-overlay border-border-strong'
-      : 'bg-surface-raised border-border-subtle';
-  const tone = disabled ? 'tertiary' : selected ? 'accent' : 'primary';
+  const feedback = usePressFeedback();
+  const reduceMotion = useReducedMotion();
+  const shown = useSharedValue(selected ? 1 : 0);
+  const twoLine = sublabel !== undefined;
+
+  useEffect(() => {
+    const target = selected ? 1 : 0;
+    shown.value = reduceMotion ? target : withTiming(target, TIMING);
+  }, [selected, reduceMotion, shown]);
+
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? (sublabel ? `${label} ${sublabel}` : label)}
-      accessibilityState={{ selected, disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      className={cx(
-        'min-h-tap min-w-tap items-center justify-center border px-4',
-        sublabel ? 'rounded-lg py-2' : 'rounded-full',
-        surface,
-      )}
-      testID={testID}
-    >
-      {sublabel ? (
-        <Text variant="micro" tone={disabled ? 'tertiary' : selected ? 'accent' : 'secondary'}>
-          {sublabel}
+    <Animated.View style={feedback.style}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? (sublabel ? `${label} ${sublabel}` : label)}
+        accessibilityState={{ selected, disabled }}
+        disabled={disabled}
+        onPress={onPress}
+        onPressIn={() => {
+          setPressed(true);
+          feedback.onPressIn();
+        }}
+        onPressOut={() => {
+          setPressed(false);
+          feedback.onPressOut();
+        }}
+        className={cx(CHIP_BASE_CLASS, chipShapeClass(twoLine), chipBorderClass(selected, pressed))}
+        style={elevationStyle('sm')}
+        testID={testID}
+      >
+        <Animated.View style={[OVERLAY_FRAME, overlayStyle]}>
+          <View className={cx(CHIP_SELECTED_OVERLAY_CLASS, chipRadiusClass(twoLine))} />
+        </Animated.View>
+        {sublabel ? (
+          <Text variant="micro" tone={chipSublabelTone(selected, disabled)}>
+            {sublabel}
+          </Text>
+        ) : null}
+        <Text
+          variant={twoLine ? 'bodyStrong' : 'body'}
+          tone={chipLabelTone(selected, disabled)}
+          tabular
+          numberOfLines={1}
+        >
+          {label}
         </Text>
-      ) : null}
-      <Text variant={sublabel ? 'bodyStrong' : 'body'} tone={tone} tabular numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }

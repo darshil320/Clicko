@@ -1,4 +1,14 @@
-import { Button, Card, EmptyState, Input, Screen, Skeleton, Text, TIER_LABEL } from '@clickco/ui';
+import {
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  Screen,
+  Section,
+  Skeleton,
+  Text,
+  TIER_LABEL,
+} from '@clickco/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import CalendarDays from 'lucide-react-native/icons/calendar-days';
 import { type ReactNode, useEffect, useMemo } from 'react';
@@ -18,7 +28,6 @@ import {
   CategoryChips,
   DatePills,
   DurationStepper,
-  Section,
   TierChips,
   TimePills,
 } from './ConfiguratorSections';
@@ -38,7 +47,7 @@ function PriceFooter({ draft, onReview }: { draft: BookingDraft; onReview: () =>
     <>
       <View className="flex-row items-end justify-between gap-3">
         <View className="flex-1 gap-1">
-          <Text variant="caption" tone="secondary">
+          <Text variant="micro" tone="tertiary">
             Running total
           </Text>
           {quote.isError ? (
@@ -144,18 +153,20 @@ export function ConfiguratorView({
   const review = form.handleSubmit(onReview);
 
   return (
-    <Screen topInset={false} footer={<PriceFooter draft={draft} onReview={() => void review()} />}>
-      <Text variant="micro" tone="tertiary">
-        Step 2 of 4 · {TIER_LABEL[draft.tier]}
-      </Text>
-
-      <Card className="gap-4">
+    <Screen
+      topInset={false}
+      eyebrow={`Step 2 of 4 · ${TIER_LABEL[draft.tier]}`}
+      title="Plan your shoot"
+      titleVariant="h1"
+      footer={<PriceFooter draft={draft} onReview={() => void review()} />}
+    >
+      <Card className="gap-5">
         <View className="flex-row items-center justify-between gap-3">
-          <View className="flex-1">
-            <Text variant="caption" tone="secondary">
+          <View className="flex-1 gap-1">
+            <Text variant="micro" tone="tertiary">
               Venue
             </Text>
-            <Text variant="bodyStrong">{locationLabel}</Text>
+            <Text variant="h3">{locationLabel}</Text>
           </View>
           {locationAction}
         </View>
@@ -234,13 +245,15 @@ export function ConfiguratorView({
       </Section>
 
       <Section title="Add-ons">
-        <AddonList
-          tier={draft.tier}
-          selected={draft.addons}
-          prices={addonPrices(probe.data)}
-          pricesLoading={probe.isPending}
-          onToggle={toggleAddon}
-        />
+        <Card padding="list">
+          <AddonList
+            tier={draft.tier}
+            selected={draft.addons}
+            prices={addonPrices(probe.data)}
+            pricesLoading={probe.isPending}
+            onToggle={toggleAddon}
+          />
+        </Card>
       </Section>
     </Screen>
   );

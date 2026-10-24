@@ -1,34 +1,44 @@
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import {
+  CARD_BASE_CLASS,
+  CARD_ELEVATION,
+  CARD_PADDING_CLASS,
+  CARD_TONE_CLASS,
+  type CardPadding,
+  type CardTone,
+} from './card.styles';
 import { cx } from './cx';
+import { elevationStyle } from './elevation';
 import { EDGE_CLASS, type EdgeTone } from './tones';
+import { usePressFeedback } from './usePressFeedback';
 
-export type CardTone = 'default' | 'accent' | 'emergency' | 'warning';
-
-const TONE_CLASS: Readonly<Record<CardTone, string>> = {
-  default: 'bg-surface-raised border-border-subtle',
-  accent: 'bg-accent-subtle border-accent-subtle',
-  emergency: 'bg-surface-raised border-border-subtle',
-  warning: 'bg-warning/15 border-warning/15',
-};
+export type { CardPadding, CardTone } from './card.styles';
 
 export interface CardProps {
   readonly children: ReactNode;
   readonly tone?: CardTone;
-  /** A thin coloured left edge (tier cards, the emergency banner). */
+  /** 20 inside by default; "compact" (12) for small tiles; "list" for a stack of ListRows. */
+  readonly padding?: CardPadding;
+  /** A thin coloured left edge. */
   readonly edge?: EdgeTone;
   readonly onPress?: () => void;
   readonly accessibilityLabel?: string;
   readonly accessibilityHint?: string;
-  /** Layout only (gap / direction). Colour and spacing come from the tone. */
+  /** Layout only (gap / direction / width). Colour and spacing come from the tone. */
   readonly className?: string;
   readonly testID?: string;
 }
 
-/** DESIGN.md §Components: surface/raised, 1px border/subtle, radius lg, padding 16. No shadow. */
+/**
+ * White theme (DESIGN-LIGHT): surface/raised, 1px border/subtle, radius lg, a soft `sm` shadow.
+ * Tinted tones sit flat. Pressable cards shrink 2% on press.
+ */
 export function Card({
   children,
   tone = 'default',
+  padding = 'default',
   edge,
   onPress,
   accessibilityLabel,
@@ -36,34 +46,38 @@ export function Card({
   className,
   testID,
 }: CardProps) {
-  const [pressed, setPressed] = useState(false);
+  const feedback = usePressFeedback();
   const classes = cx(
-    'rounded-lg border p-4',
-    TONE_CLASS[tone],
+    CARD_BASE_CLASS,
+    CARD_PADDING_CLASS[padding],
+    CARD_TONE_CLASS[tone],
     edge && `border-l-2 ${EDGE_CLASS[edge]}`,
-    pressed && 'bg-surface-overlay',
     className,
   );
+  const shadow = elevationStyle(CARD_ELEVATION[tone]);
 
   if (!onPress) {
     return (
-      <View className={classes} testID={testID}>
+      <View className={classes} style={shadow} testID={testID}>
         {children}
       </View>
     );
   }
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint}
-      onPress={onPress}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      className={classes}
-      testID={testID}
-    >
-      {children}
-    </Pressable>
+    <Animated.View style={feedback.style}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        onPress={onPress}
+        onPressIn={feedback.onPressIn}
+        onPressOut={feedback.onPressOut}
+        className={classes}
+        style={shadow}
+        testID={testID}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
   );
 }

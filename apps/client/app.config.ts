@@ -1,4 +1,4 @@
-import { color } from '@clickco/design-tokens';
+import { colorLight } from '@clickco/design-tokens';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /**
@@ -13,8 +13,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'clickco',
   version: '0.1.0',
   orientation: 'portrait',
-  userInterfaceStyle: 'dark',
-  backgroundColor: color.surface.base,
+  // White theme (ADR-0017): light system chrome, dark status-bar content, white root view.
+  userInterfaceStyle: 'light',
+  backgroundColor: colorLight.surface.base,
   ios: {
     bundleIdentifier: 'in.clickco.client',
     supportsTablet: false,
@@ -28,7 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundler: 'metro',
     // Single-page output: the app is session-gated, and MMKV's web backend needs a browser.
     output: 'single',
-    backgroundColor: color.surface.base,
+    backgroundColor: colorLight.surface.base,
   },
   plugins: ['expo-router'],
   experiments: {

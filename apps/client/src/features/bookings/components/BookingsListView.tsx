@@ -1,5 +1,4 @@
-import { color } from '@clickco/design-tokens';
-import { Chip, EmptyState, Screen, Skeleton, Text } from '@clickco/ui';
+import { EmptyState, palette, Reveal, Screen, SegmentedControl, Skeleton, Text } from '@clickco/ui';
 import CalendarCheck from 'lucide-react-native/icons/calendar-check';
 import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import { useState } from 'react';
@@ -22,44 +21,45 @@ export function BookingsListView({ onOpen, onBook }: BookingsListViewProps) {
   const bookings = useBookings();
   const split = splitBookings(bookings.data ?? []);
   const shown = split[segment];
+  const count = (n: number) => (bookings.data ? ` (${n})` : '');
 
   return (
     <Screen
       header={
-        <View className="gap-3 pb-2">
-          <Text variant="h1" accessibilityRole="header">
+        <View className="gap-4 pb-2">
+          <Text variant="display" accessibilityRole="header">
             Bookings
           </Text>
-          <View className="flex-row gap-2" accessibilityRole="tablist">
-            <Chip
-              label={`Upcoming${bookings.data ? ` (${split.upcoming.length})` : ''}`}
-              selected={segment === 'upcoming'}
-              onPress={() => setSegment('upcoming')}
-              testID="segment-upcoming"
-            />
-            <Chip
-              label={`Past${bookings.data ? ` (${split.past.length})` : ''}`}
-              selected={segment === 'past'}
-              onPress={() => setSegment('past')}
-              testID="segment-past"
-            />
-          </View>
+          <SegmentedControl
+            accessibilityLabel="Show bookings"
+            value={segment}
+            onChange={setSegment}
+            segments={[
+              {
+                value: 'upcoming',
+                label: `Upcoming${count(split.upcoming.length)}`,
+                testID: 'segment-upcoming',
+              },
+              { value: 'past', label: `Past${count(split.past.length)}`, testID: 'segment-past' },
+            ]}
+          />
         </View>
       }
       refreshControl={
         <RefreshControl
           refreshing={bookings.isRefetching}
           onRefresh={() => void bookings.refetch()}
-          tintColor={color.text.secondary}
+          tintColor={palette.text.secondary}
+          colors={[palette.text.primary]}
         />
       }
     >
       {bookings.isPending ? (
-        <>
-          <Skeleton className="h-32 w-full rounded-lg" />
-          <Skeleton className="h-32 w-full rounded-lg" />
-          <Skeleton className="h-32 w-full rounded-lg" />
-        </>
+        <View className="gap-4">
+          <Skeleton className="h-40 w-full rounded-lg" />
+          <Skeleton className="h-40 w-full rounded-lg" />
+          <Skeleton className="h-40 w-full rounded-lg" />
+        </View>
       ) : bookings.isError ? (
         <EmptyState
           icon={CircleAlert}
@@ -69,6 +69,7 @@ export function BookingsListView({ onOpen, onBook }: BookingsListViewProps) {
         />
       ) : shown.length === 0 ? (
         <EmptyState
+          key={segment}
           icon={CalendarCheck}
           title={segment === 'upcoming' ? 'No upcoming shoots' : 'No past shoots yet'}
           body={
@@ -79,9 +80,13 @@ export function BookingsListView({ onOpen, onBook }: BookingsListViewProps) {
           action={{ label: 'Book a shoot', onPress: onBook }}
         />
       ) : (
-        shown.map((booking) => (
-          <BookingCard key={booking.id} booking={booking} onPress={() => onOpen(booking.id)} />
-        ))
+        <View key={segment} className="gap-4">
+          {shown.map((booking, i) => (
+            <Reveal key={booking.id} index={i}>
+              <BookingCard booking={booking} onPress={() => onOpen(booking.id)} />
+            </Reveal>
+          ))}
+        </View>
       )}
     </Screen>
   );

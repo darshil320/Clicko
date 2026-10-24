@@ -3,50 +3,37 @@ import {
   Button,
   Card,
   Icon,
-  type LucideIcon,
+  IconTile,
+  Reveal,
+  Section,
   Skeleton,
+  StatusBadge,
   Text,
   TIER_LABEL,
-  TIER_TONE,
   TierBadge,
 } from '@clickco/ui';
-import Briefcase from 'lucide-react-native/icons/briefcase';
-import Building from 'lucide-react-native/icons/building';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
-import Heart from 'lucide-react-native/icons/heart';
-import Package from 'lucide-react-native/icons/package';
-import PartyPopper from 'lucide-react-native/icons/party-popper';
-import UserRound from 'lucide-react-native/icons/user-round';
-import UtensilsCrossed from 'lucide-react-native/icons/utensils-crossed';
 import Zap from 'lucide-react-native/icons/zap';
 import { ScrollView, View } from 'react-native';
 import { CATEGORIES, TIER_COPY } from '@/shared/catalogue';
+import { categoryIcon } from '@/shared/category-icons';
 import { userMessage } from '@/shared/errors';
 import { useTierPrices } from '../hooks';
 import { fromPricePaise, rupees } from '../lib/quote-view';
 
-const CATEGORY_ICON: Readonly<Record<string, LucideIcon>> = {
-  FOOD: UtensilsCrossed,
-  WEDDING: Heart,
-  PORTRAIT: UserRound,
-  PRODUCT: Package,
-  EVENT: PartyPopper,
-  REAL_ESTATE: Building,
-  CORPORATE: Briefcase,
-};
+/** Professional is the default recommendation (it carries the one accent on Home). */
+const RECOMMENDED_TIER: PlanTier = 'PROFESSIONAL';
 
-/** "Need a photographer today?" — emergency-red edge, the one place that colour is allowed. */
+/** "Need a photographer today?" — the emergency red lives on its tile only. */
 export function EmergencyBanner({ onPress }: { onPress: () => void }) {
   return (
     <Card
-      tone="emergency"
-      edge="emergency"
       onPress={onPress}
       accessibilityLabel="Need a photographer today? Book in the next 3 hours"
       testID="emergency-banner"
     >
-      <View className="flex-row items-center gap-3">
-        <Icon icon={Zap} tone="emergency" />
+      <View className="flex-row items-center gap-4">
+        <IconTile icon={Zap} tone="emergency" size="md" />
         <View className="flex-1 gap-1">
           <Text variant="bodyStrong">Need a photographer today?</Text>
           <Text variant="caption" tone="secondary">
@@ -59,34 +46,34 @@ export function EmergencyBanner({ onPress }: { onPress: () => void }) {
   );
 }
 
-/** "Browse by need": six categories in a horizontal row (photography tiles pending real imagery). */
+/** "Browse by need": six categories in a horizontal, edge-to-edge row of soft tiles. */
 export function CategoryRow({ onSelect }: { onSelect: (categoryCode: string) => void }) {
   return (
-    <View className="gap-3">
-      <Text variant="h3" accessibilityRole="header">
-        Browse by need
-      </Text>
+    <Section title="Browse by need">
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerClassName="gap-3"
+        className="-mx-5"
+        contentContainerClassName="gap-3 px-5 py-1"
       >
-        {CATEGORIES.slice(0, 6).map((category) => (
-          <Card
-            key={category.code}
-            onPress={() => onSelect(category.code)}
-            accessibilityLabel={`${category.label} photography`}
-            className="min-w-tap items-center gap-2"
-            testID={`category-${category.code}`}
-          >
-            <View className="h-14 w-14 items-center justify-center rounded-md bg-surface-overlay">
-              <Icon icon={CATEGORY_ICON[category.code] ?? UserRound} tone="secondary" />
-            </View>
-            <Text variant="caption">{category.label}</Text>
-          </Card>
+        {CATEGORIES.slice(0, 6).map((category, i) => (
+          <Reveal key={category.code} index={i}>
+            <Card
+              padding="compact"
+              onPress={() => onSelect(category.code)}
+              accessibilityLabel={`${category.label} photography`}
+              className="w-28 items-center gap-3"
+              testID={`category-${category.code}`}
+            >
+              <IconTile icon={categoryIcon(category.code)} size="md" shape="circle" />
+              <Text variant="caption" align="center" numberOfLines={1}>
+                {category.label}
+              </Text>
+            </Card>
+          </Reveal>
         ))}
       </ScrollView>
-    </View>
+    </Section>
   );
 }
 
@@ -99,9 +86,9 @@ type PriceState =
 function TierPrice({ price }: { price: PriceState }) {
   switch (price.kind) {
     case 'loading':
-      return <Skeleton className="h-6 w-full rounded-sm" />;
+      return <Skeleton className="h-7 w-full rounded-sm" />;
     case 'onRequest':
-      return <Text variant="bodyStrong">On request</Text>;
+      return <Text variant="h3">On request</Text>;
     case 'error':
       return (
         <View className="flex-row items-center gap-2">
@@ -113,12 +100,17 @@ function TierPrice({ price }: { price: PriceState }) {
       );
     case 'ready':
       return (
-        <Text variant="bodyStrong" tabular>
-          from {rupees(price.fromPaise)} / 2 hrs{' '}
+        <View className="flex-row flex-wrap items-baseline gap-1">
           <Text variant="caption" tone="tertiary">
-            + GST
+            from
           </Text>
-        </Text>
+          <Text variant="h2" tabular>
+            {rupees(price.fromPaise)}
+          </Text>
+          <Text variant="caption" tone="tertiary">
+            / 2 hrs + GST
+          </Text>
+        </View>
       );
   }
 }
@@ -134,19 +126,20 @@ export function TierCard({
 }) {
   return (
     <Card
-      edge={TIER_TONE[tier].edge}
       onPress={onPress}
       accessibilityLabel={`${TIER_LABEL[tier]} plan, ${TIER_COPY[tier].tagline}`}
+      className="gap-3"
       testID={`tier-${tier}`}
     >
       <View className="flex-row items-center gap-3">
-        <View className="flex-1 gap-2">
+        <View className="flex-1 flex-row flex-wrap items-center gap-3">
           <TierBadge tier={tier} />
-          <Text tone="secondary">{TIER_COPY[tier].tagline}</Text>
-          <TierPrice price={price} />
+          {tier === RECOMMENDED_TIER ? <StatusBadge label="Recommended" tone="accent" /> : null}
         </View>
         <Icon icon={ChevronRight} tone="tertiary" />
       </View>
+      <Text tone="secondary">{TIER_COPY[tier].tagline}</Text>
+      <TierPrice price={price} />
     </Card>
   );
 }
@@ -161,11 +154,8 @@ export function TierList({
 }) {
   const prices = useTierPrices(pincode);
   return (
-    <View className="gap-3">
-      <Text variant="h3" accessibilityRole="header">
-        Choose your tier
-      </Text>
-      {prices.map(({ tier, query }) => {
+    <Section title="Choose your tier">
+      {prices.map(({ tier, query }, i) => {
         const fromPaise = fromPricePaise(query?.data);
         const price: PriceState =
           query === undefined || query.isPending
@@ -179,13 +169,19 @@ export function TierList({
               : fromPaise === null
                 ? { kind: 'onRequest' }
                 : { kind: 'ready', fromPaise };
-        return <TierCard key={tier} tier={tier} price={price} onPress={() => onSelect(tier)} />;
+        return (
+          <Reveal key={tier} index={i}>
+            <TierCard tier={tier} price={price} onPress={() => onSelect(tier)} />
+          </Reveal>
+        );
       })}
-      <TierCard
-        tier="SIGNATURE"
-        price={{ kind: 'onRequest' }}
-        onPress={() => onSelect('SIGNATURE')}
-      />
-    </View>
+      <Reveal index={prices.length}>
+        <TierCard
+          tier="SIGNATURE"
+          price={{ kind: 'onRequest' }}
+          onPress={() => onSelect('SIGNATURE')}
+        />
+      </Reveal>
+    </Section>
   );
 }

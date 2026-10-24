@@ -2,15 +2,17 @@ import {
   Button,
   Card,
   EmptyState,
-  Icon,
+  IconTile,
   Screen,
+  Section,
   Skeleton,
   StatusBadge,
   Text,
   TIER_LABEL,
 } from '@clickco/ui';
+import Check from 'lucide-react-native/icons/check';
 import CircleAlert from 'lucide-react-native/icons/circle-alert';
-import CircleCheck from 'lucide-react-native/icons/circle-check';
+import Hourglass from 'lucide-react-native/icons/hourglass';
 import { Share, View } from 'react-native';
 import { awaitingPayment, journey, statusPresentation } from '@/shared/booking-status';
 import { categoryLabel } from '@/shared/catalogue';
@@ -25,15 +27,17 @@ export interface ConfirmedViewProps {
   readonly onViewBooking: (bookingId: string) => void;
 }
 
-/** Screen 5 — "You're booked." Amber success, the reference, and what happens next. */
+/** Screen 5 — "You're booked." A soft amber success mark, the reference, and what happens next. */
 export function ConfirmedView({ bookingId, onViewBooking }: ConfirmedViewProps) {
   const detail = useBooking(bookingId);
 
   if (detail.isPending) {
     return (
       <Screen>
-        <Skeleton className="h-14 w-14 rounded-full" />
-        <Skeleton className="h-10 w-full" />
+        <View className="items-center gap-4 pt-12">
+          <Skeleton className="h-14 w-14 rounded-full" />
+          <Skeleton className="h-10 w-48" />
+        </View>
         <Skeleton className="h-32 w-full rounded-lg" />
       </Screen>
     );
@@ -74,38 +78,48 @@ export function ConfirmedView({ bookingId, onViewBooking }: ConfirmedViewProps) 
         </>
       }
     >
-      <View className="items-center gap-3 pt-10">
-        <Icon icon={CircleCheck} tone={pending ? 'warning' : 'accent'} size="large" />
-        <Text variant="display" align="center" testID="confirmed-title">
-          {pending ? 'Almost there.' : "You're booked."}
-        </Text>
-        <Text tone="secondary" align="center">
-          Booking ID #{booking.reference}
-        </Text>
+      <View className="items-center gap-4 pt-12 pb-2">
+        <IconTile
+          icon={pending ? Hourglass : Check}
+          tone={pending ? 'warning' : 'accentSubtle'}
+          size="lg"
+          shape="circle"
+        />
+        <View className="items-center gap-2">
+          <Text variant="display" align="center" testID="confirmed-title">
+            {pending ? 'Almost there.' : "You're booked."}
+          </Text>
+          <Text tone="secondary" align="center" tabular>
+            Booking ID #{booking.reference}
+          </Text>
+        </View>
         {pending ? (
-          <StatusBadge label={statusPresentation(booking.status).label} tone="warning" />
+          <View className="items-center">
+            <StatusBadge label={statusPresentation(booking.status).label} tone="warning" />
+          </View>
         ) : null}
       </View>
 
-      <Card className="gap-1">
-        <Text variant="bodyStrong">{what}</Text>
+      <Card className="gap-2">
+        <Text variant="h3">{what}</Text>
         <Text tone="secondary" tabular>
           {when}
         </Text>
         <Text tone="secondary">{where}</Text>
       </Card>
 
-      <Card>
-        <JourneyTimeline steps={journey(booking.status)} />
-      </Card>
-
-      <Card>
-        <Text variant="caption" tone="secondary">
-          {pending
+      <Section
+        title="What happens next"
+        subtitle={
+          pending
             ? 'Finish the payment to lock in your photographer.'
-            : "We'll assign your photographer within 2 hours."}
-        </Text>
-      </Card>
+            : "We'll assign your photographer within 2 hours."
+        }
+      >
+        <Card>
+          <JourneyTimeline steps={journey(booking.status)} />
+        </Card>
+      </Section>
     </Screen>
   );
 }

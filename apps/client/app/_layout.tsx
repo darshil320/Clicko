@@ -1,6 +1,5 @@
 import '../global.css';
-import { color } from '@clickco/design-tokens';
-import { FONT_FACES, fontFaceFor } from '@clickco/ui';
+import { FONT_FACES, fontFaceFor, palette } from '@clickco/ui';
 // Per-weight subpaths: the package index requires all 18 faces, which Metro would bundle.
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
@@ -9,7 +8,7 @@ import { InterTight_600SemiBold } from '@expo-google-fonts/inter-tight/600SemiBo
 import { InterTight_700Bold } from '@expo-google-fonts/inter-tight/700Bold';
 import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
@@ -31,25 +30,28 @@ const FONT_FILES: Readonly<Record<string, number>> = {
 const missingFaces = FONT_FACES.filter((face) => !(face in FONT_FILES));
 if (missingFaces.length > 0) throw new Error(`Font files missing for: ${missingFaces.join(', ')}`);
 
+/** White theme (ADR-0017). `primary` tints navigator controls, so it is ink — never amber text. */
 const navigationTheme = {
-  ...DarkTheme,
+  ...DefaultTheme,
+  dark: false,
   colors: {
-    ...DarkTheme.colors,
-    primary: color.accent.default,
-    background: color.surface.base,
-    card: color.surface.base,
-    text: color.text.primary,
-    border: color.border.subtle,
+    ...DefaultTheme.colors,
+    primary: palette.text.primary,
+    background: palette.surface.base,
+    card: palette.surface.base,
+    text: palette.text.primary,
+    border: palette.border.subtle,
+    notification: palette.accent.default,
   },
 };
 
 const screenOptions = {
-  headerStyle: { backgroundColor: color.surface.base },
-  headerTintColor: color.text.primary,
+  headerStyle: { backgroundColor: palette.surface.base },
+  headerTintColor: palette.text.primary,
   headerTitleStyle: { fontFamily: fontFaceFor('h3') },
   headerShadowVisible: false,
   headerBackButtonDisplayMode: 'minimal' as const,
-  contentStyle: { backgroundColor: color.surface.base },
+  contentStyle: { backgroundColor: palette.surface.base },
 };
 
 function useAppFocus(): void {
@@ -88,7 +90,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider value={navigationTheme}>
-          <StatusBar style="light" />
+          <StatusBar style="dark" />
           <Stack screenOptions={screenOptions}>
             <Stack.Protected guard={signedIn}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

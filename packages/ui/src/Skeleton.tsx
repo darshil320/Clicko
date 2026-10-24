@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Platform, View } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { cx } from './cx';
 
 const PULSE_MS = 900;
@@ -10,11 +11,16 @@ export interface SkeletonProps {
   readonly className?: string;
 }
 
-/** Loading placeholder — screens show skeletons, never spinners (clickco-screen §6). */
+/**
+ * Loading placeholder — screens show skeletons, never spinners (clickco-screen §6). A soft
+ * hairline-grey block that breathes; still under reduced motion.
+ */
 export function Skeleton({ className }: SkeletonProps) {
   const opacity = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion) return;
     const useNativeDriver = Platform.OS !== 'web';
     const loop = Animated.loop(
       Animated.sequence([
@@ -24,7 +30,7 @@ export function Skeleton({ className }: SkeletonProps) {
     );
     loop.start();
     return () => loop.stop();
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
 
   return (
     <Animated.View
@@ -33,7 +39,7 @@ export function Skeleton({ className }: SkeletonProps) {
       style={{ opacity }}
     >
       {/* className lives on a plain View: NativeWind maps classes on core components only. */}
-      <View className={cx('rounded-md bg-surface-overlay', className)} />
+      <View className={cx('rounded-md bg-border-subtle', className)} />
     </Animated.View>
   );
 }

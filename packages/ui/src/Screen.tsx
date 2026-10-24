@@ -9,11 +9,21 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { cx } from './cx';
+import { Reveal } from './Reveal';
+import { Text } from './Text';
 
 export interface ScreenProps {
   readonly children: ReactNode;
-  /** Non-scrolling content above the body (a compact header). */
+  /** Non-scrolling content above the body (a compact header, a segmented control). */
   readonly header?: ReactNode;
+  /** A small uppercase line above the title, e.g. "Step 2 of 4". */
+  readonly eyebrow?: string;
+  /** A confident page title at the top of the scrolling body. */
+  readonly title?: string;
+  /** One calm line under the title. */
+  readonly subtitle?: string;
+  /** "display" (32) for tab roots; "h1" (24) under a navigator header. */
+  readonly titleVariant?: 'display' | 'h1';
   /** Pinned to the bottom, 16px above the safe-area inset — the primary CTA lives here. */
   readonly footer?: ReactNode;
   readonly scroll?: boolean;
@@ -23,10 +33,41 @@ export interface ScreenProps {
   readonly testID?: string;
 }
 
-/** Safe-area screen frame: surface/base, 20px horizontal padding, optional pinned footer. */
+function TitleBlock({
+  eyebrow,
+  title,
+  subtitle,
+  titleVariant,
+}: Pick<ScreenProps, 'eyebrow' | 'title' | 'subtitle' | 'titleVariant'>) {
+  if (!eyebrow && !title && !subtitle) return null;
+  return (
+    <View className="gap-2">
+      {eyebrow ? (
+        <Text variant="micro" tone="tertiary">
+          {eyebrow}
+        </Text>
+      ) : null}
+      {title ? (
+        <Text variant={titleVariant ?? 'display'} accessibilityRole="header">
+          {title}
+        </Text>
+      ) : null}
+      {subtitle ? <Text tone="secondary">{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+/**
+ * Safe-area screen frame (DESIGN-LIGHT §Whitespace): white, 20px sides, 24px between groups,
+ * an optional title block, and an optional pinned footer. The body fades and rises in once.
+ */
 export function Screen({
   children,
   header,
+  eyebrow,
+  title,
+  subtitle,
+  titleVariant,
   footer,
   scroll = true,
   topInset = true,
@@ -34,7 +75,13 @@ export function Screen({
   testID,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
-  const body = cx('gap-4 px-5 pt-4', footer ? 'pb-6' : 'pb-10');
+  const padding = cx('px-5 pt-4', footer ? 'pb-8' : 'pb-12');
+  const body = (
+    <Reveal className="gap-6">
+      <TitleBlock eyebrow={eyebrow} title={title} subtitle={subtitle} titleVariant={titleVariant} />
+      {children}
+    </Reveal>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -43,22 +90,22 @@ export function Screen({
       style={{ paddingTop: topInset ? insets.top : 0 }}
       testID={testID}
     >
-      {header ? <View className="px-5 pt-2">{header}</View> : null}
+      {header ? <View className="px-5 pt-3 pb-2">{header}</View> : null}
       {scroll ? (
         <ScrollView
           className="flex-1"
-          contentContainerClassName={body}
+          contentContainerClassName={padding}
           keyboardShouldPersistTaps="handled"
           refreshControl={refreshControl}
         >
-          {children}
+          {body}
         </ScrollView>
       ) : (
-        <View className={cx('flex-1', body)}>{children}</View>
+        <View className={cx('flex-1', padding)}>{body}</View>
       )}
       {footer ? (
         <View
-          className="gap-3 border-t border-border-subtle bg-surface-base px-5 pt-3"
+          className="gap-3 border-t border-border-subtle bg-surface-base px-5 pt-4"
           style={{ paddingBottom: insets.bottom + layout.ctaGapAboveInset }}
         >
           {footer}
