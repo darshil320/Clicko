@@ -8,6 +8,7 @@
  *    (event `booking.redispatching`). CANCELLED_PRO and PRO_NO_SHOW are reached from DISPATCHING
  *    only, when the replacement search fails (or an unfilled <3h emergency reaches T-90).
  *  - QUALITY_ESCALATION is reachable only from DELIVERED and exits to CLOSED.
+ * ADR-0016: UNSAFE_SITE → UPLOADING (the photographer uploads what was shot).
  * IN_PROGRESS → EXTENSION_REQUESTED → EXTENSION_APPROVED is an assignment event, not a booking
  * status: the booking stays IN_PROGRESS.
  */
@@ -39,7 +40,8 @@ const TRANSITIONS: Readonly<Record<BookingStatus, readonly BookingStatus[]>> = {
   CANCELLED_PRO: [],
   PRO_NO_SHOW: [],
   ACCESS_DENIED: [],
-  UNSAFE_SITE: [],
+  // ADR-0016 D11: a confirmed unsafe site delivers what was shot.
+  UNSAFE_SITE: ['UPLOADING'],
   DATA_LOSS: [],
   ABANDONED: [],
 };

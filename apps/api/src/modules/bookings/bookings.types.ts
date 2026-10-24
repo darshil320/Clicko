@@ -206,3 +206,21 @@ export interface BookingChargeRecord {
   readonly expectedPayoutPaise: bigint;
   readonly computedAt: Date;
 }
+
+/** What delivery and the SLA machine read (ADR-0016). */
+export interface DeliveryBookingFacts {
+  readonly bookingId: string;
+  readonly reference: string;
+  readonly status: BookingStatus;
+  readonly userId: string;
+  readonly scheduledStart: Date;
+  readonly totalPaise: bigint;
+  readonly advancePaise: bigint;
+  readonly balancePaise: bigint;
+  readonly amountPaidPaise: bigint;
+  readonly slaT0: Date | null;
+  readonly deliveryDueAt: Date | null;
+  readonly deliveredAt: Date | null;
+  readonly galleryRecipient: 'BOOKER' | 'SUBJECT';
+  readonly hasRushDelivery: boolean;
+}

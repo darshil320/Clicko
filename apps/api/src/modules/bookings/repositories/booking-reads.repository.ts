@@ -131,6 +131,37 @@ export class BookingReadsRepository {
     };
   }
 
+  /** Every snapshot sequence added up (quote + extensions + waiting) — the balance invoice basis. */
+  async allSnapshotTotals(db: Db, bookingId: string): Promise<SnapshotTotals | null> {
+    const [row] = await db<
+      {
+        base: string;
+        addons: string;
+        travel: string;
+        taxable: string;
+        total: string;
+        place_of_supply: string | null;
+        sac: string | null;
+      }[]
+    >`
+      SELECT sum(base_amount_paise)::text AS base, sum(addons_amount_paise)::text AS addons,
+             sum(travel_amount_paise)::text AS travel, sum(taxable_amount_paise)::text AS taxable,
+             sum(total_amount_paise)::text AS total,
+             max(breakdown->'gst'->>'placeOfSupply') FILTER (WHERE sequence = 1) AS place_of_supply,
+             max(breakdown->'gst'->>'sac') FILTER (WHERE sequence = 1) AS sac
+      FROM booking_price_snapshots WHERE booking_id = ${bookingId}`;
+    if (!row?.place_of_supply || !row.sac || row.total === null) return null;
+    const travel = BigInt(row.travel);
+    return {
+      taxablePaise: BigInt(row.taxable),
+      totalPaise: BigInt(row.total),
+      subtotalPaise: BigInt(row.base) + BigInt(row.addons) + travel,
+      travelPaise: travel,
+      placeOfSupply: row.place_of_supply,
+      sacCode: row.sac,
+    };
+  }
+
   /**
    * A booking holds a redemption (and counts as "a booking" for first-booking promos) unless it
    * never got past a draft, was cancelled, or is a quote that expired unpaid.

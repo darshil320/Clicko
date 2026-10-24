@@ -19,6 +19,7 @@ import {
   type ChargeBasis,
   type CreateQuotedInput,
   type Db,
+  type DeliveryBookingFacts,
   type DispatchFacts,
   type OfferBookingSummary,
   type OnsiteBookingFacts,
@@ -29,6 +30,7 @@ import {
   type TransitionInput,
   type Tx,
 } from './bookings.types';
+import { BookingDeliveryRepository } from './repositories/booking-delivery.repository';
 import { BookingDispatchRepository } from './repositories/booking-dispatch.repository';
 import { BookingOnsiteRepository } from './repositories/booking-onsite.repository';
 import { BookingReadsRepository } from './repositories/booking-reads.repository';
@@ -84,6 +86,7 @@ export class BookingsService {
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(BookingDispatchRepository) private readonly dispatchReads: BookingDispatchRepository,
     @Inject(BookingOnsiteRepository) private readonly onsite: BookingOnsiteRepository,
+    @Inject(BookingDeliveryRepository) private readonly delivery: BookingDeliveryRepository,
   ) {}
 
   /** — → DRAFT → QUOTED with snapshot sequence 1 and its add-ons, in the caller's transaction. */
@@ -146,6 +149,13 @@ export class BookingsService {
 
   async quoteSnapshotTotals(tx: Tx, bookingId: string): Promise<SnapshotTotals> {
     const totals = await this.reads.quoteSnapshotTotals(tx, bookingId);
+    if (!totals) throw new Error(`Booking ${bookingId} has no quote snapshot`);
+    return totals;
+  }
+
+  /** Every snapshot added up: what the booking's invoices must sum to (ADR-0016 D3). */
+  async allSnapshotTotals(tx: Tx, bookingId: string): Promise<SnapshotTotals> {
+    const totals = await this.reads.allSnapshotTotals(tx, bookingId);
     if (!totals) throw new Error(`Booking ${bookingId} has no quote snapshot`);
     return totals;
   }
@@ -231,6 +241,32 @@ export class BookingsService {
         message: 'Already checked out',
       });
     }
+  }
+
+  /** Balance, paid amount, SLA anchors and delivery state (ADR-0016). Throws 404 when absent. */
+  async deliveryFacts(db: Db, bookingId: string): Promise<DeliveryBookingFacts> {
+    const facts = await this.delivery.facts(db, bookingId);
+    if (!facts) throw new NotFoundException(NOT_FOUND);
+    return facts;
+  }
+
+  /** sla_t0 + delivery_due_at for a T0 that is not a check-out (unsafe site). Once. */
+  async recordSlaAnchor(
+    tx: Tx,
+    bookingId: string,
+    t0: Date,
+    deliveryDueAt: Date,
+  ): Promise<boolean> {
+    return this.delivery.setSlaAnchor(tx, bookingId, t0, deliveryDueAt);
+  }
+
+  /** delivered_at, once; the caller transitions BALANCE_PENDING → DELIVERED in the same tx. */
+  async recordDelivered(tx: Tx, bookingId: string, at: Date): Promise<void> {
+    await this.delivery.setDelivered(tx, bookingId, at);
+  }
+
+  async recordClosed(tx: Tx, bookingId: string, at: Date): Promise<void> {
+    await this.delivery.setClosed(tx, bookingId, at);
   }
 
   /**

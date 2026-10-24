@@ -51,6 +51,8 @@ const DOMAIN_ROWS: ReadonlyArray<readonly [S, S]> = [
   ['CHECKED_IN', 'ACCESS_DENIED'],
   ['IN_PROGRESS', 'ACCESS_DENIED'],
   ['IN_PROGRESS', 'UNSAFE_SITE'],
+  // ADR-0016 D11: a confirmed unsafe site uploads what was shot.
+  ['UNSAFE_SITE', 'UPLOADING'],
   ['UPLOADING', 'DATA_LOSS'],
   ['PROCESSING', 'DATA_LOSS'],
   ['QA', 'DATA_LOSS'],
@@ -112,7 +114,7 @@ describe('booking state machine (DOMAIN.md §2)', () => {
     }
   });
 
-  it('treats closed, cancelled and exception outcomes as terminal', () => {
+  it('treats closed, cancelled and exception outcomes as terminal (not an unsafe site: its files are delivered)', () => {
     const terminal = STATUSES.filter((s) => isTerminal(s));
     expect(terminal).toEqual([
       'CLOSED',
@@ -120,7 +122,6 @@ describe('booking state machine (DOMAIN.md §2)', () => {
       'CANCELLED_PRO',
       'PRO_NO_SHOW',
       'ACCESS_DENIED',
-      'UNSAFE_SITE',
       'DATA_LOSS',
       'ABANDONED',
     ]);
