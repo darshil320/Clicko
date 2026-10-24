@@ -119,6 +119,7 @@ export class PaymentFlowService {
       if (open) return open;
       throw conflict('PAYMENT_NOT_OPEN', 'This booking has no payment awaiting completion');
     }
+    if (booking.status === 'BALANCE_PENDING') return this.openBalance(tx, booking);
     if (booking.status !== 'QUOTED') {
       throw conflict('BOOKING_NOT_PAYABLE', `A ${booking.status} booking has nothing to pay`);
     }
@@ -157,6 +158,29 @@ export class PaymentFlowService {
       },
     });
     return payment;
+  }
+
+  /**
+   * ADR-0016 D4: the balance — everything charged and not yet paid (extensions and waiting
+   * included). The open balance order is reused while it is for the amount still due.
+   */
+  private async openBalance(tx: Tx, booking: BookingRow): Promise<PaymentRecord> {
+    const due = booking.totalPaise - booking.amountPaidPaise;
+    if (due <= 0n) {
+      throw new UnprocessableEntityException({
+        code: 'NOTHING_TO_PAY',
+        message: 'This booking has no amount due',
+      });
+    }
+    const open = await this.payments.findOpenForBooking(tx, booking.id);
+    if (open?.purpose === 'BALANCE' && open.amountPaise === due) return open;
+    return this.payments.createOrder(tx, {
+      bookingId: booking.id,
+      userId: booking.userId,
+      purpose: 'BALANCE',
+      amountPaise: due,
+      authorizeOnly: false,
+    });
   }
 
   /** Lock order everywhere is booking → payment (ADR-0012 D4): find, lock booking, lock payment. */
@@ -204,6 +228,8 @@ export class PaymentFlowService {
     if (payment.isAuthOnly && payment.status === 'AUTHORIZED') {
       return this.applyHeldCapture(tx, payment, event, booking, now);
     }
+    if (payment.purpose === 'BALANCE')
+      return this.applyBalanceCapture(tx, payment, event, booking, now);
     const awaiting = booking.status === 'ADVANCE_PENDING' && paymentWindowOpen(booking, now);
     await this.payments.recordCapture(tx, {
       payment,
@@ -223,6 +249,36 @@ export class PaymentFlowService {
     }
     await this.confirm(tx, booking.id, payment, event.amountPaise, now);
     return applied;
+  }
+
+  /**
+   * The balance (ADR-0016 D3/D4): with the booking waiting for exactly this amount, the capture,
+   * the remainder invoice and `payment.balance_captured` (which releases the delivery). Anything
+   * else is booked without an invoice and flagged.
+   */
+  private async applyBalanceCapture(
+    tx: Tx,
+    payment: PaymentRecord,
+    event: PaymentSucceededEvent,
+    booking: BookingRow,
+    now: Date,
+  ): Promise<Applied> {
+    const due = booking.totalPaise - booking.amountPaidPaise;
+    if (booking.status === 'BALANCE_PENDING' && event.amountPaise === due) {
+      await this.payments.recordBalanceCapture(tx, {
+        payment,
+        event,
+        capturedAt: now,
+        allSnapshots: await this.bookings.allSnapshotTotals(tx, booking.id),
+      });
+      await this.bookings.addAmountPaid(tx, booking.id, event.amountPaise);
+      return applied;
+    }
+    await this.payments.recordCapture(tx, { payment, event, capturedAt: now, invoiceBasis: null });
+    await this.bookings.addAmountPaid(tx, booking.id, event.amountPaise);
+    const reason = `BALANCE_CAPTURED_WHILE_${booking.status}`;
+    await this.payments.flagForReview(tx, payment, reason, event.amountPaise);
+    return review(`${reason}: refund or reconcile`);
   }
 
   /** We released this hold, yet the gateway captured it: book the money, flag it for refund. */

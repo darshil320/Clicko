@@ -51,3 +51,40 @@ export function splitInvoice(input: InvoiceSplitInput): InvoiceSplit {
     totalPaise: amountPaise,
   };
 }
+
+export interface RemainderInput {
+  /** Every price snapshot of the booking added up (quote + extensions + waiting). */
+  readonly snapshot: { readonly taxablePaise: bigint; readonly totalPaise: bigint };
+  readonly placeOfSupply: string;
+  /** The invoices already issued for the booking (not cancelled). */
+  readonly prior: readonly InvoiceSplit[];
+}
+
+/**
+ * ADR-0016 D3: the balance invoice is what is left — the whole booking's split (taxable exact,
+ * GST split like the engine) minus every prior invoice, component by component. The invoices of a
+ * booking therefore always sum to its snapshots to the paisa.
+ */
+export function remainderInvoice(input: RemainderInput): InvoiceSplit {
+  const whole = splitInvoice({
+    amountPaise: input.snapshot.totalPaise,
+    snapshot: input.snapshot,
+    placeOfSupply: input.placeOfSupply,
+  });
+  const sum = (pick: (s: InvoiceSplit) => bigint) =>
+    input.prior.reduce((acc, s) => acc + pick(s), 0n);
+  const rest: InvoiceSplit = {
+    taxablePaise: whole.taxablePaise - sum((s) => s.taxablePaise),
+    cgstPaise: whole.cgstPaise - sum((s) => s.cgstPaise),
+    sgstPaise: whole.sgstPaise - sum((s) => s.sgstPaise),
+    igstPaise: whole.igstPaise - sum((s) => s.igstPaise),
+    totalPaise: whole.totalPaise - sum((s) => s.totalPaise),
+  };
+  const parts = [rest.taxablePaise, rest.cgstPaise, rest.sgstPaise, rest.igstPaise];
+  if (rest.totalPaise <= 0n || parts.some((p) => p < 0n)) {
+    throw new RangeError(
+      `remainderInvoice: nothing (or less than nothing) left: ${rest.totalPaise}`,
+    );
+  }
+  return rest;
+}

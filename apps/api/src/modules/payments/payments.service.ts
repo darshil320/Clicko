@@ -223,6 +223,59 @@ export class PaymentsService {
     return { invoiceId };
   }
 
+  /**
+   * The balance arrived (ADR-0016 D3/D4): BALANCE_CAPTURED (+ GATEWAY_FEE), the balance tax
+   * invoice as the exact remainder of every snapshot, and `payment.balance_captured` for the
+   * delivery release — one transaction, the caller's.
+   */
+  async recordBalanceCapture(
+    tx: Tx,
+    c: Omit<CaptureInput, 'invoiceBasis'> & { readonly allSnapshots: InvoiceBasis },
+  ): Promise<{ invoiceId: string }> {
+    const { payment, event, capturedAt } = c;
+    await this.postCaptured(tx, payment, event.amountPaise, event.providerPaymentId, capturedAt);
+    if (event.feePaise > 0n) {
+      await this.ledger.post(tx, {
+        txnKind: 'GATEWAY_FEE',
+        entries: gatewayFeeEntries(event.feePaise),
+        refs: this.refs(payment),
+        memo: `Gateway fee on ${event.providerPaymentId}`,
+        occurredAt: capturedAt,
+      });
+    }
+    const invoice = await this.invoices.issueRemainder(tx, {
+      bookingId: payment.bookingId,
+      userId: payment.userId,
+      paymentId: payment.id,
+      purpose: 'BALANCE',
+      basis: c.allSnapshots,
+      issuedAt: capturedAt,
+    });
+    await this.payments.markCaptured(tx, payment.id, {
+      providerPaymentId: event.providerPaymentId,
+      method: event.method,
+      vpaOrLast4: event.vpaOrLast4,
+      capturedPaise: event.amountPaise,
+      feePaise: event.feePaise,
+      capturedAt,
+      invoiceId: invoice.id,
+    });
+    await appendDomainEvent(tx, {
+      eventType: 'payment.balance_captured',
+      aggregateKind: 'payment',
+      aggregateId: payment.id,
+      occurredAt: capturedAt,
+      payload: {
+        payment_id: payment.id,
+        booking_id: payment.bookingId,
+        amount_paise: fromPaiseBigint(event.amountPaise),
+        invoice_id: invoice.id,
+        invoice_number: invoice.invoiceNumber,
+      },
+    });
+    return { invoiceId: invoice.id };
+  }
+
   /** Authorise-only (<3h): no money captured, no invoice, no ledger until capture. */
   async markAuthorized(tx: Tx, a: AuthorizationInput): Promise<void> {
     await this.payments.markAuthorized(tx, a.payment.id, {

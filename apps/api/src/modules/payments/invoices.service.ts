@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { invoiceSeriesFor } from './financial-year';
-import { type InvoiceSplit, splitInvoice } from './invoice-split';
+import { type InvoiceSplit, remainderInvoice, splitInvoice } from './invoice-split';
 import { LedgerService } from './ledger/ledger.service';
 import { gstAccruedEntries, travelShareOf } from './ledger/ledger-entries';
 import type { InvoiceBasis, PaymentPurpose, Tx } from './payments.types';
@@ -38,6 +38,28 @@ export class InvoicesService {
       snapshot: i.basis,
       placeOfSupply: i.basis.placeOfSupply,
     });
+    return this.issueSplit(tx, i, split);
+  }
+
+  /**
+   * ADR-0016 D3: the balance invoice — what is left of every snapshot after the invoices already
+   * issued, so a booking's invoices sum to its snapshots to the paisa. `basis` = all snapshots.
+   */
+  async issueRemainder(tx: Tx, i: Omit<IssueInvoiceInput, 'amountPaise'>): Promise<IssuedInvoice> {
+    const prior = await this.repo.forBooking(tx, i.bookingId);
+    const split = remainderInvoice({
+      snapshot: i.basis,
+      placeOfSupply: i.basis.placeOfSupply,
+      prior,
+    });
+    return this.issueSplit(tx, { ...i, amountPaise: split.totalPaise }, split);
+  }
+
+  private async issueSplit(
+    tx: Tx,
+    i: IssueInvoiceInput,
+    split: InvoiceSplit,
+  ): Promise<IssuedInvoice> {
     const series = invoiceSeriesFor(i.issuedAt);
     await this.repo.ensureSeries(tx, series);
     const invoiceNumber = await this.repo.allocateNumber(tx, series.code, series.financialYear);

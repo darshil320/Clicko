@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitInvoice } from '../invoice-split';
+import { remainderInvoice, splitInvoice } from '../invoice-split';
 
 // A Surat booking (place of supply Gujarat, same state as Clickco): taxable 1432900, GST 257922.
 const SNAPSHOT = { taxablePaise: 1_432_900n, totalPaise: 1_690_822n };
@@ -80,6 +80,60 @@ describe('splitInvoice (ADR-0009 advance invoice)', () => {
         snapshot: { taxablePaise: 0n, totalPaise: 0n },
         placeOfSupply: GUJARAT,
       }),
+    ).toThrow(RangeError);
+  });
+});
+
+describe('remainderInvoice (ADR-0016 D3: the balance takes exact remainders)', () => {
+  // Advance = ceil(total / 2) of the quote; an approved extension (576725, taxable 488750) added.
+  const QUOTE = SNAPSHOT;
+  const ALL = { taxablePaise: 1_432_900n + 488_750n, totalPaise: 1_690_822n + 576_725n };
+  const advance = splitInvoice({ amountPaise: 845_411n, snapshot: QUOTE, placeOfSupply: GUJARAT });
+
+  it('advance + balance reproduce every snapshot to the paisa (intra-state)', () => {
+    const balance = remainderInvoice({ snapshot: ALL, placeOfSupply: GUJARAT, prior: [advance] });
+    expect(balance.totalPaise).toBe(ALL.totalPaise - 845_411n);
+    expect(advance.taxablePaise + balance.taxablePaise).toBe(ALL.taxablePaise);
+    const gst = ALL.totalPaise - ALL.taxablePaise;
+    expect(advance.cgstPaise + balance.cgstPaise + advance.sgstPaise + balance.sgstPaise).toBe(gst);
+    expect(balance.cgstPaise - balance.sgstPaise).toBeGreaterThanOrEqual(-1n);
+    expect(balance.cgstPaise - balance.sgstPaise).toBeLessThanOrEqual(1n);
+    expect(sumOf(balance)).toBe(balance.totalPaise);
+  });
+
+  it('inter-state is all IGST', () => {
+    const adv = splitInvoice({
+      amountPaise: 845_411n,
+      snapshot: QUOTE,
+      placeOfSupply: MAHARASHTRA,
+    });
+    const balance = remainderInvoice({ snapshot: ALL, placeOfSupply: MAHARASHTRA, prior: [adv] });
+    expect(balance.cgstPaise + balance.sgstPaise).toBe(0n);
+    expect(adv.igstPaise + balance.igstPaise).toBe(ALL.totalPaise - ALL.taxablePaise);
+  });
+
+  it('a booking paid in full whose only balance is an extension invoices just that', () => {
+    const full = splitInvoice({
+      amountPaise: QUOTE.totalPaise,
+      snapshot: QUOTE,
+      placeOfSupply: GUJARAT,
+    });
+    const balance = remainderInvoice({ snapshot: ALL, placeOfSupply: GUJARAT, prior: [full] });
+    expect(balance.totalPaise).toBe(576_725n);
+    expect(balance.taxablePaise).toBe(488_750n);
+  });
+
+  it('refuses when nothing is left, or the prior invoices exceed the snapshots', () => {
+    const full = splitInvoice({
+      amountPaise: QUOTE.totalPaise,
+      snapshot: QUOTE,
+      placeOfSupply: GUJARAT,
+    });
+    expect(() =>
+      remainderInvoice({ snapshot: QUOTE, placeOfSupply: GUJARAT, prior: [full] }),
+    ).toThrow(RangeError);
+    expect(() =>
+      remainderInvoice({ snapshot: QUOTE, placeOfSupply: GUJARAT, prior: [full, advance] }),
     ).toThrow(RangeError);
   });
 });
