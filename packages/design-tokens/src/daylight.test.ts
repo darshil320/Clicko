@@ -110,6 +110,8 @@ describe('Daylight contrast (WCAG AA)', () => {
   it('reads text and captions on the darkroom band', () => {
     expect(contrast(x.darkroom.text, x.darkroom.default)).toBeGreaterThanOrEqual(7);
     expect(contrast(x.darkroom.muted, x.darkroom.default)).toBeGreaterThanOrEqual(AA);
+    // The italic accent word on darkroom is amber itself (DESIGN-DAYLIGHT §Rules).
+    expect(contrast(c.accent.default, x.darkroom.default)).toBeGreaterThanOrEqual(7);
   });
 
   it('keeps status and emergency colours readable as text on paper', () => {
@@ -133,7 +135,9 @@ describe('Daylight type, shape and depth', () => {
 
   it('documents every fluid step as "min → max"', () => {
     for (const [name, step] of Object.entries(daylightType.fluid)) {
-      expect(DESIGN_DAYLIGHT_MD).toMatch(new RegExp(`^${name}\\s+${step.min} → ${step.max}\\s`, 'm'));
+      expect(DESIGN_DAYLIGHT_MD).toMatch(
+        new RegExp(`^${name}\\s+${step.min} → ${step.max}\\s`, 'm'),
+      );
       expect(step.max).toBeGreaterThan(step.min);
     }
     expect(daylightType.fluid.hero.max).toBeGreaterThan(daylightType.fluid.section.max);

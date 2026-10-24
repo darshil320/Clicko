@@ -74,7 +74,7 @@ shadow/photo   0 40px 80px -32px rgba(20,18,16,0.35)   photos floating in the he
 ## Rules
 - Photos are the hero: every section carries a photo frame; never set body copy on a photo.
 - One accent-filled element per viewport. Amber is a fill with text/on-accent; amber as text is
-  accent/text.
+  accent/text. The one exception: on darkroom, the italic accent word is amber itself (≥ 7:1).
 - Text colours sit only on the grounds named above. On sage, clay and haze use text/primary,
   text/secondary or the tint's own deep colour — never text/tertiary.
 - One linen band, one darkroom band and one amber panel per page, never two of a kind in a row.
