@@ -114,8 +114,15 @@ export const ROADMAP: readonly Sprint[] = [
     id: 'S8',
     title: 'Delivery + SLA machine',
     dates: '21 – 25 Dec',
-    state: 'in-progress',
-    shipped: [],
+    state: 'done',
+    shipped: [
+      'QA gate, then the balance: paid in the app, GST invoice to the exact paisa',
+      'Links issued by Clickco only after everything is paid; the storage link is never shown',
+      'Every SLA clock from check-out, paused while the client pays; reminders; abandon at 30 days',
+      'Late delivery recorded with a provisional remedy (amounts waiting on Darshil)',
+      'RAW files deleted at 7 days, JPEGs and links at 30, then the booking closes',
+    ],
+    note: 'Proven by a 13-scenario end-to-end test; the staff QA desk comes with the admin panel',
   },
   { id: 'S9–10', title: 'Admin panel', dates: '28 Dec – 8 Jan', state: 'planned', shipped: [] },
   {
@@ -140,4 +147,5 @@ export const WAITING_ON_OWNER: readonly string[] = [
   'Confirm clickco.in ownership + Cloudflare',
   'Figma Wave 1 designs (gates the client app, S4)',
   'Razorpay test keys (S3 builds against a sandbox adapter until then)',
+  'Late-delivery compensation amounts (a provisional table is in place, never applied automatically)',
 ];

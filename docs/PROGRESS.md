@@ -2,6 +2,29 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-24 · Sprint 8 (delivery + SLA) and the white theme
+**Shipped**
+- S8 API: QA gate (dev console until the S9 desk); balance order with the GST invoice issued at
+  capture as the exact remainder of every snapshot; links released only once everything is paid,
+  behind Clickco's opaque `/d/<token>`; the SLA machine (production clocks from T0, RUSH_24H
+  halved, pause in BALANCE_PENDING, three balance reminders, abandon at 30 d, breach rows with a
+  provisional remedy never applied automatically, a sweep for lost jobs); RAW purged +7 d, JPEG and
+  links +30 d, then CLOSED; unsafe-site bookings upload what was shot
+- 13-scenario delivery e2e test; API 886 tests green
+- White theme tokens (`colorLight`, elevation, section rhythm, motion) with WCAG contrast tests;
+  the website, the upload portal and the client app are being restyled to it
+
+**Decisions:** ADR-0016 (S8 design), ADR-0017 (white theme). SA-15–SA-22.
+
+**Housekeeping:** the disk filled twice (Docker's VM disk too). The e2e harness now cleans its
+storage per app; Docker was restarted; leaked test databases dropped.
+
+**Waiting on Darshil:** the breach remedy amounts (SA-21), CA confirmation of the balance invoice
+timing (SA-15), clickco-01 §4 v2 for the white theme (SA-22).
+
+**Next:** finish the white-theme pass and review every screen · the Pro app (S6 frontend) · S9–10
+admin panel (staff QA desk, finance desk for refunds, credits and breach remedies)
+
 ## 2026-10-24 · Sprints 6 (API) and 7, security review closed
 **Shipped**
 - S6 on-site API: en-route, geofenced check-in/out (150 m; fallback points accepted unverified),
