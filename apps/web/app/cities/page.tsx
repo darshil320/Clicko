@@ -3,9 +3,10 @@ import { CityCards } from '../../src/components/home/CitiesServed';
 import { Breadcrumbs } from '../../src/components/ui/Breadcrumbs';
 import { Icon } from '../../src/components/ui/Icon';
 import { JsonLd } from '../../src/components/ui/JsonLd';
+import { PhotoFrame } from '../../src/components/ui/PhotoFrame';
 import { Section } from '../../src/components/ui/Section';
 import { WaitlistSection } from '../../src/components/waitlist/WaitlistSection';
-import { WAITLIST_EXAMPLES } from '../../src/content/cities';
+import { LAUNCH_CITIES, WAITLIST_EXAMPLES } from '../../src/content/cities';
 import { breadcrumbLd, type Crumb } from '../../src/lib/jsonld';
 import { pageMetadata } from '../../src/lib/metadata';
 import { paths } from '../../src/lib/routes';
@@ -28,13 +29,20 @@ export default function CitiesPage() {
     <div className="page">
       <JsonLd data={breadcrumbLd(CRUMBS)} />
       <header className="page-hero">
-        <div className="wrap">
-          <Breadcrumbs crumbs={CRUMBS} />
-          <h1>Where Clickco shoots</h1>
-          <p className="lead">
-            The Clickco brand and app are pan-India. Photographers are bookable in three cities
-            today; every other pincode can join the waitlist.
-          </p>
+        <div className="wrap page-hero-grid">
+          <div>
+            <Breadcrumbs crumbs={CRUMBS} />
+            <h1>Where Clickco shoots</h1>
+            <p className="lead">
+              The Clickco brand and app are pan-India. Photographers are bookable in three cities
+              today; every other pincode can join the waitlist.
+            </p>
+          </div>
+          <PhotoFrame
+            mood="coast"
+            caption={LAUNCH_CITIES.map((city) => city.name).join(' · ')}
+            corners
+          />
         </div>
       </header>
       <Section

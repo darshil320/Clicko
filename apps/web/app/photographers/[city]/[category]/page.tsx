@@ -10,6 +10,7 @@ import {
 } from '../../../../src/components/seo/SeoParts';
 import { FaqList } from '../../../../src/components/ui/FaqList';
 import { JsonLd } from '../../../../src/components/ui/JsonLd';
+import { CATEGORY_MOOD } from '../../../../src/components/ui/PhotoFrame';
 import { Section } from '../../../../src/components/ui/Section';
 import { findCategory } from '../../../../src/content/categories';
 import { findCity } from '../../../../src/content/cities';
@@ -73,7 +74,13 @@ export default async function CityCategoryPage({ params }: Props) {
           faqPageLd(content.faqs),
         ]}
       />
-      <PageHero crumbs={content.crumbs} city={city} title={content.h1}>
+      <PageHero
+        crumbs={content.crumbs}
+        city={city}
+        title={content.h1}
+        mood={CATEGORY_MOOD[category.code]}
+        caption={`${category.label} · ${city.name}`}
+      >
         <p className="lead">{category.summary}</p>
         <p className="muted">{angle}</p>
       </PageHero>
@@ -135,7 +142,7 @@ export default async function CityCategoryPage({ params }: Props) {
       >
         <FaqList faqs={content.faqs} />
       </Section>
-      <Section id="related" raised title={`More shoots in ${city.name}`}>
+      <Section id="related" title={`More shoots in ${city.name}`}>
         <CategoryLinks city={city} exclude={category.slug} />
         <div className="section-foot">
           <OtherCities current={city} category={category} />

@@ -1,18 +1,11 @@
 import { LAUNCH_CITIES, statusLabel, WAITLIST_EXAMPLES } from '../../content/cities';
 import { paths } from '../../lib/routes';
 import { Icon } from '../ui/Icon';
-import { PhotoFrame, type PhotoMood } from '../ui/PhotoFrame';
+import { CITY_MOOD, PhotoFrame } from '../ui/PhotoFrame';
 import { Section } from '../ui/Section';
 
 /** How many example neighbourhoods a city card lists. */
 const AREAS_SHOWN = 4;
-
-/** Placeholder light per launch city until real city photographs exist. */
-const CITY_MOOD: Readonly<Record<string, PhotoMood>> = {
-  surat: 'golden',
-  mumbai: 'coast',
-  vadodara: 'garden',
-};
 
 export function CityCards() {
   return (

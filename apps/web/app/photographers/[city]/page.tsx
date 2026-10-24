@@ -11,6 +11,7 @@ import {
 } from '../../../src/components/seo/SeoParts';
 import { FaqList } from '../../../src/components/ui/FaqList';
 import { JsonLd } from '../../../src/components/ui/JsonLd';
+import { CITY_MOOD } from '../../../src/components/ui/PhotoFrame';
 import { Section } from '../../../src/components/ui/Section';
 import { findCity } from '../../../src/content/cities';
 import { breadcrumbLd, faqPageLd, serviceLd } from '../../../src/lib/jsonld';
@@ -61,7 +62,13 @@ export default async function CityHub({ params }: Props) {
           faqPageLd(content.faqs),
         ]}
       />
-      <PageHero crumbs={content.crumbs} city={city} title={content.h1}>
+      <PageHero
+        crumbs={content.crumbs}
+        city={city}
+        title={content.h1}
+        mood={CITY_MOOD[city.slug] ?? 'golden'}
+        caption={city.name}
+      >
         <p className="lead">{city.intro}</p>
       </PageHero>
       <Section
@@ -86,7 +93,7 @@ export default async function CityHub({ params }: Props) {
         <CategoryLinks city={city} />
       </Section>
       <HowItWorks />
-      <Section id="faq" raised eyebrow="Help" title={`Booking a photographer in ${city.name}`}>
+      <Section id="faq" eyebrow="Help" title={`Booking a photographer in ${city.name}`}>
         <FaqList faqs={content.faqs} />
       </Section>
       <Section id="other-cities" title="Other cities">

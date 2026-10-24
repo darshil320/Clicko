@@ -7,8 +7,8 @@ import { formatRupees } from '../../lib/money';
 import { fromPrice } from '../../lib/pricing';
 import { paths } from '../../lib/routes';
 import { Breadcrumbs } from '../ui/Breadcrumbs';
-import { CategoryIcon } from '../ui/CategoryIcon';
 import { Icon, IconChip } from '../ui/Icon';
+import { CATEGORY_MOOD, PhotoFrame, type PhotoMood } from '../ui/PhotoFrame';
 
 export function StatusBadge({ city }: { readonly city: LaunchCity }) {
   return (
@@ -22,20 +22,28 @@ export function PageHero({
   crumbs,
   city,
   title,
+  mood,
+  caption,
   children,
 }: {
   readonly crumbs: readonly Crumb[];
   readonly city: LaunchCity;
   readonly title: string;
+  /** The hero photograph's placeholder light (ADR-0018: every section carries a photo). */
+  readonly mood: PhotoMood;
+  readonly caption: string;
   readonly children: ReactNode;
 }) {
   return (
     <header className="page-hero">
-      <div className="wrap">
-        <Breadcrumbs crumbs={crumbs} />
-        <StatusBadge city={city} />
-        <h1>{title}</h1>
-        <div className="prose-block">{children}</div>
+      <div className="wrap page-hero-grid">
+        <div>
+          <Breadcrumbs crumbs={crumbs} />
+          <StatusBadge city={city} />
+          <h1>{title}</h1>
+          <div className="prose-block">{children}</div>
+        </div>
+        <PhotoFrame mood={mood} caption={caption} corners />
       </div>
     </header>
   );
@@ -78,18 +86,20 @@ export function CategoryLinks({
       {shown.map((category) => {
         const price = fromPrice('BASIC', city.tier, CATEGORY_UPLIFT_BPS[category.code]);
         return (
-          <li key={category.slug} className="card lift">
-            <CategoryIcon code={category.code} />
-            <span className="card-arrow" aria-hidden="true">
-              <Icon name="arrowRight" />
-            </span>
-            <h3>
-              <a className="card-link" href={paths.cityCategory(city, category)}>
-                {category.label} photography
-              </a>
-            </h3>
-            <p className="muted">{category.summary}</p>
-            <p className="price-note push">From {formatRupees(price.basePaise)} + GST</p>
+          <li key={category.slug} className="card card-photo lift">
+            <PhotoFrame mood={CATEGORY_MOOD[category.code]} />
+            <div className="card-body">
+              <h3>
+                <a className="card-link" href={paths.cityCategory(city, category)}>
+                  {category.label} photography
+                </a>
+              </h3>
+              <p className="muted">{category.summary}</p>
+              <p className="price-note push">From {formatRupees(price.basePaise)} + GST</p>
+              <span className="card-arrow" aria-hidden="true">
+                <Icon name="arrowRight" />
+              </span>
+            </div>
           </li>
         );
       })}

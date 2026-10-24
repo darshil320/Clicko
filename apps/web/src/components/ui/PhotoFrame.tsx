@@ -14,6 +14,13 @@ export const CATEGORY_MOOD: Readonly<Record<CategoryCode, PhotoMood>> = {
   CORPORATE: 'office',
 };
 
+/** Placeholder light per launch city (by slug) until real city photographs exist. */
+export const CITY_MOOD: Readonly<Record<string, PhotoMood>> = {
+  surat: 'golden',
+  mumbai: 'coast',
+  vadodara: 'garden',
+};
+
 export interface PhotoFrameProps {
   readonly mood: PhotoMood;
   /** A real photograph. Without one the frame paints its mood and is hidden from assistive tech. */
