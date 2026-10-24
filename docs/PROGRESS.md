@@ -2,6 +2,25 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-24 · Daylight — desktop header gap fix (branch feat/web-daylight)
+**Shipped**
+- apps/web: on desktop the floating header sat in its own flat 80px strip, so each hero's
+  daylight glow started below it with a visible seam. The header now overlays the first band
+  (`headerOverlay` in styles/tokens.ts) and `.hero`, `.page-hero` and legal pages add the same
+  amount back to their top padding — the glow runs to the top edge, content does not move.
+  Mobile unchanged. Web tests 129 green, typecheck and lint clean, static export builds.
+- Repo pushed to github.com/darshil320/Clicko (`main`, public). The local branch
+  feat/web-daylight was renamed to `main`.
+- Vercel: project `clickco-web` in darshil320s-projects, Git-connected (pushes to `main` deploy to
+  production), root `apps/web`, Node 22.x, `ENABLE_EXPERIMENTAL_COREPACK=1` for pnpm 11.
+  `apps/web/vercel.json` installs only the root + web workspace and builds with plain pnpm.
+  Live at https://clickco-web.vercel.app.
+
+**Not done:** the deploy runs `build`, not `build:production` — legal pages show the Draft notice
+and the waitlist form posts to localhost until the legal fields and `NEXT_PUBLIC_API_URL` exist.
+clickco.in is not attached. Local git authenticates as darshil321, which cannot push to
+darshil320/Clicko.
+
 ## 2026-10-24 · Daylight — marketing website redesign (branch feat/web-daylight)
 **Shipped**
 - ADR-0018 + docs/DESIGN-DAYLIGHT.md: a marketing-only brand layer on the white theme. Warm paper
