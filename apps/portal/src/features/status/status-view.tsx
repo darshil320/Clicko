@@ -3,29 +3,101 @@
 import type { ProUploadJob } from '@clickco/contracts';
 import { useEffect, useState } from 'react';
 import { errorMessage } from '../../shared/api';
-import { formatBytes } from '../../shared/format';
+import { formatBytes, formatCode, formatDateTime } from '../../shared/format';
 import { useRequireSession } from '../../shared/hooks';
+import { Icon, type IconName } from '../../shared/icons';
 import { findUploadJob } from '../../shared/jobs-api';
+import { BackLink, Callout, Loading, StatusPill } from '../../shared/ui';
 
 const STEPS = [
   {
     status: 'UPLOADING',
     label: 'Upload verified',
     detail: 'Every file arrived intact (checksums matched)',
+    icon: 'shield',
   },
   {
     status: 'PROCESSING',
     label: 'Processing',
     detail: 'RAW files are converted to full-resolution JPEGs',
+    icon: 'image',
   },
   {
     status: 'QA',
     label: 'Quality check',
     detail: 'Clickco checks file counts and obvious corruption',
+    icon: 'eye',
   },
-] as const;
+] as const satisfies ReadonlyArray<{
+  status: string;
+  label: string;
+  detail: string;
+  icon: IconName;
+}>;
 
 const ORDER = ['CHECKED_OUT', 'UPLOADING', 'PROCESSING', 'QA'];
+
+type StepState = 'done' | 'current' | 'later';
+
+const STATE_PILL = {
+  done: { tone: 'ok', text: 'Done' },
+  current: { tone: 'warn', text: 'In progress' },
+  later: { tone: 'idle', text: 'Waiting' },
+} as const;
+
+function Timeline({ job }: { readonly job: ProUploadJob }) {
+  const reached = ORDER.indexOf(job.bookingStatus);
+  // The upload itself is only "verified" once the booking has left UPLOADING.
+  const doneThrough =
+    job.bookingStatus === 'UPLOADING' || job.bookingStatus === 'CHECKED_OUT' ? 0 : reached;
+  return (
+    <ol className="timeline reveal-list" data-testid="status">
+      {STEPS.map((step) => {
+        const index = ORDER.indexOf(step.status);
+        const state: StepState =
+          index < doneThrough ? 'done' : index === doneThrough ? 'current' : 'later';
+        const pill = STATE_PILL[state];
+        return (
+          <li className={`step ${state}`} key={step.status}>
+            <span className="node" aria-hidden="true">
+              {state === 'done' ? (
+                <Icon name="check" size="sm" />
+              ) : state === 'current' ? (
+                <span className="dot live" />
+              ) : (
+                <Icon name={step.icon} size="sm" />
+              )}
+            </span>
+            <div className="step-body">
+              <span className="step-title">{step.label}</span>
+              <span className="muted small">{step.detail}</span>
+            </div>
+            <StatusPill tone={pill.tone} label={pill.text} />
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Stats({ job }: { readonly job: ProUploadJob }) {
+  const stats = [
+    ['RAW files', String(job.media.rawFiles)],
+    ['JPEG files', String(job.media.jpegFiles)],
+    ['JPEGs exported', String(job.media.exportedJpegs)],
+    ['Uploaded', formatBytes(job.media.uploadedBytes)],
+  ] as const;
+  return (
+    <div className="stats reveal-list">
+      {stats.map(([label, value]) => (
+        <div className="stat" key={label}>
+          <span className="stat-label">{label}</span>
+          <span className="stat-value">{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Processing + verification status after an upload (doc 02 §7 status page). */
 export function StatusView({ bookingId }: { readonly bookingId: string }) {
@@ -48,69 +120,68 @@ export function StatusView({ bookingId }: { readonly bookingId: string }) {
     };
   }, [bookingId, session]);
 
-  if (error) return <p className="err">{error}</p>;
-  if (job === undefined) return <p className="muted">Loading…</p>;
-  if (job === null) {
+  if (error) {
     return (
-      <div className="card stack">
-        <span>This shoot is no longer in your upload list — it has moved on to delivery.</span>
-        <a className="button secondary" href="/jobs">
-          Back to jobs
-        </a>
+      <div className="page">
+        <BackLink href="/jobs">Your shoots</BackLink>
+        <Callout tone="bad" title="Could not load this shoot" alert>
+          {error}
+        </Callout>
       </div>
     );
   }
-  const reached = ORDER.indexOf(job.bookingStatus);
-  // The upload itself is only "verified" once the booking has left UPLOADING.
-  const doneThrough =
-    job.bookingStatus === 'UPLOADING' || job.bookingStatus === 'CHECKED_OUT' ? 0 : reached;
+  if (job === undefined) return <Loading />;
+  if (job === null) {
+    return (
+      <div className="page">
+        <BackLink href="/jobs">Your shoots</BackLink>
+        <div className="card white empty reveal">
+          <span className="tile lg round ok">
+            <Icon name="check" size="lg" />
+          </span>
+          <h2>This shoot has moved on to delivery</h2>
+          <p className="lede">It is no longer in your upload list.</p>
+          <a className="button secondary" href="/jobs">
+            Back to your shoots
+          </a>
+        </div>
+      </div>
+    );
+  }
+  const canUpload = job.bookingStatus === 'CHECKED_OUT' || job.bookingStatus === 'UPLOADING';
   return (
-    <div className="stack">
-      <h1>Status · {job.bookingReference}</h1>
-      <div className="card stack" data-testid="status">
-        {STEPS.map((step) => {
-          const index = ORDER.indexOf(step.status);
-          const state = index < doneThrough ? 'done' : index === doneThrough ? 'current' : 'later';
-          const pill = state === 'done' ? 'ok' : state === 'current' ? 'warn' : 'idle';
-          const text = state === 'done' ? 'Done' : state === 'current' ? 'In progress' : 'Waiting';
-          return (
-            <div className="spread" key={step.status}>
-              <div>
-                <strong>{step.label}</strong>
-                <div className="muted small">{step.detail}</div>
-              </div>
-              <span className={`pill ${pill}`}>{text}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="card stats">
-        <div className="stat">
-          <div className="muted small">RAW files</div>
-          <div className="value">{job.media.rawFiles}</div>
+    <div className="page">
+      <BackLink href="/jobs">Your shoots</BackLink>
+      <header className="page-head reveal">
+        <div>
+          <span className="eyebrow">Status</span>
+          <h1 className="num">{job.bookingReference}</h1>
+          <div className="meta">
+            <span>
+              <Icon name="camera" size="sm" />
+              {formatCode(job.categoryCode)} · {formatCode(job.tier)}
+            </span>
+            <span>
+              <Icon name="calendar" size="sm" />
+              Shot {formatDateTime(job.scheduledStart)}
+            </span>
+          </div>
         </div>
-        <div className="stat">
-          <div className="muted small">JPEG files</div>
-          <div className="value">{job.media.jpegFiles}</div>
-        </div>
-        <div className="stat">
-          <div className="muted small">JPEGs exported</div>
-          <div className="value">{job.media.exportedJpegs}</div>
-        </div>
-        <div className="stat">
-          <div className="muted small">Uploaded</div>
-          <div className="value">{formatBytes(job.media.uploadedBytes)}</div>
-        </div>
-      </div>
-      <p className="muted small">
+        {canUpload ? (
+          <a className="button" href={`/jobs/${bookingId}/upload`}>
+            Go to upload
+            <Icon name="forward" size="sm" />
+          </a>
+        ) : null}
+      </header>
+      <section className="card white">
+        <Timeline job={job} />
+      </section>
+      <Stats job={job} />
+      <Callout tone="info" icon="shield">
         You are paid for this shoot once it is delivered. The client receives the files from Clickco
         — never share them yourself.
-      </p>
-      {job.bookingStatus === 'CHECKED_OUT' || job.bookingStatus === 'UPLOADING' ? (
-        <a className="button" href={`/jobs/${bookingId}/upload`}>
-          Go to upload
-        </a>
-      ) : null}
+      </Callout>
     </div>
   );
 }

@@ -1,18 +1,20 @@
 'use client';
 
 import { MEDIA_LIMITS, type ProUploadJob } from '@clickco/contracts';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { errorMessage } from '../../shared/api';
-import { formatBytes, formatCountdown } from '../../shared/format';
+import { formatBytes, formatCode, formatCountdown, formatDateTime } from '../../shared/format';
 import { useNow } from '../../shared/hooks';
+import { Icon } from '../../shared/icons';
 import { listUploadJobs } from '../../shared/jobs-api';
+import { Callout, StatusPill, type Tone } from '../../shared/ui';
 
 const AWAITING: ReadonlySet<string> = new Set(['CHECKED_OUT', 'UPLOADING']);
 
-const STATUS_LABEL: Readonly<Record<string, { label: string; tone: string }>> = {
+const STATUS_LABEL: Readonly<Record<string, { label: string; tone: Tone; live?: boolean }>> = {
   CHECKED_OUT: { label: 'Awaiting upload', tone: 'warn' },
-  UPLOADING: { label: 'Uploading', tone: 'warn' },
-  PROCESSING: { label: 'Processing', tone: 'idle' },
+  UPLOADING: { label: 'Uploading', tone: 'warn', live: true },
+  PROCESSING: { label: 'Processing', tone: 'idle', live: true },
   QA: { label: 'In QA', tone: 'ok' },
 };
 
@@ -20,63 +22,177 @@ function Deadline({ job, now }: { readonly job: ProUploadJob; readonly now: numb
   if (!job.uploadDeadlineAt)
     return <span className="muted small">Deadline unknown — contact ops</span>;
   const { text, overdue } = formatCountdown(Date.parse(job.uploadDeadlineAt), now);
-  return <span className={overdue ? 'overdue countdown' : 'countdown'}>{text}</span>;
+  return (
+    <>
+      <span className={overdue ? 'countdown overdue' : 'countdown'}>{text}</span>
+      <span className="muted small">Due {formatDateTime(job.uploadDeadlineAt)}</span>
+    </>
+  );
 }
 
-function JobCard({ job, now }: { readonly job: ProUploadJob; readonly now: number }) {
-  const status = STATUS_LABEL[job.bookingStatus] ?? { label: job.bookingStatus, tone: 'idle' };
-  const awaiting = AWAITING.has(job.bookingStatus);
+function SessionProgress({ job }: { readonly job: ProUploadJob }) {
   const session = job.activeSession;
+  if (!session) return null;
+  const share =
+    session.declaredBytes === 0 ? 0 : (session.receivedBytes / session.declaredBytes) * 100;
   return (
-    <div className="card stack">
-      <div className="spread">
+    <div className="mini">
+      <div
+        className="bar thin neutral"
+        role="progressbar"
+        aria-label="Upload in progress"
+        aria-valuenow={Math.floor(share)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <span style={{ width: `${share}%` }} />
+      </div>
+      <span className="small muted num">
+        {session.receivedFileCount} of {session.declaredFileCount} files ·{' '}
+        {formatBytes(session.receivedBytes)} of {formatBytes(session.declaredBytes)}
+      </span>
+    </div>
+  );
+}
+
+function JobCard({
+  job,
+  now,
+  primary,
+}: {
+  readonly job: ProUploadJob;
+  readonly now: number;
+  /** Only the most urgent job gets the amber button (one accent element in view). */
+  readonly primary: boolean;
+}) {
+  const status = STATUS_LABEL[job.bookingStatus] ?? {
+    label: formatCode(job.bookingStatus),
+    tone: 'idle',
+  };
+  const awaiting = AWAITING.has(job.bookingStatus);
+  return (
+    <article className="card lift job">
+      <div className="job-head">
         <div>
-          <strong>{job.bookingReference}</strong>{' '}
-          <span className="muted">
-            · {job.categoryCode} · {job.tier} · shot{' '}
-            {new Date(job.scheduledStart).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
-          </span>
+          <span className="ref">{job.bookingReference}</span>
+          <div className="meta">
+            <span>
+              <Icon name="camera" size="sm" />
+              {formatCode(job.categoryCode)} · {formatCode(job.tier)}
+            </span>
+            <span>
+              <Icon name="calendar" size="sm" />
+              Shot {formatDateTime(job.scheduledStart)}
+            </span>
+          </div>
         </div>
-        <span className={`pill ${status.tone}`}>{status.label}</span>
+        <StatusPill tone={status.tone} label={status.label} live={status.live} />
       </div>
       {awaiting ? (
-        <div className="spread">
-          <div className="stack">
-            <span>
-              Upload deadline: <Deadline job={job} now={now} />
-            </span>
-            <span className="muted small">
-              {MEDIA_LIMITS.uploadDeadlineHours} hours from check-out. A late upload counts against
-              your on-time rate (it affects the offers you get) and Clickco ops will call you.
-            </span>
-            {session ? (
-              <span className="small">
-                In progress: {session.receivedFileCount} of {session.declaredFileCount} files ·{' '}
-                {formatBytes(session.receivedBytes)} of {formatBytes(session.declaredBytes)}
-              </span>
-            ) : null}
+        <div className="job-foot">
+          <div>
+            <span className="micro faint">Upload deadline</span>
+            <Deadline job={job} now={now} />
+            <SessionProgress job={job} />
           </div>
-          <a className="button" href={`/jobs/${job.bookingId}/upload`}>
-            {session ? 'Resume upload' : 'Upload photos'}
+          <a
+            className={primary ? 'button' : 'button secondary'}
+            href={`/jobs/${job.bookingId}/upload`}
+          >
+            {job.activeSession ? 'Resume upload' : 'Upload photos'}
+            <Icon name="forward" size="sm" />
           </a>
         </div>
       ) : (
-        <div className="spread">
-          <span className="muted small">
-            {job.media.rawFiles} RAW · {job.media.jpegFiles} JPEG ·{' '}
-            {formatBytes(job.media.uploadedBytes)} uploaded
-          </span>
+        <div className="job-foot">
+          <div>
+            <div className="row">
+              <span className="chip">
+                <strong>{job.media.rawFiles}</strong> RAW
+              </span>
+              <span className="chip">
+                <strong>{job.media.jpegFiles}</strong> JPEG
+              </span>
+              <span className="chip">
+                <strong>{formatBytes(job.media.uploadedBytes)}</strong> uploaded
+              </span>
+            </div>
+          </div>
           <a className="button secondary" href={`/jobs/${job.bookingId}/status`}>
             View status
           </a>
         </div>
       )}
+    </article>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="card job" aria-hidden="true">
+      <div className="skeleton sk-title" />
+      <div className="skeleton sk-line" />
+      <div className="skeleton sk-short" />
     </div>
+  );
+}
+
+function Empty({ onRetry }: { readonly onRetry: () => void }) {
+  return (
+    <div className="card white empty reveal">
+      <div className="empty-art">
+        <span className="art-dots dots fade-mask" aria-hidden="true" />
+        <span className="tile lg round">
+          <Icon name="camera" size="lg" />
+        </span>
+      </div>
+      <h2>No shoots are waiting for an upload</h2>
+      <p className="lede">A job appears here as soon as you check out of a shoot in the Pro app.</p>
+      <button type="button" className="secondary" onClick={onRetry}>
+        <Icon name="refresh" size="sm" />
+        Check again
+      </button>
+    </div>
+  );
+}
+
+function Group({
+  title,
+  jobs,
+  now,
+  primaryId,
+  children,
+}: {
+  readonly title: string;
+  readonly jobs: readonly ProUploadJob[];
+  readonly now: number;
+  readonly primaryId: string | null;
+  readonly children?: ReactNode;
+}) {
+  if (jobs.length === 0) return null;
+  return (
+    <section className="group" aria-label={title}>
+      <h2 className="group-label">
+        {title} <span className="count num">{jobs.length}</span>
+      </h2>
+      {children}
+      <div className="group reveal-list">
+        {jobs.map((job) => (
+          <JobCard key={job.bookingId} job={job} now={now} primary={job.bookingId === primaryId} />
+        ))}
+      </div>
+    </section>
   );
 }
 
 /** Jobs awaiting upload, with a live countdown to check-out + 6 h (doc 02 §7). */
 export function JobList() {
+  // "Try again" / "Check again" remount the list, which starts a fresh load.
+  const [attempt, setAttempt] = useState(0);
+  return <Jobs key={attempt} onRetry={() => setAttempt((n) => n + 1)} />;
+}
+
+function Jobs({ onRetry }: { readonly onRetry: () => void }) {
   const now = useNow(1_000);
   const [jobs, setJobs] = useState<readonly ProUploadJob[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,23 +211,44 @@ export function JobList() {
     };
   }, []);
 
-  if (error) return <p className="err">{error}</p>;
-  if (jobs === null) return <p className="muted">Loading your jobs…</p>;
-  if (jobs.length === 0) {
+  if (error) {
     return (
-      <div className="card">
-        <p>No shoots are waiting for an upload.</p>
-        <p className="muted small">
-          A job appears here as soon as you check out of a shoot in the Pro app.
-        </p>
+      <div className="stack loose">
+        <Callout tone="bad" title="Could not load your shoots" alert>
+          {error}
+        </Callout>
+        <div>
+          <button type="button" className="secondary" onClick={onRetry}>
+            <Icon name="refresh" size="sm" />
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
+  if (jobs === null) {
+    return (
+      <div className="group" role="status">
+        <span className="visually-hidden">Loading your shoots…</span>
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    );
+  }
+  if (jobs.length === 0) return <Empty onRetry={onRetry} />;
+
+  const awaiting = jobs.filter((j) => AWAITING.has(j.bookingStatus));
+  const uploaded = jobs.filter((j) => !AWAITING.has(j.bookingStatus));
+  const primaryId = awaiting[0]?.bookingId ?? null;
   return (
-    <div>
-      {jobs.map((job) => (
-        <JobCard key={job.bookingId} job={job} now={now} />
-      ))}
+    <div className="groups">
+      <Group title="To upload" jobs={awaiting} now={now} primaryId={primaryId}>
+        <Callout tone="accent" title={`${MEDIA_LIMITS.uploadDeadlineHours}-hour upload window`}>
+          The clock starts when you check out. A late upload counts against your on-time rate (it
+          affects the offers you get) and Clickco ops will call you.
+        </Callout>
+      </Group>
+      <Group title="Uploaded" jobs={uploaded} now={now} primaryId={null} />
     </div>
   );
 }

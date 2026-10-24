@@ -5,7 +5,9 @@ import { PhoneE164, ProVerifyOtpResponse, RequestOtpResponse } from '@clickco/co
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
 import { api, errorMessage } from '../../shared/api';
+import { Icon } from '../../shared/icons';
 import { saveSession } from '../../shared/session';
+import { Callout } from '../../shared/ui';
 
 /** Development only: Next inlines NODE_ENV, so the helper does not exist in a production build. */
 const DEV = process.env.NODE_ENV === 'development';
@@ -94,59 +96,96 @@ export function SignIn() {
     else setError('No development OTP found yet — request a code first');
   };
 
+  const step = challengeId === null ? 1 : 2;
   return (
-    <div className="card stack narrow">
-      <h1>Photographer sign-in</h1>
-      <p className="muted small">
-        Use the mobile number registered with Clickco. We send a 6-digit code by SMS.
-      </p>
-      {challengeId === null ? (
-        <form className="stack" onSubmit={requestCode}>
-          <label>
-            Mobile number
-            <input
-              name="phone"
-              inputMode="tel"
-              autoComplete="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.trim())}
-            />
-          </label>
-          <button type="submit" disabled={busy}>
-            {busy ? 'Sending…' : 'Send code'}
-          </button>
-        </form>
-      ) : (
-        <form className="stack" onSubmit={verify}>
-          <label>
-            6-digit code sent to {phone}
-            <input
-              name="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            />
-          </label>
-          <button type="submit" disabled={busy || code.length !== 6}>
-            {busy ? 'Checking…' : 'Sign in'}
-          </button>
-          {DEV ? (
-            <button type="button" className="secondary" onClick={fillDevOtp} disabled={busy}>
-              Fill dev OTP
+    <section className="auth">
+      <div className="auth-bg dots fade-mask" aria-hidden="true" />
+      <div className="auth-card reveal">
+        <span className="tile lg accent">
+          <Icon name="camera" size="lg" />
+        </span>
+        <div className="auth-head">
+          <div className="steps" aria-hidden="true">
+            <span className="on" />
+            <span className={step === 2 ? 'on' : undefined} />
+          </div>
+          <span className="eyebrow">
+            Step {step} of 2 · {step === 1 ? 'Mobile number' : 'Verify'}
+          </span>
+          <h1>{step === 1 ? 'Photographer sign-in' : 'Enter your code'}</h1>
+          <p className="muted">
+            {step === 1
+              ? 'Use the mobile number registered with Clickco. We send a 6-digit code by SMS.'
+              : `We sent a 6-digit code by SMS to ${phone}.`}
+          </p>
+        </div>
+        {challengeId === null ? (
+          <form className="stack loose" onSubmit={requestCode}>
+            <label className="field">
+              Mobile number
+              <input
+                name="phone"
+                inputMode="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.trim())}
+              />
+              <span className="hint">+91 followed by your 10-digit number</span>
+            </label>
+            <button type="submit" className="block" disabled={busy}>
+              {busy ? 'Sending…' : 'Send code'}
+              {busy ? null : <Icon name="forward" size="sm" />}
             </button>
-          ) : null}
-          <button type="button" className="link" onClick={() => setChallengeId(null)}>
-            Use a different number
-          </button>
-        </form>
-      )}
-      {error ? (
-        <p className="err small" role="alert">
-          {error}
+          </form>
+        ) : (
+          <form className="stack loose" onSubmit={verify}>
+            <label className="field">
+              6-digit code
+              <input
+                name="code"
+                className="otp"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              />
+            </label>
+            <div className="stack">
+              <button type="submit" className="block" disabled={busy || code.length !== 6}>
+                {busy ? 'Checking…' : 'Sign in'}
+              </button>
+              {DEV ? (
+                <button
+                  type="button"
+                  className="secondary block"
+                  onClick={fillDevOtp}
+                  disabled={busy}
+                >
+                  Fill dev OTP
+                </button>
+              ) : null}
+              <button type="button" className="ghost block" onClick={() => setChallengeId(null)}>
+                Use a different number
+              </button>
+            </div>
+          </form>
+        )}
+        {error ? (
+          <div className="auth-error">
+            <Callout tone="bad" alert>
+              {error}
+            </Callout>
+          </div>
+        ) : null}
+        <p className="auth-foot">
+          <Icon name="shield" size="sm" />
+          <span>
+            You stay signed in only while this tab is open. An unfinished upload resumes after you
+            sign in again.
+          </span>
         </p>
-      ) : null}
-    </div>
+      </div>
+    </section>
   );
 }

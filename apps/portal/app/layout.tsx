@@ -20,13 +20,16 @@ export default async function RootLayout({ children }: { readonly children: Reac
       </head>
       <body>
         <header className="top">
-          <a className="brand" href="/jobs">
-            Clickco Upload
-          </a>
-          <nav>
-            <a href="/jobs">Jobs</a>
-            <SignOut />
-          </nav>
+          <div className="top-inner">
+            <a className="brand" href="/jobs" aria-label="Clickco Upload — your shoots">
+              <span className="brand-mark" aria-hidden="true" />
+              <span>Clickco</span>
+              <span className="brand-sub">Upload</span>
+            </a>
+            <nav className="nav" aria-label="Account">
+              <SignOut />
+            </nav>
+          </div>
         </header>
         <main>{children}</main>
       </body>

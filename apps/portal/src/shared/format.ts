@@ -35,3 +35,55 @@ export function formatCountdown(
     ? { text: `${label} left`, overdue: false }
     : { text: `Overdue by ${label}`, overdue: true };
 }
+
+/** Clickco operates in India: dates and times are shown in IST whatever the browser's zone. */
+const INDIA_TIME_ZONE = 'Asia/Kolkata';
+
+// en-US for the parts: its short month is "Sep" (en-IN / en-GB now say "Sept").
+const DATE_TIME_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: INDIA_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
+function parts(at: string | number): Readonly<Record<string, string>> {
+  const date = new Date(typeof at === 'string' ? Date.parse(at) : at);
+  return Object.fromEntries(DATE_TIME_PARTS.formatToParts(date).map((p) => [p.type, p.value]));
+}
+
+/** "14 Sep" (DESIGN.md: dates are DD MMM). */
+export function formatDate(at: string | number): string {
+  const p = parts(at);
+  return `${p.day} ${p.month}`;
+}
+
+/** "14 Sep, 4:30 pm" (DESIGN.md: 12-hour times with am/pm). */
+export function formatDateTime(at: string | number): string {
+  const p = parts(at);
+  return `${p.day} ${p.month}, ${p.hour}:${p.minute} ${(p.dayPeriod ?? '').toLowerCase()}`;
+}
+
+/** "SEMI_PRO" → "Semi Pro": enum codes shown to a person. */
+export function formatCode(code: string): string {
+  return code
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** "Vikram Reddy" → "VR", for the avatar. */
+export function initials(name: string): string {
+  const letters = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join('');
+  return letters || '?';
+}

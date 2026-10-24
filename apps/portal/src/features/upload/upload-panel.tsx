@@ -1,219 +1,217 @@
 'use client';
 
-import { JPEG_EXTENSIONS, MEDIA_LIMITS, RAW_EXTENSIONS } from '@clickco/contracts';
-import { type DragEvent, useEffect, useState } from 'react';
-import { formatBytes, formatCountdown, formatDuration } from '../../shared/format';
+import { MEDIA_LIMITS, type ProUploadJob } from '@clickco/contracts';
+import { useEffect } from 'react';
+import { formatBytes, formatCode, formatCountdown, formatDateTime } from '../../shared/format';
 import { useNow, useRequireSession } from '../../shared/hooks';
-import { summariseRejections } from './file-filter';
-import { filesFromDrop, filesFromInput } from './folder-drop';
-import type { UploadProgress } from './uploader';
+import { Icon } from '../../shared/icons';
+import { BackLink, Callout, Loading } from '../../shared/ui';
+import { DropZone, Rejections } from './drop-zone';
+import { ProgressView } from './progress-view';
+import { SelectStage } from './selection';
 import { type UploadStage, useUpload } from './use-upload';
 
-const ACCEPT = [...RAW_EXTENSIONS, ...JPEG_EXTENSIONS].join(',');
-/** React has no type for the non-standard folder-picker attribute. */
-const FOLDER_PICKER = { webkitdirectory: '', directory: '' } as Record<string, string>;
+type Upload = ReturnType<typeof useUpload>;
 
-function Rejections({
-  rejected,
-}: {
-  readonly rejected: Parameters<typeof summariseRejections>[0];
-}) {
-  if (rejected.length === 0) return null;
+function Head({ job, now }: { readonly job: ProUploadJob | null; readonly now: number }) {
+  const deadline = job?.uploadDeadlineAt
+    ? formatCountdown(Date.parse(job.uploadDeadlineAt), now)
+    : null;
   return (
-    <div className="card">
-      <strong>{rejected.length} file(s) skipped</strong>
-      <ul className="plain small">
-        {summariseRejections(rejected).map((g) => (
-          <li key={g.reason}>
-            <span className="err">{g.message}</span>
-            <span className="muted">
-              {' '}
-              — {g.names.slice(0, 5).join(', ')}
-              {g.names.length > 5 ? ` and ${g.names.length - 5} more` : ''}
+    <header className="page-head reveal">
+      <div>
+        <span className="eyebrow">Upload</span>
+        <h1 className="num">{job?.bookingReference ?? 'Upload photos'}</h1>
+        {job ? (
+          <div className="meta">
+            <span>
+              <Icon name="camera" size="sm" />
+              {formatCode(job.categoryCode)} · {formatCode(job.tier)}
             </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function DropZone({
-  onFiles,
-  label,
-}: {
-  readonly onFiles: (f: Awaited<ReturnType<typeof filesFromDrop>>) => void;
-  readonly label: string;
-}) {
-  const [active, setActive] = useState(false);
-  const [reading, setReading] = useState(false);
-  const onDrop = async (e: DragEvent) => {
-    e.preventDefault();
-    setActive(false);
-    setReading(true);
-    try {
-      onFiles(await filesFromDrop(e.dataTransfer));
-    } finally {
-      setReading(false);
-    }
-  };
-  return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a drag-and-drop target; keyboard users use the file and folder buttons inside it
-    <div
-      className={active ? 'drop active stack' : 'drop stack'}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setActive(true);
-      }}
-      onDragLeave={() => setActive(false)}
-      onDrop={onDrop}
-      data-testid="drop-zone"
-    >
-      <strong>{reading ? 'Reading the folder…' : label}</strong>
-      <span className="small">
-        RAW (.cr2 .cr3 .nef .arw .raf .orf .rw2 .dng) and JPEG. Everything else is skipped.
-      </span>
-      <div className="row center">
-        <label className="button secondary">
-          Choose files
-          <input
-            type="file"
-            multiple
-            accept={ACCEPT}
-            hidden
-            data-testid="file-input"
-            onChange={(e) => onFiles(filesFromInput(e.target.files))}
-          />
-        </label>
-        <label className="button secondary">
-          Choose card folder
-          <input
-            type="file"
-            multiple
-            hidden
-            {...FOLDER_PICKER}
-            onChange={(e) => onFiles(filesFromInput(e.target.files))}
-          />
-        </label>
-      </div>
-    </div>
-  );
-}
-
-function ProgressView({ progress }: { readonly progress: UploadProgress }) {
-  const share = progress.bytesAll === 0 ? 0 : (progress.bytesDone / progress.bytesAll) * 100;
-  return (
-    <div className="card stack" data-testid="progress">
-      <div
-        className="bar"
-        role="progressbar"
-        aria-valuenow={Math.floor(share)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <span style={{ width: `${share}%` }} />
-      </div>
-      <div className="stats">
-        <div className="stat">
-          <div className="muted small">Uploaded (confirmed)</div>
-          <div className="value">{formatBytes(progress.bytesDone)}</div>
-          <div className="muted small">of {formatBytes(progress.bytesAll)}</div>
-        </div>
-        <div className="stat">
-          <div className="muted small">Files verified</div>
-          <div className="value">
-            {progress.filesDone} / {progress.filesAll}
-          </div>
-        </div>
-        <div className="stat">
-          <div className="muted small">Speed</div>
-          <div className="value">
-            {progress.bytesPerSecond === null ? '—' : `${formatBytes(progress.bytesPerSecond)}/s`}
-          </div>
-        </div>
-        <div className="stat">
-          <div className="muted small">Time left</div>
-          <div className="value">
-            {progress.etaSeconds === null ? 'measuring…' : formatDuration(progress.etaSeconds)}
-          </div>
-        </div>
-      </div>
-      {progress.activeFiles.length > 0 ? (
-        <span className="muted small">Sending: {progress.activeFiles.slice(0, 4).join(', ')}</span>
-      ) : null}
-      {progress.retrying ? (
-        <span className="small warn-text">
-          Connection trouble — retry {progress.retrying.attempt} of{' '}
-          {MEDIA_LIMITS.backoffScheduleMs.length} in {progress.retrying.delayMs / 1000} s (
-          {progress.retrying.message})
-        </span>
-      ) : null}
-      {progress.error ? (
-        <p className="err" role="alert">
-          {progress.error.message}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function SelectStage({
-  stage,
-  onFiles,
-  onStart,
-  onClear,
-}: {
-  readonly stage: Extract<UploadStage, { kind: 'select' }>;
-  readonly onFiles: (f: Awaited<ReturnType<typeof filesFromDrop>>) => void;
-  readonly onStart: (frames: number) => void;
-  readonly onClear: () => void;
-}) {
-  const [frames, setFrames] = useState<number | null>(null);
-  const bytes = stage.accepted.reduce((sum, a) => sum + a.file.size, 0);
-  const raw = stage.accepted.filter((a) => a.kind === 'RAW_PHOTO').length;
-  const declared = frames ?? stage.detectedFrames;
-  return (
-    <div className="stack">
-      <DropZone onFiles={onFiles} label="Drag the card folder here" />
-      <Rejections rejected={stage.rejected} />
-      {stage.accepted.length > 0 ? (
-        <div className="card stack">
-          <div className="spread">
-            <strong data-testid="selection-summary">
-              {stage.accepted.length} files · {raw} RAW · {stage.accepted.length - raw} JPEG ·{' '}
-              {formatBytes(bytes)}
-            </strong>
-            <button type="button" className="link" onClick={onClear}>
-              Clear selection
-            </button>
-          </div>
-          <label>
-            Frames shot (a RAW + JPEG pair is one frame) — we found {stage.detectedFrames}
-            <input
-              name="frames"
-              inputMode="numeric"
-              value={String(declared)}
-              onChange={(e) =>
-                setFrames(Number.parseInt(e.target.value.replace(/\D/g, '') || '0', 10))
-              }
-            />
-          </label>
-          {declared !== stage.detectedFrames ? (
-            <span className="err small">
-              The selected files contain {stage.detectedFrames} frames. Add the missing files, or
-              correct the count.
+            <span>
+              <Icon name="calendar" size="sm" />
+              Shot {formatDateTime(job.scheduledStart)}
             </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => onStart(declared)}
-            disabled={declared !== stage.detectedFrames}
+          </div>
+        ) : null}
+      </div>
+      {deadline && job?.uploadDeadlineAt ? (
+        <div className="deadline-box">
+          <span className="micro faint">Upload deadline</span>
+          <span
+            className={deadline.overdue ? 'countdown overdue' : 'countdown'}
+            data-testid="deadline"
           >
-            Start upload
+            {deadline.text}
+          </span>
+          <span className="muted small">
+            Due {formatDateTime(job.uploadDeadlineAt)} · {MEDIA_LIMITS.uploadDeadlineHours} h after
+            check-out
+          </span>
+        </div>
+      ) : null}
+    </header>
+  );
+}
+
+function Blocked({
+  stage,
+  bookingId,
+}: {
+  readonly stage: Extract<UploadStage, { kind: 'blocked' }>;
+  readonly bookingId: string;
+}) {
+  return (
+    <div className="card white empty reveal">
+      <span className={stage.showStatus ? 'tile lg round ok' : 'tile lg round'}>
+        <Icon name={stage.showStatus ? 'check' : 'info'} size="lg" />
+      </span>
+      <h2>{stage.message}</h2>
+      <div className="row center">
+        {stage.showStatus ? (
+          <a className="button" href={`/jobs/${bookingId}/status`}>
+            View status
+          </a>
+        ) : null}
+        <a className="button secondary" href="/jobs">
+          Back to your shoots
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function Resume({
+  stage,
+  upload,
+  onCancel,
+}: {
+  readonly stage: Extract<UploadStage, { kind: 'resume' }>;
+  readonly upload: Upload;
+  readonly onCancel: () => void;
+}) {
+  const { session, missing } = stage;
+  const share =
+    session.declaredBytes === 0 ? 0 : (session.receivedBytes / session.declaredBytes) * 100;
+  return (
+    <div className="stack loose">
+      <section className="card white stack loose reveal">
+        <div className="lead-row">
+          <span className="tile warn">
+            <Icon name="refresh" />
+          </span>
+          <div className="stack tight">
+            <h2>An upload for this shoot is unfinished</h2>
+            <p className="muted">
+              {session.receivedFileCount} of {session.declaredFileCount} files are already verified.
+              Drop the same card folder to resume — finished parts are not sent again.
+            </p>
+          </div>
+        </div>
+        <div
+          className="bar neutral"
+          role="progressbar"
+          aria-label="Already uploaded"
+          aria-valuenow={Math.floor(share)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <span style={{ width: `${share}%` }} />
+        </div>
+        {missing.length > 0 ? (
+          <Callout tone="bad" title="Some files are still missing">
+            Still missing from what you dropped:{' '}
+            {missing
+              .slice(0, 5)
+              .map((f) => f.name)
+              .join(', ')}
+            {missing.length > 5 ? ` and ${missing.length - 5} more` : ''}. Files must be the same
+            (name, size and date) as when the upload started.
+          </Callout>
+        ) : null}
+      </section>
+      <DropZone onFiles={upload.addFiles} title="Drop the same card folder to resume" />
+      <Rejections rejected={stage.rejected} />
+      <div className="row">
+        <button type="button" className="danger" onClick={onCancel}>
+          <Icon name="x" size="sm" />
+          Cancel this upload and start again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const RUN_NOTE = {
+  running:
+    'Keep this tab open. If it closes, sign in again and drop the same folder — the upload resumes where it stopped.',
+  paused: 'Paused. Parts already confirmed are kept — resume when you are ready.',
+  failed: 'Resume to try again from where it stopped.',
+} as const;
+
+function Running({
+  stage,
+  upload,
+  onCancel,
+}: {
+  readonly stage: Extract<UploadStage, { kind: 'running' | 'paused' | 'failed' }>;
+  readonly upload: Upload;
+  readonly onCancel: () => void;
+}) {
+  return (
+    <div className="stack loose">
+      <ProgressView progress={stage.progress} kind={stage.kind} />
+      <div className="spread">
+        <span className="small muted">{RUN_NOTE[stage.kind]}</span>
+        <div className="row">
+          {stage.kind === 'running' ? (
+            <button
+              type="button"
+              className="secondary"
+              onClick={upload.pause}
+              disabled={stage.progress.phase === 'finishing'}
+            >
+              <Icon name="pause" size="sm" />
+              Pause
+            </button>
+          ) : (
+            <button type="button" onClick={() => void upload.resume()}>
+              <Icon name="play" size="sm" />
+              Resume
+            </button>
+          )}
+          <button type="button" className="danger" onClick={onCancel}>
+            <Icon name="x" size="sm" />
+            Cancel upload
           </button>
         </div>
-      ) : null}
+      </div>
     </div>
+  );
+}
+
+function Done({
+  stage,
+  bookingId,
+}: {
+  readonly stage: Extract<UploadStage, { kind: 'done' }>;
+  readonly bookingId: string;
+}) {
+  return (
+    <section className="card white done-card reveal" data-testid="upload-done">
+      <span className="tile lg round ok">
+        <Icon name="check" size="lg" />
+      </span>
+      <h2>Upload complete — {stage.result.receivedFileCount} files verified</h2>
+      <p className="lede">
+        {formatBytes(stage.result.receivedBytes)} received and checked. Clickco now converts the RAW
+        files and runs QA.
+      </p>
+      <a className="button" href={`/jobs/${bookingId}/status`}>
+        View status
+        <Icon name="forward" size="sm" />
+      </a>
+    </section>
   );
 }
 
@@ -233,9 +231,6 @@ export function UploadPanel({ bookingId }: { readonly bookingId: string }) {
     return () => window.removeEventListener('beforeunload', warn);
   }, [stage.kind]);
 
-  const deadline = job?.uploadDeadlineAt
-    ? formatCountdown(Date.parse(job.uploadDeadlineAt), now)
-    : null;
   const confirmCancel = () => {
     if (
       window.confirm(
@@ -247,52 +242,16 @@ export function UploadPanel({ bookingId }: { readonly bookingId: string }) {
   };
 
   return (
-    <div className="stack">
-      <div className="spread">
-        <div>
-          <h1>Upload {job?.bookingReference ?? ''}</h1>
-          {job ? (
-            <span className="muted">
-              {job.categoryCode} · {job.tier}
-            </span>
-          ) : null}
-        </div>
-        {deadline ? (
-          <div className="stack align-end">
-            <span
-              className={deadline.overdue ? 'overdue countdown' : 'countdown'}
-              data-testid="deadline"
-            >
-              {deadline.text}
-            </span>
-            <span className="muted small">
-              Upload deadline: {MEDIA_LIMITS.uploadDeadlineHours} h after check-out
-            </span>
-          </div>
-        ) : null}
-      </div>
+    <div className="page">
+      <BackLink href="/jobs">Your shoots</BackLink>
+      <Head job={job} now={now} />
       {upload.error ? (
-        <p className="err" role="alert">
+        <Callout tone="bad" alert>
           {upload.error}
-        </p>
+        </Callout>
       ) : null}
-
-      {stage.kind === 'loading' ? <p className="muted">Loading…</p> : null}
-      {stage.kind === 'blocked' ? (
-        <div className="card stack">
-          <span>{stage.message}</span>
-          <div className="row">
-            {stage.showStatus ? (
-              <a className="button" href={`/jobs/${bookingId}/status`}>
-                View status
-              </a>
-            ) : null}
-            <a className="button secondary" href="/jobs">
-              Back to jobs
-            </a>
-          </div>
-        </div>
-      ) : null}
+      {stage.kind === 'loading' ? <Loading /> : null}
+      {stage.kind === 'blocked' ? <Blocked stage={stage} bookingId={bookingId} /> : null}
       {stage.kind === 'select' ? (
         <SelectStage
           stage={stage}
@@ -302,77 +261,12 @@ export function UploadPanel({ bookingId }: { readonly bookingId: string }) {
         />
       ) : null}
       {stage.kind === 'resume' ? (
-        <div className="stack">
-          <div className="card stack">
-            <strong>An upload for this shoot is unfinished</strong>
-            <span className="muted">
-              {stage.session.receivedFileCount} of {stage.session.declaredFileCount} files are
-              already verified. Drop the same card folder to resume — finished parts are not sent
-              again.
-            </span>
-            {stage.missing.length > 0 ? (
-              <span className="err small">
-                Still missing from what you dropped:{' '}
-                {stage.missing
-                  .slice(0, 5)
-                  .map((f) => f.name)
-                  .join(', ')}
-                {stage.missing.length > 5 ? ` and ${stage.missing.length - 5} more` : ''}. Files
-                must be the same (name, size and date) as when the upload started.
-              </span>
-            ) : null}
-            <div className="row">
-              <button type="button" className="danger" onClick={confirmCancel}>
-                Cancel this upload and start again
-              </button>
-            </div>
-          </div>
-          <DropZone onFiles={upload.addFiles} label="Drop the same card folder to resume" />
-          <Rejections rejected={stage.rejected} />
-        </div>
+        <Resume stage={stage} upload={upload} onCancel={confirmCancel} />
       ) : null}
       {stage.kind === 'running' || stage.kind === 'paused' || stage.kind === 'failed' ? (
-        <div className="stack">
-          <ProgressView progress={stage.progress} />
-          <div className="row">
-            {stage.kind === 'running' ? (
-              <button
-                type="button"
-                className="secondary"
-                onClick={upload.pause}
-                disabled={stage.progress.phase === 'finishing'}
-              >
-                Pause
-              </button>
-            ) : (
-              <button type="button" onClick={() => void upload.resume()}>
-                Resume
-              </button>
-            )}
-            <button type="button" className="danger" onClick={confirmCancel}>
-              Cancel upload
-            </button>
-          </div>
-          {stage.kind === 'running' ? (
-            <span className="muted small">
-              Keep this tab open. If it closes, sign in again and drop the same folder — the upload
-              resumes where it stopped.
-            </span>
-          ) : null}
-        </div>
+        <Running stage={stage} upload={upload} onCancel={confirmCancel} />
       ) : null}
-      {stage.kind === 'done' ? (
-        <div className="card stack" data-testid="upload-done">
-          <strong>Upload complete — {stage.result.receivedFileCount} files verified</strong>
-          <span className="muted">
-            {formatBytes(stage.result.receivedBytes)} received and checked. Clickco now converts the
-            RAW files and runs QA.
-          </span>
-          <a className="button" href={`/jobs/${bookingId}/status`}>
-            View status
-          </a>
-        </div>
-      ) : null}
+      {stage.kind === 'done' ? <Done stage={stage} bookingId={bookingId} /> : null}
     </div>
   );
 }
