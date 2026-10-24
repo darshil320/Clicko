@@ -2,6 +2,29 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-24 · Daylight — marketing website redesign (branch feat/web-daylight)
+**Shipped**
+- ADR-0018 + docs/DESIGN-DAYLIGHT.md: a marketing-only brand layer on the white theme. Warm paper
+  ground, linen bands, sage/clay/haze tints, one darkroom band, placeholder photo colours,
+  Instrument Serif display + Inter Tight + Geist Mono (self-hosted via next/font, no new deps)
+- design-tokens: `colorDaylight` (colorLight's names), `daylightExtras`, `daylightType`,
+  `daylightRadius`, `daylightElevation`; tests mirror the doc and check WCAG AA per ground
+- apps/web: PhotoFrame with seven placeholder moods (real photos drop in via `src`); editorial
+  hero with photo collage around the real Surat quote; photo cards for steps, categories, cities;
+  tinted trust tiles; pricing on the linen band; Emergency table on the darkroom panel; amber app
+  panel; capsule header; darkroom footer with wordmark; photo heroes on city/category/cities pages
+- Content, prices (rate card, paise), lead-time table, waitlist form, legal links: unchanged
+- Tests: web 129 · design-tokens 76 · repo typecheck and tests 15/15
+
+**Visual reference:** the Clickco Daylight design-system artifact (claude.ai, private to Darshil).
+
+**Not done:** real photography (frames show placeholder moods); Darkroom (dark) website theme is
+out of scope; `build:production` still needs `NEXT_PUBLIC_API_URL` and the legal fields, as before.
+
+**Note:** `main` does not exist; `master` is 49 commits behind, so this branch is cut from
+feat/sprint-5-dispatch. Local pnpm 11 needs Node 22 (`nvm alias default 22` set; restart the app
+so hooks pick it up).
+
 ## 2026-10-24 · Sprint 8 (delivery + SLA) and the white theme
 **Shipped**
 - S8 API: QA gate (dev console until the S9 desk); balance order with the GST invoice issued at
