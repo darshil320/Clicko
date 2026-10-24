@@ -7,8 +7,10 @@ import { Hero } from '../src/components/home/Hero';
 import { HomeFaq } from '../src/components/home/HomeFaq';
 import { HowItWorks } from '../src/components/home/HowItWorks';
 import { Pricing } from '../src/components/home/Pricing';
+import { ShootMarquee } from '../src/components/home/ShootMarquee';
 import { Trust } from '../src/components/home/Trust';
 import { JsonLd } from '../src/components/ui/JsonLd';
+import { WaitlistSection } from '../src/components/waitlist/WaitlistSection';
 import { LAUNCH_CITIES } from '../src/content/cities';
 import { HOME_FAQS } from '../src/content/home';
 import { SITE } from '../src/content/site';
@@ -28,12 +30,14 @@ export default function Home() {
     <div className="page">
       <JsonLd data={[organizationLd(LAUNCH_CITIES), faqPageLd(HOME_FAQS)]} />
       <Hero />
+      <ShootMarquee />
       <HowItWorks />
+      <Trust />
       <Pricing />
       <Categories />
       <Emergency />
       <CitiesServed />
-      <Trust />
+      <WaitlistSection />
       <HomeFaq />
       <AppDownload />
     </div>

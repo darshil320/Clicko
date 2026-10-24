@@ -1,4 +1,6 @@
 import { PRIMARY_NAV, SITE } from '../../content/site';
+import { paths } from '../../lib/routes';
+import { BrandMark } from './BrandMark';
 
 export function SiteHeader() {
   return (
@@ -7,7 +9,8 @@ export function SiteHeader() {
         Skip to content
       </a>
       <div className="wrap bar">
-        <a className="brand" href="/" aria-label={`${SITE.name} home`}>
+        <a className="brand" href={paths.home} aria-label={`${SITE.name} home`}>
+          <BrandMark />
           {SITE.name}
         </a>
         <nav className="site-nav" aria-label="Primary">
@@ -19,6 +22,9 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
+        <a className="btn btn-dark btn-sm header-cta" href={`${paths.cities}#waitlist`}>
+          Join the waitlist
+        </a>
       </div>
     </header>
   );

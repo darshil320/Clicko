@@ -1,4 +1,4 @@
-import { color } from '@clickco/design-tokens';
+import { colorLight } from '@clickco/design-tokens';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { SiteFooter } from '../src/components/site/SiteFooter';
@@ -30,8 +30,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: color.surface.base,
-  colorScheme: 'dark',
+  themeColor: colorLight.surface.base,
+  colorScheme: 'light',
   width: 'device-width',
   initialScale: 1,
 };

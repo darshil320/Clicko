@@ -1,4 +1,4 @@
-import { color } from '@clickco/design-tokens';
+import { color, colorLight } from '@clickco/design-tokens';
 import { describe, expect, it } from 'vitest';
 import { siteCss } from '../theme';
 import { brandMarkSvg } from './brand-mark';
@@ -23,7 +23,8 @@ describe('siteCss', () => {
     const css = siteCss();
     const root = css.slice(css.indexOf(':root{'), css.indexOf('}', css.indexOf(':root{')));
     const rest = css.replace(root, '');
-    expect(root).toContain(`--color-accent-default:${color.accent.default}`);
+    expect(root).toContain(`--color-accent-default:${colorLight.accent.default}`);
+    expect(root).toContain(`--color-surface-base:${colorLight.surface.base}`);
     expect(rest).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/);
   });
 });

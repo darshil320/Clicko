@@ -1,14 +1,21 @@
 import { LAUNCH_CITIES, statusLabel, WAITLIST_EXAMPLES } from '../../content/cities';
 import { paths } from '../../lib/routes';
+import { Icon } from '../ui/Icon';
 import { Section } from '../ui/Section';
+
+/** How many example neighbourhoods a city card lists. */
+const AREAS_SHOWN = 4;
 
 export function CityCards() {
   return (
     <ul className="grid grid-3">
       {LAUNCH_CITIES.map((city) => (
-        <li key={city.slug} className="card">
+        <li key={city.slug} className="card lift city-card">
           <span className={`badge ${city.status === 'LIVE' ? 'badge-live' : 'badge-pilot'}`}>
             {statusLabel(city.status)}
+          </span>
+          <span className="card-arrow" aria-hidden="true">
+            <Icon name="arrowRight" />
           </span>
           <h3>
             <a className="card-link" href={paths.cityHub(city)}>
@@ -16,6 +23,10 @@ export function CityCards() {
             </a>
           </h3>
           <p className="muted">{city.summary}</p>
+          <p className="city-areas push">
+            <Icon name="mapPin" />
+            {city.areas.slice(0, AREAS_SHOWN).join(' · ')}
+          </p>
         </li>
       ))}
     </ul>
@@ -26,6 +37,7 @@ export function CitiesServed() {
   return (
     <Section
       id="cities"
+      raised
       eyebrow="Where we shoot"
       title="Live in Surat and Mumbai. Piloting in Vadodara."
       lead="The app works anywhere in India. Booking opens pincode by pincode, and the waitlist decides where we go next."
@@ -41,14 +53,16 @@ export function CitiesServed() {
           <ul className="chips" aria-label="Cities on the waitlist">
             {WAITLIST_EXAMPLES.map((name) => (
               <li key={name} className="chip">
+                <Icon name="mapPin" />
                 {name}
               </li>
             ))}
           </ul>
         </div>
         <div>
-          <a className="btn btn-secondary" href={`${paths.cities}#waitlist`}>
+          <a className="btn btn-secondary" href="#waitlist">
             Join the waitlist
+            <Icon name="arrowRight" />
           </a>
         </div>
       </div>

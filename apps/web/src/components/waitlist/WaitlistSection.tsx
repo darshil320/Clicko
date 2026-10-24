@@ -14,7 +14,9 @@ export function WaitlistSection() {
       lead="Tell us where you need a photographer. We open new cities in order of waitlist demand, and we will message you when booking opens near you."
     >
       <div className="split">
-        <WaitlistForm />
+        <div className="form-card">
+          <WaitlistForm />
+        </div>
         <div>
           <h3>How the waitlist works</h3>
           <ul className="checklist">

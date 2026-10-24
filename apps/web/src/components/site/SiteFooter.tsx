@@ -3,6 +3,7 @@ import { LAUNCH_CITIES } from '../../content/cities';
 import { CONTACT, LEGAL_LINKS, SITE } from '../../content/site';
 import { LEGAL } from '../../legal/config';
 import { paths } from '../../lib/routes';
+import { BrandMark } from './BrandMark';
 
 const DEFAULT_CITY = LAUNCH_CITIES[0];
 
@@ -11,8 +12,11 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="wrap">
         <div className="footer-grid">
-          <div>
-            <p className="footer-brand">{SITE.name}</p>
+          <div className="footer-about">
+            <p className="footer-brand">
+              <BrandMark />
+              {SITE.name}
+            </p>
             <p>
               On-demand professional photography. Live in Surat and Mumbai, pilot in Vadodara,
               waitlist everywhere else in India.

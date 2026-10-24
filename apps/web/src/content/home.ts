@@ -37,6 +37,8 @@ export interface TrustPoint {
   readonly title: string;
   readonly body: string;
   readonly link?: { readonly label: string; readonly href: string };
+  /** Short proof points, shown as chips on the wide bento tiles. */
+  readonly facts?: readonly string[];
 }
 
 export const TRUST_POINTS: readonly TrustPoint[] = [
@@ -45,6 +47,7 @@ export const TRUST_POINTS: readonly TrustPoint[] = [
     body:
       'Every photographer passes KYC, police verification and a portfolio review by our team ' +
       'before their first booking. We never store Aadhaar numbers.',
+    facts: ['KYC', 'Police verification', 'Portfolio review'],
   },
   {
     title: 'Dual-card backup',
@@ -64,8 +67,19 @@ export const TRUST_POINTS: readonly TrustPoint[] = [
       'Complaints are acknowledged within 48 hours and resolved within 30 days, as the Consumer ' +
       'Protection (E-Commerce) Rules require.',
     link: { label: 'Grievance redressal', href: '/grievance/' },
+    facts: ['Acknowledged within 48 hours', 'Resolved within 30 days'],
   },
 ];
+
+/**
+ * Illustrative app activity beside the hero's sample quote. It is a mock of the app, so it uses
+ * a mock name (DESIGN.md §Content rules) and is hidden from assistive tech.
+ */
+export const HERO_ACTIVITY = {
+  photographer: 'Rahul Mehta',
+  assigned: 'Photographer assigned',
+  delivered: 'Photos delivered',
+} as const;
 
 export const HOME_FAQS: readonly Faq[] = [
   {

@@ -1,24 +1,32 @@
-import { Section } from '../ui/Section';
+import { Icon } from '../ui/Icon';
 
 const STORES = ['App Store', 'Google Play'] as const;
 
-/** Store badges as text until the listings exist (PLAN S12). Not links: there is nowhere to go yet. */
+/** Closing call to action. Store badges are text until the listings exist (PLAN S12): nowhere to link yet. */
 export function AppDownload() {
   return (
-    <Section
-      id="app"
-      eyebrow="The Clickco app"
-      title="Booking happens in the app"
-      lead="Choose a plan, see the full price with GST, pay securely and follow your booking from confirmation to delivery. The app is on its way to the stores."
-    >
-      <ul className="store-badges" aria-label="App downloads">
-        {STORES.map((store) => (
-          <li key={store} className="store-badge">
-            <small>Coming soon</small>
-            {store}
-          </li>
-        ))}
-      </ul>
-    </Section>
+    <section id="app" className="section" aria-labelledby="app-title">
+      <div className="wrap">
+        <div className="cta-panel reveal">
+          <p className="eyebrow">The Clickco app</p>
+          <h2 id="app-title">Booking happens in the app</h2>
+          <p className="lead">
+            Choose a plan, see the full price with GST, pay securely and follow your booking from
+            confirmation to delivery. The app is on its way to the stores.
+          </p>
+          <ul className="store-badges" aria-label="App downloads">
+            {STORES.map((store) => (
+              <li key={store} className="store-badge">
+                <Icon name="phone" />
+                <span>
+                  <small>Coming soon</small>
+                  {store}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
   );
 }

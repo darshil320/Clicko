@@ -118,8 +118,11 @@ export default async function CityCategoryPage({ params }: Props) {
               ))}
             </ul>
           </div>
-          <div className={`card edge edge-${recommended.edge}`}>
-            <p className="tier-name">Our recommendation</p>
+          <div className={`card tier recommend tone-${recommended.edge}`}>
+            <p className="tier-name">
+              <span className="tier-dot" aria-hidden="true" />
+              Our recommendation
+            </p>
             <h3>{recommended.label}</h3>
             <p className="muted">{category.recommended.why}</p>
           </div>

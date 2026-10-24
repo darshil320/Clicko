@@ -6,6 +6,8 @@ export function HomeFaq() {
   return (
     <Section
       id="faq"
+      raised
+      split
       eyebrow="Help"
       title="Questions, answered"
       lead={

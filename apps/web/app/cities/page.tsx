@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CityCards } from '../../src/components/home/CitiesServed';
 import { Breadcrumbs } from '../../src/components/ui/Breadcrumbs';
+import { Icon } from '../../src/components/ui/Icon';
 import { JsonLd } from '../../src/components/ui/JsonLd';
 import { Section } from '../../src/components/ui/Section';
 import { WaitlistSection } from '../../src/components/waitlist/WaitlistSection';
@@ -52,6 +53,7 @@ export default function CitiesPage() {
         <ul className="chips" aria-label="Examples of waitlist cities">
           {WAITLIST_EXAMPLES.map((name) => (
             <li key={name} className="chip">
+              <Icon name="mapPin" />
               {name}
             </li>
           ))}

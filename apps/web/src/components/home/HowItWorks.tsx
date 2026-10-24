@@ -1,6 +1,8 @@
 import { HOW_IT_WORKS } from '../../content/home';
 import { Section } from '../ui/Section';
 
+const numeral = (index: number): string => `${index + 1}`.padStart(2, '0');
+
 export function HowItWorks() {
   return (
     <Section
@@ -9,11 +11,11 @@ export function HowItWorks() {
       title="From booking to photos in four steps"
       lead="No calls, no negotiating, no chasing a photographer for files."
     >
-      <ol className="grid grid-4 steps">
+      <ol className="steps">
         {HOW_IT_WORKS.map((step, index) => (
-          <li key={step.title} className="card">
+          <li key={step.title} className="step">
             <span className="step-num" aria-hidden="true">
-              {index + 1}
+              {numeral(index)}
             </span>
             <h3>
               <span className="sr-only">Step {index + 1}: </span>

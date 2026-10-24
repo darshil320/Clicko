@@ -7,6 +7,8 @@ import { formatRupees } from '../../lib/money';
 import { fromPrice } from '../../lib/pricing';
 import { paths } from '../../lib/routes';
 import { Breadcrumbs } from '../ui/Breadcrumbs';
+import { CategoryIcon } from '../ui/CategoryIcon';
+import { Icon, IconChip } from '../ui/Icon';
 
 export function StatusBadge({ city }: { readonly city: LaunchCity }) {
   return (
@@ -43,6 +45,7 @@ export function PageHero({
 export function CityNotes({ city }: { readonly city: LaunchCity }) {
   return (
     <div className="card">
+      <IconChip name="mapPin" />
       <h3>Good to know in {city.name}</h3>
       <p className="muted">
         Areas we shoot in include {city.areas.slice(0, -1).join(', ')} and {city.areas.at(-1)}.
@@ -67,12 +70,19 @@ export function CategoryLinks({
   readonly city: LaunchCity;
   readonly exclude?: Category['slug'];
 }) {
+  const shown = CATEGORIES.filter((category) => category.slug !== exclude);
+  // Seven cards use the feature grid (one wide card fills the gap); six sit evenly in threes.
+  const grid = shown.length % 2 === 1 ? 'grid grid-4 grid-feature' : 'grid grid-3';
   return (
-    <ul className="grid grid-4">
-      {CATEGORIES.filter((category) => category.slug !== exclude).map((category) => {
+    <ul className={grid}>
+      {shown.map((category) => {
         const price = fromPrice('BASIC', city.tier, CATEGORY_UPLIFT_BPS[category.code]);
         return (
-          <li key={category.slug} className="card">
+          <li key={category.slug} className="card lift">
+            <CategoryIcon code={category.code} />
+            <span className="card-arrow" aria-hidden="true">
+              <Icon name="arrowRight" />
+            </span>
             <h3>
               <a className="card-link" href={paths.cityCategory(city, category)}>
                 {category.label} photography
