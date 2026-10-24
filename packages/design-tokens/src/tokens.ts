@@ -31,13 +31,73 @@ export const colorLight = {
   danger: '#DC2626',
 } as const satisfies { readonly [K in keyof typeof color]: unknown };
 
-export type Palette = typeof color | typeof colorLight;
+/**
+ * ADR-0018 — Daylight, the marketing website's palette. Same keys as `colorLight`, so the web
+ * styles keep their semantic variables: warm paper ground, linen bands, white cards.
+ * Source: docs/DESIGN-DAYLIGHT.md. The client app and the portal stay on `colorLight`.
+ */
+export const colorDaylight = {
+  surface: { base: '#FBFAF7', raised: '#F3EFE7', overlay: '#FFFFFF' },
+  border: { subtle: '#E8E3D9', strong: '#D3CCBF' },
+  text: { primary: '#141210', secondary: '#4B4640', tertiary: '#6E675D', 'on-accent': '#1A1206' },
+  accent: { default: '#FFB63D', hover: '#F5A524', subtle: '#FFF1D6' },
+  emergency: { default: '#C8262D', subtle: '#FFF1F1' },
+  success: '#15803D',
+  warning: '#B45309',
+  danger: '#DC2626',
+} as const satisfies { readonly [K in keyof typeof color]: unknown };
+
+/** Website-only colours beside `colorDaylight` (DESIGN-DAYLIGHT §Colour — extras, photographs). */
+export const daylightExtras = {
+  /** Amber as text: links and the italic accent word. Plain amber is never text. */
+  accent: { text: '#8A5000' },
+  sage: { default: '#DCE5D6', deep: '#3A5535' },
+  clay: { default: '#F3DED3', deep: '#934328' },
+  haze: { default: '#DDE6EE', deep: '#2C5170' },
+  darkroom: { default: '#121110', text: '#F6F2EA', muted: '#A39C90' },
+  /** Placeholder photographs only, never UI. */
+  photo: {
+    sun: '#FFC56B',
+    ember: '#D9703A',
+    rose: '#E6B3A1',
+    leaf: '#7E9A6E',
+    sea: '#7FA3BF',
+    cream: '#F6EBD9',
+    dusk: '#3B3330',
+  },
+} as const;
+
+export type Palette = typeof color | typeof colorLight | typeof colorDaylight;
 
 /** Light theme only: soft shadows (the dark theme uses surface layering instead). */
 export const elevation = {
   sm: '0 1px 2px rgba(14,14,16,0.04)',
   md: '0 2px 8px rgba(14,14,16,0.04), 0 8px 24px rgba(14,14,16,0.06)',
   lg: '0 24px 64px rgba(14,14,16,0.10)',
+} as const;
+
+/** Daylight (ADR-0018): the lift under photos floating in the hero collage. */
+export const daylightElevation = {
+  photo: '0 40px 80px -32px rgba(20,18,16,0.35)',
+} as const;
+
+/** Daylight (ADR-0018): photo frames and tiles, and full-width panels. Cards keep `radius.lg`. */
+export const daylightRadius = { photo: 28, panel: 40 } as const;
+
+/**
+ * Daylight (ADR-0018) web type: a serif display, the existing body sans, a mono for labels and
+ * camera captions, and fluid display steps from a small phone to the content max width.
+ */
+export const daylightType = {
+  family: { display: 'Instrument Serif', body: 'Inter Tight', mono: 'Geist Mono' },
+  fluid: {
+    hero: { min: 44, max: 96, leading: 0.94 },
+    page: { min: 40, max: 72, leading: 0.98 },
+    section: { min: 36, max: 64, leading: 1 },
+    figure: { min: 32, max: 48, leading: 1 },
+  },
+  /** Uppercase mono labels. */
+  labelTrackingEm: 0.12,
 } as const;
 
 /** Web vertical rhythm between sections, and content widths (DESIGN-LIGHT §Whitespace). */

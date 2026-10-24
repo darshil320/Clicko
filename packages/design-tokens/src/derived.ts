@@ -13,8 +13,11 @@ function mapValues<T, U>(obj: Record<string, T>, fn: (v: T) => U): Record<string
   return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fn(v)]));
 }
 
+/** A palette or a set of extras: colour groups one level deep. */
+export type ColourGroups = Readonly<Record<string, string | Readonly<Record<string, string>>>>;
+
 /** Flat list of [css-name, value] for every colour token, e.g. ["accent-default", "#FFB63D"]. */
-export function colourEntries(palette: Palette = color): Array<[string, string]> {
+export function colourEntries(palette: ColourGroups = color): Array<[string, string]> {
   return Object.entries(palette).flatMap(([group, value]) =>
     typeof value === 'string'
       ? [[group, value] as [string, string]]
