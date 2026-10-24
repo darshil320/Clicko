@@ -11,8 +11,13 @@ export function Emergency() {
   return (
     <Section
       id="emergency"
+      dark
       eyebrow="Same-day and emergency"
-      title="Need a photographer today?"
+      title={
+        <>
+          Need a photographer <em>today?</em>
+        </>
+      }
       lead="We will try — but we will not over-promise. Short-notice shoots cost more, and with less than 8 hours’ notice we cannot guarantee a photographer."
     >
       <div className="bands">

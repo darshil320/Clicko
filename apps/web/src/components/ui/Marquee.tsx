@@ -1,8 +1,11 @@
 import { Icon, type IconName } from './Icon';
+import { PhotoFrame, type PhotoMood } from './PhotoFrame';
 
 export interface MarqueeItem {
   readonly label: string;
   readonly icon?: IconName;
+  /** A tiny inline photo instead of an icon (DESIGN-DAYLIGHT §Imagery). */
+  readonly mood?: PhotoMood;
   /** Emphasised items (e.g. cities) read in primary text. */
   readonly strong?: boolean;
 }
@@ -18,7 +21,8 @@ function MarqueeList({
     <ul className="marquee-list" aria-hidden={hidden ? true : undefined}>
       {items.map((item) => (
         <li key={item.label} className={item.strong ? 'marquee-item marquee-city' : 'marquee-item'}>
-          {item.icon ? <Icon name={item.icon} /> : null}
+          {item.mood ? <PhotoFrame mood={item.mood} shape="pill" /> : null}
+          {item.icon && !item.mood ? <Icon name={item.icon} /> : null}
           {item.label}
         </li>
       ))}

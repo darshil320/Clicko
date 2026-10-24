@@ -3,6 +3,8 @@ import type { Faq } from './types';
 export interface Step {
   readonly title: string;
   readonly body: string;
+  /** One proof point from the body, shown as a chip on the step card. */
+  readonly fact: string;
 }
 
 /** Book → photographer assigned → shoot → photos in 48 h (v0.2 §6, T&C §2, §5). */
@@ -12,24 +14,28 @@ export const HOW_IT_WORKS: readonly Step[] = [
     body:
       'Pick a tier, a category, the date and the venue. You see the full price with GST before ' +
       'you pay — 50% to book, or 100% when the shoot is within 24 hours.',
+    fact: '50% to book',
   },
   {
     title: 'A photographer is assigned',
     body:
       'A verified photographer of your tier and category accepts the job. You see who is coming, ' +
       'and the app tells you when they are on the way.',
+    fact: 'Verified',
   },
   {
     title: 'The shoot',
     body:
       'Your photographer checks in on arrival and shoots for the hours you booked. Running over? ' +
       'Extensions happen only after you approve them in the app.',
+    fact: 'Check-in on arrival',
   },
   {
     title: 'Photos in 48 hours',
     body:
       'Every delivered frame as camera RAW plus a full-resolution JPEG, by secure link, within ' +
       '48 hours of the shoot ending and the balance being paid.',
+    fact: 'RAW + JPEG',
   },
 ];
 

@@ -2,11 +2,14 @@ import type { ReactNode } from 'react';
 
 export interface SectionProps {
   readonly id: string;
-  readonly title: string;
+  /** Plain text, or text with one <em> phrase in the accent (DESIGN-DAYLIGHT §Type). */
+  readonly title: ReactNode;
   readonly eyebrow?: string;
   readonly lead?: ReactNode;
-  /** Warm off-white band (surface/raised) to separate it from its neighbours. */
+  /** Linen band (surface/raised): one per page (DESIGN-DAYLIGHT §Rules). */
   readonly raised?: boolean;
+  /** The darkroom panel: one per page, for the Emergency explainer (ADR-0018). */
+  readonly dark?: boolean;
   /** Centre the heading block over the content. */
   readonly centered?: boolean;
   /** Heading on the left, content on the right (desktop); stacked on small screens. */
@@ -21,6 +24,7 @@ export function Section({
   eyebrow,
   lead,
   raised = false,
+  dark = false,
   centered = false,
   split = false,
   children,
@@ -37,7 +41,9 @@ export function Section({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={raised ? 'section section-raised' : 'section'}
+      className={['section', raised && 'section-raised', dark && 'section-dark']
+        .filter(Boolean)
+        .join(' ')}
     >
       {split ? (
         <div className="wrap section-split">

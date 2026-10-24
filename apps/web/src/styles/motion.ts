@@ -5,6 +5,7 @@ import {
   motionMs,
   motionOk,
   ms,
+  photoZoom,
   px,
   revealBlurPx,
   revealRange,
@@ -46,7 +47,7 @@ ${heroStagger()}
 @supports (animation-timeline:view()){
   .reveal{animation:rise linear both;animation-timeline:view();
     animation-range:entry ${revealRange.from}% entry ${revealRange.to}%}
-  .grid>li,.bento>li,.steps>li,.bands-list>li,.tiers>li,.faq>details{animation:fade-up linear both;
+  .grid>li,.bento>li,.steps>li,.marquee-band,.bands-list>li,.tiers>li,.faq>details{animation:fade-up linear both;
     animation-timeline:view();animation-range:entry ${revealRange.from}% entry ${revealRange.to}%}
 }
 .lift,.btn,.tab,.input,.nav-list a,.card-arrow{transition:transform ${quick},box-shadow ${quick},
@@ -54,6 +55,11 @@ ${heroStagger()}
 .lift:hover{transform:translateY(${px(-liftPx)})}
 .btn-primary:hover,.btn-dark:hover{transform:translateY(${px(-liftPx / 2)})}
 .lift:hover .card-arrow{transform:translateX(${px(liftPx)})}
+.photo::before{transition:scale ${ms(motionMs.heroMs)} ${ease}}
+.lift:hover>.photo::before{scale:${photoZoom}}
+.hero-stage .photo{animation:rise ${ms(motionMs.heroMs)} ${ease} both}
+.hero-stage .collage-top{animation-delay:${ms(staggerMs * 2)}}
+.hero-stage .collage-bottom{animation-delay:${ms(staggerMs * 4)}}
 .faq summary::after{transition:transform ${ms(motionMs.revealMs)} ${ease}}
 }`;
 }

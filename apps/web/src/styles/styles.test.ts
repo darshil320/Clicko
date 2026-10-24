@@ -32,8 +32,9 @@ describe('Daylight theme (ADR-0018, on ADR-0017)', () => {
     }
   });
 
-  it('never uses the amber fill as a text colour — only accent-text', () => {
-    expect(css).not.toMatch(/(^|[;{\s])color:var\(--color-accent-(?!text\))/);
+  it('never uses the amber fill as a text colour — only accent-text, or amber on darkroom', () => {
+    const light = css.replace(/\.section-dark[^{]*\{[^}]*\}/g, '');
+    expect(light).not.toMatch(/(^|[;{\s])color:var\(--color-accent-(?!text\))/);
   });
 
   it('paints with photo colours only inside the photo frame styles', () => {

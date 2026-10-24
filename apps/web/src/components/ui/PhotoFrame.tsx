@@ -50,7 +50,9 @@ export function PhotoFrame({
   shape = 'portrait',
   className,
 }: PhotoFrameProps) {
-  const classes = ['photo', `mood-${mood}`, SHAPE_CLASS[shape], className].filter(Boolean).join(' ');
+  const classes = ['photo', `mood-${mood}`, SHAPE_CLASS[shape], className]
+    .filter(Boolean)
+    .join(' ');
   const Tag = shape === 'pill' ? 'span' : 'figure';
   return (
     <Tag className={classes} aria-hidden={src ? undefined : true}>

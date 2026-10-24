@@ -58,7 +58,11 @@ const fallbacks = [
  * next/font self-hosts the Daylight families under hashed names and exposes each one as a CSS
  * variable on <html> (app/fonts.ts). The named family follows it for tools that skip next/font.
  */
-export const fontVar = { display: '--font-display', body: '--font-body', mono: '--font-mono' } as const;
+export const fontVar = {
+  display: '--font-display',
+  body: '--font-body',
+  mono: '--font-mono',
+} as const;
 const family = daylightType.family;
 export const fontBody = `var(${fontVar.body}),${quote(family.body)},${fallbacks}`;
 export const fontDisplay = `var(${fontVar.display}),${quote(family.display)},Georgia,"Times New Roman",serif`;
@@ -82,7 +86,14 @@ export const fluid = (min: number, max: number): string =>
 /** Unitless line heights: big type sits tight, reading text breathes. */
 export const leading = { display: 1.04, heading: 1.1, title: 1.3, lead: 1.55, prose: 1.7 } as const;
 /** Negative tracking for big headings, in em. */
-export const tracking = { display: -0.035, heading: -0.025, title: -0.01 } as const;
+export const tracking = {
+  display: -0.035,
+  heading: -0.025,
+  title: -0.01,
+  /** The brand lockup and the footer wordmark (ADR-0018 §Logo). */
+  lockup: -0.03,
+  wordmark: -0.05,
+} as const;
 
 interface FluidStep {
   readonly min: number;
@@ -155,6 +166,30 @@ export const bp = { sm: 640, lg: 960 } as const;
 export const mq = (min: number): string => `@media (min-width:${px(min)})`;
 /** Height of the header bar. */
 export const headerHeight = S[14] + S[2];
+
+/**
+ * The hero collage (desktop): a stage height and each frame's box as % of the stage, so the
+ * composition scales with the column. Frames overlap on purpose (DESIGN-DAYLIGHT §Imagery).
+ */
+export const collage = {
+  height: S[14] * 10 + S[10],
+  main: { left: 6, top: 2, width: 58, height: 78 },
+  sideTop: { right: 0, top: 0, width: 33, height: 40 },
+  sideBottom: { right: 0, bottom: 14, width: 33, height: 40 },
+  /** Mobile: the main photo's cap and how far the quote card climbs onto it. */
+  phoneMax: measure.stage,
+  quoteOverlap: S[14] * 2,
+} as const;
+
+/** Photo heights inside cards: category tiles, step cards and city cards. */
+export const cardPhotoHeight = S[14] * 4;
+
+/** The footer wordmark: from the hero's widest size to two and a half times it. */
+export const wordmark = {
+  min: daylightType.fluid.hero.max,
+  max: daylightType.fluid.hero.max * 2.5,
+  leading: 0.8,
+} as const;
 /** Width of the "booked" column in the lead-time table. */
 export const bandWhenColumn = S[14] * 4;
 
@@ -182,6 +217,10 @@ export const fx = {
   marqueeFade: 12,
   selectionPercent: 40,
   linkUnderlinePercent: 40,
+  /** The darkroom band: hairlines, inset wells and the amber glow, as % of their colour. */
+  darkRulePercent: 14,
+  darkWellPercent: 5,
+  darkGlowPercent: 30,
   focusHaloPercent: 45,
   noticeTint: 6,
   noticeEdge: 24,
@@ -193,6 +232,8 @@ export const fx = {
 export const motionOk = '@media (prefers-reduced-motion:no-preference)';
 export const ease = motion.easeOut;
 export const motionMs = motion;
+/** Photos zoom this much on card hover (DESIGN-DAYLIGHT §Motion). */
+export const photoZoom = 1.04;
 /** Hover lift: a quarter of the reveal rise. */
 export const liftPx = motion.revealRisePx / 4;
 /** Reveal blur, "light" per DESIGN-LIGHT. */

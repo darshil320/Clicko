@@ -1,4 +1,4 @@
-import { label, px, RD, R, S, stroke, tint, v } from './tokens';
+import { label, px, R, RD, S, stroke, tint, v } from './tokens';
 
 /**
  * Placeholder moods for photo frames (DESIGN-DAYLIGHT §Imagery): soft, photographic light painted
@@ -9,7 +9,8 @@ const glow = (w: number, h: number, at: string, colour: string, fade = 72): stri
   `radial-gradient(${w}% ${h}% at ${at},${colour} 0,transparent ${fade}%)`;
 const spark = (w: number, at: string, percent: number): string =>
   `radial-gradient(${w}% ${w}% at ${at},${tint('surface-overlay', percent)} 0,transparent 100%)`;
-const wash = (deg: number, ...stops: string[]): string => `linear-gradient(${deg}deg,${stops.join(',')})`;
+const wash = (deg: number, ...stops: string[]): string =>
+  `linear-gradient(${deg}deg,${stops.join(',')})`;
 const p = (name: string): string => v(`photo-${name}`);
 
 export const MOODS: Readonly<Record<string, readonly string[]>> = {

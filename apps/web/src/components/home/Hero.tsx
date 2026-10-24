@@ -4,42 +4,70 @@ import { TIERS } from '../../content/tiers';
 import { formatRupees } from '../../lib/money';
 import { fromPrice } from '../../lib/pricing';
 import { paths } from '../../lib/routes';
+import { ButtonArrow } from '../ui/ButtonArrow';
 import { Icon, IconChip } from '../ui/Icon';
-import { ImageSlot } from '../ui/ImageSlot';
+import { PhotoFrame } from '../ui/PhotoFrame';
 
-const surat = LAUNCH_CITIES[0];
+const [surat, mumbai, vadodara] = LAUNCH_CITIES;
 const entry = surat ? fromPrice('BASIC', surat.tier) : undefined;
 const sample = surat ? fromPrice('PROFESSIONAL', surat.tier) : undefined;
 
-function QuotePreview() {
+function QuoteCard() {
   if (!sample || !surat) return null;
-  const frames = TIERS.PROFESSIONAL.framesPerHour * sample.hours;
+  return (
+    <div className="collage-quote">
+      <div className="quote">
+        <h2>
+          {TIERS.PROFESSIONAL.label} · Portrait · {sample.hours} hours
+          <span>{surat.name}</span>
+        </h2>
+        <dl>
+          <div className="quote-row">
+            <dt>Photography</dt>
+            <dd>{formatRupees(sample.basePaise)}</dd>
+          </div>
+          <div className="quote-row">
+            <dt>GST 18%</dt>
+            <dd>{formatRupees(sample.gstPaise)}</dd>
+          </div>
+          <div className="quote-row quote-sum">
+            <dt>You pay</dt>
+            <dd>{formatRupees(sample.totalPaise)}</dd>
+          </div>
+        </dl>
+        <p className="quote-meta">
+          Weekday daytime, booked 2+ days ahead. 50% to book, the rest after the shoot.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The photo collage beside the headline: three frames (placeholders until real shoots exist),
+ * the app's two status cards (a mock, hidden from assistive tech) and the real sample quote.
+ */
+function Collage() {
+  const frames = TIERS.PROFESSIONAL.framesPerHour * (sample?.hours ?? 0);
   return (
     <div className="hero-stage">
-      <ImageSlot label={`${surat.name} · sample quote`}>
-        <div className="quote">
-          <h2>
-            {TIERS.PROFESSIONAL.label} · Portrait · {sample.hours} hours
-          </h2>
-          <dl>
-            <div className="quote-row">
-              <dt>Photography</dt>
-              <dd>{formatRupees(sample.basePaise)}</dd>
-            </div>
-            <div className="quote-row">
-              <dt>GST 18%</dt>
-              <dd>{formatRupees(sample.gstPaise)}</dd>
-            </div>
-            <div className="quote-row quote-sum">
-              <dt>You pay</dt>
-              <dd>{formatRupees(sample.totalPaise)}</dd>
-            </div>
-          </dl>
-          <p className="quote-meta">
-            Weekday daytime, booked 2+ days ahead. 50% to book, the rest after the shoot.
-          </p>
-        </div>
-      </ImageSlot>
+      <PhotoFrame
+        mood="golden"
+        caption={`Wedding · ${surat?.name ?? ''}`}
+        meta="85mm · f/1.8"
+        corners
+        className="collage-main"
+      />
+      <PhotoFrame
+        mood="plate"
+        caption={`Food · ${mumbai?.name ?? ''}`}
+        className="collage-side collage-top"
+      />
+      <PhotoFrame
+        mood="coast"
+        caption={`Real estate · ${vadodara?.name ?? ''}`}
+        className="collage-side collage-bottom"
+      />
       <div className="float float-start" aria-hidden="true">
         <IconChip name="userCheck" />
         <span>
@@ -54,23 +82,24 @@ function QuotePreview() {
           {frames} frames · RAW + JPEG
         </span>
       </div>
+      <QuoteCard />
     </div>
   );
 }
 
-/** Airy centred hero on a fading dot grid, then the sample quote with GST in the same block. */
+/** Editorial hero (ADR-0018): serif headline with an inline photo, facts, and the collage. */
 export function Hero() {
   return (
     <section className="hero" aria-labelledby="hero-title">
-      <div className="wrap">
+      <div className="wrap hero-grid">
         <div className="hero-copy">
           <p className="pill">
             <span className="live-dot" aria-hidden="true" />
             Live in Surat &amp; Mumbai · Pilot in Vadodara
           </p>
           <h1 id="hero-title">
-            Book a professional photographer.{' '}
-            <span className="soft">Get your photos in 48 hours.</span>
+            Book a professional <PhotoFrame mood="golden" shape="pill" /> photographer.{' '}
+            <em>Get your photos in 48 hours.</em>
           </h1>
           <p className="lead">
             Verified photographers for food, weddings, portraits, products, events, real estate and
@@ -79,10 +108,10 @@ export function Hero() {
           <div className="actions">
             <a className="btn btn-primary" href="#pricing">
               See prices
+              <ButtonArrow />
             </a>
             <a className="btn btn-secondary" href={paths.cities}>
               Is my city covered?
-              <Icon name="arrowRight" />
             </a>
           </div>
           <ul className="facts">
@@ -108,7 +137,7 @@ export function Hero() {
             </li>
           </ul>
         </div>
-        <QuotePreview />
+        <Collage />
       </div>
     </section>
   );

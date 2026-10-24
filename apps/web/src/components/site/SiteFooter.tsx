@@ -59,6 +59,9 @@ export function SiteFooter() {
             </ul>
           </nav>
         </div>
+        <p className="footer-wordmark" aria-hidden="true">
+          {SITE.name}
+        </p>
         <div className="footer-legal">
           <p>
             © {new Date().getFullYear()} {LEGAL.entityName}. {LEGAL.brandName} is operated by{' '}

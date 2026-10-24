@@ -7,7 +7,6 @@ import {
   L,
   label,
   measure,
-  micro,
   mq,
   px,
   R,
@@ -99,9 +98,11 @@ ${mq(bp.lg)}{.card{padding:${px(S[6])}}.card-arrow{top:${px(S[6])};right:${px(S[
   width:${px(S[10])};height:${px(S[10])};margin-bottom:${px(S[5])};border-radius:${px(R.md)};
   background:${v('surface-raised')};color:${v('text-primary')}}
 .icon-chip svg{width:${px(ICON.size)};height:${px(ICON.size)}}
-${TONES.map((tone) => `.tone-${tone}{background:${v(`${tone}-default`)};border-color:transparent}
+${TONES.map(
+  (tone) => `.tone-${tone}{background:${v(`${tone}-default`)};border-color:transparent}
 .tone-${tone} .icon-chip{background:${v('surface-overlay')};color:${v(`${tone}-deep`)}}
-.tone-${tone} .muted,.tone-${tone} .chip{color:${v('text-secondary')}}`).join('\n')}
+.tone-${tone} .muted,.tone-${tone} .chip{color:${v('text-secondary')}}`,
+).join('\n')}
 .price-note{${type(T.caption)};color:${v('text-secondary')};font-variant-numeric:tabular-nums;
   margin:${px(S[1])} 0 ${px(S[4])}}
 .checklist{list-style:none;margin:0 0 ${px(S[4])};padding:0;display:grid;gap:${px(S[3])}}
@@ -129,6 +130,8 @@ ${dot('pilot')}
 .badge-live{color:${v('success')}}
 .badge-pilot{color:${v('warning')}}
 .badge-emergency{background:${v('emergency-subtle')};border-color:transparent;color:${v('emergency-default')}}
+.badge-accent{background:${v('accent-subtle')};border-color:transparent;color:${v('text-primary')}}
+${TONES.map((tone) => `.badge-${tone}{background:${v(`${tone}-default`)};border-color:transparent;color:${v(`${tone}-deep`)}}`).join('\n')}
 .pill{display:inline-flex;align-items:center;gap:${px(S[2])};min-height:${px(S[8])};padding:0 ${px(S[4])};
   border-radius:${px(R.full)};background:${v('accent-subtle')};${label};color:${v('text-primary')}}
 .live-dot{position:relative;display:inline-block;flex-shrink:0;width:${px(S[2])};height:${px(S[2])};
