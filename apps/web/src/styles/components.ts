@@ -5,6 +5,7 @@ import {
   hairline,
   ICON,
   L,
+  label,
   measure,
   micro,
   mq,
@@ -19,6 +20,9 @@ import {
   v,
   webType,
 } from './tokens';
+
+/** Daylight tints (DESIGN-DAYLIGHT §Colour — extras): trust, people and delivery. */
+export const TONES = ['sage', 'clay', 'haze'] as const;
 
 /** Buttons, cards, badges, grids, FAQ, breadcrumbs, tabs, chips, notices (DESIGN.md §Components). */
 export function componentsCss(): string {
@@ -39,13 +43,21 @@ function buttonsCss(): string {
   border-color:transparent;font:inherit;${type(T.bodyStrong)};text-decoration:none;cursor:pointer;
   white-space:nowrap}
 .btn svg{flex-shrink:0}
-.btn-primary{background:${v('accent-default')};color:${v('text-on-accent')};box-shadow:${shadow('sm')}}
+.btn-primary{background:${v('accent-default')};color:${v('text-on-accent')};
+  box-shadow:inset 0 ${px(-stroke.thick)} 0 ${v('accent-hover')}}
 .btn-primary:hover{background:${v('accent-hover')}}
-.btn-secondary{background:${v('surface-base')};border-color:${v('border-strong')};color:${v('text-primary')}}
-.btn-secondary:hover{border-color:${v('text-tertiary')};background:${v('surface-raised')}}
-.btn-dark{background:${v('text-primary')};color:${v('surface-base')}}
-.btn-dark:hover{background:${v('text-secondary')}}
+.btn-secondary{background:${v('surface-overlay')};border-color:${v('border-strong')};color:${v('text-primary')}}
+.btn-secondary:hover{border-color:${v('text-tertiary')};box-shadow:${shadow('sm')}}
+.btn-dark{background:${v('text-primary')};color:${v('surface-overlay')}}
+.btn-dark:hover{box-shadow:${shadow('md')}}
 .btn-sm{min-height:${px(L.minTapTarget)};padding:0 ${px(S[4])}}
+.btn-arrow{display:inline-grid;place-items:center;width:${px(S[6] + S[1])};height:${px(S[6] + S[1])};
+  margin-right:${px(-S[3] - S[1] / 2)};border-radius:${px(R.full)};background:${v('text-on-accent')};
+  color:${v('surface-overlay')}}
+.btn-arrow svg{width:${px(S[4])};height:${px(S[4])}}
+.btn-dark .btn-arrow{background:${v('surface-overlay')};color:${v('text-primary')}}
+.btn-secondary .btn-arrow{background:${v('text-primary')};color:${v('surface-overlay')}}
+.btn-sm .btn-arrow{width:${px(S[6])};height:${px(S[6])};margin-right:${px(-S[2] - S[1] / 2)}}
 .btn:focus-visible{outline-offset:${px(S[1])}}
 .btn[aria-busy="true"]{cursor:progress}
 .btn:disabled{opacity:${fx.disabledOpacity}}
@@ -66,7 +78,7 @@ ${mq(bp.lg)}{
   .grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
   .grid-5{grid-template-columns:repeat(5,minmax(0,1fr))}
 }
-.card{position:relative;display:flex;flex-direction:column;background:${v('surface-raised')};
+.card{position:relative;display:flex;flex-direction:column;background:${v('surface-overlay')};
   border:${hairline()};border-radius:${px(R.lg)};padding:${px(S[5])}}
 .card>:last-child{margin-bottom:0}
 .card h3{margin-bottom:${px(S[2])}}
@@ -85,9 +97,11 @@ ${mq(bp.lg)}{
 ${mq(bp.lg)}{.card{padding:${px(S[6])}}.card-arrow{top:${px(S[6])};right:${px(S[6])}}}
 .icon-chip{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
   width:${px(S[10])};height:${px(S[10])};margin-bottom:${px(S[5])};border-radius:${px(R.md)};
-  background:${v('surface-base')};border:${hairline()};box-shadow:${shadow('sm')};color:${v('text-primary')}}
+  background:${v('surface-raised')};color:${v('text-primary')}}
 .icon-chip svg{width:${px(ICON.size)};height:${px(ICON.size)}}
-.section-raised .icon-chip{background:${v('surface-raised')};box-shadow:none}
+${TONES.map((tone) => `.tone-${tone}{background:${v(`${tone}-default`)};border-color:transparent}
+.tone-${tone} .icon-chip{background:${v('surface-overlay')};color:${v(`${tone}-deep`)}}
+.tone-${tone} .muted,.tone-${tone} .chip{color:${v('text-secondary')}}`).join('\n')}
 .price-note{${type(T.caption)};color:${v('text-secondary')};font-variant-numeric:tabular-nums;
   margin:${px(S[1])} 0 ${px(S[4])}}
 .checklist{list-style:none;margin:0 0 ${px(S[4])};padding:0;display:grid;gap:${px(S[3])}}
@@ -107,8 +121,8 @@ function badgesCss(): string {
     `.badge-${tone}::before{content:"";width:${px(S[2] - stroke.thick)};height:${px(S[2] - stroke.thick)};
   border-radius:${px(R.full)};background:${v(tone === 'live' ? 'success' : 'warning')}}`;
   return `
-.badge{display:inline-flex;align-items:center;gap:${px(S[2])};align-self:flex-start;${micro};
-  padding:${px(S[1])} ${px(S[3])};border-radius:${px(R.full)};background:${v('surface-base')};
+.badge{display:inline-flex;align-items:center;gap:${px(S[2])};align-self:flex-start;${label};
+  padding:${px(S[1] + stroke.hairline)} ${px(S[3])};border-radius:${px(R.full)};background:${v('surface-overlay')};
   border:${hairline()};color:${v('text-secondary')};margin-bottom:${px(S[4])}}
 ${dot('live')}
 ${dot('pilot')}
@@ -116,17 +130,24 @@ ${dot('pilot')}
 .badge-pilot{color:${v('warning')}}
 .badge-emergency{background:${v('emergency-subtle')};border-color:transparent;color:${v('emergency-default')}}
 .pill{display:inline-flex;align-items:center;gap:${px(S[2])};min-height:${px(S[8])};padding:0 ${px(S[4])};
-  border-radius:${px(R.full)};background:${v('surface-base')};border:${hairline()};box-shadow:${shadow('sm')};
-  ${type(T.caption)};font-weight:${T.bodyStrong.weight};color:${v('text-secondary')}}
-.live-dot{position:relative;display:inline-block;width:${px(S[2])};height:${px(S[2])};border-radius:${px(R.full)};
-  background:${v('success')}}
+  border-radius:${px(R.full)};background:${v('accent-subtle')};${label};color:${v('text-primary')}}
+.live-dot{position:relative;display:inline-block;flex-shrink:0;width:${px(S[2])};height:${px(S[2])};
+  border-radius:${px(R.full)};background:${v('accent-default')};box-shadow:0 0 0 ${px(S[1])} ${v('surface-overlay')}}
 .live-dot::after{content:"";position:absolute;inset:0;border-radius:inherit;background:inherit;opacity:0}
 .chips{display:flex;flex-wrap:wrap;gap:${px(S[2])};list-style:none;margin:0;padding:0}
 .chip{display:inline-flex;align-items:center;gap:${px(S[2])};min-height:${px(S[8])};padding:0 ${px(S[3])};
-  border-radius:${px(R.full)};background:${v('surface-base')};border:${hairline()};
+  border-radius:${px(R.full)};background:${v('surface-overlay')};border:${hairline()};
   color:${v('text-secondary')};${type(T.caption)}}
 .chip svg{width:${px(S[4])};height:${px(S[4])};color:${v('text-tertiary')}}
 `;
+}
+
+/** A plus sign drawn with two gradient bars, centred in its box. */
+function plus(colour: string): string {
+  const bar = `linear-gradient(${v(colour)},${v(colour)})`;
+  const arm = px(S[3]);
+  const w = px(stroke.thick);
+  return `${bar} center/${arm} ${w} no-repeat,${bar} center/${w} ${arm} no-repeat`;
 }
 
 function disclosureCss(): string {
@@ -137,10 +158,10 @@ function disclosureCss(): string {
   min-height:${px(L.minTapTarget)};padding:${px(S[5])} 0;${fluidType(webType.title)};font-weight:${T.bodyStrong.weight};
   cursor:pointer;list-style:none}
 .faq summary::-webkit-details-marker{display:none}
-.faq summary::after{content:"";flex-shrink:0;width:${px(S[3])};height:${px(S[3])};
-  background:linear-gradient(${v('text-secondary')},${v('text-secondary')}) center/100% ${px(stroke.thick)} no-repeat,
-  linear-gradient(${v('text-secondary')},${v('text-secondary')}) center/${px(stroke.thick)} 100% no-repeat}
-.faq details[open] summary::after{transform:rotate(45deg)}
+.faq summary::after{content:"";flex-shrink:0;width:${px(S[8] + S[1])};height:${px(S[8] + S[1])};
+  border:${hairline('border-strong')};border-radius:${px(R.full)};background:${plus('text-secondary')}}
+.faq details[open] summary::after{transform:rotate(45deg);border-color:${v('accent-default')};
+  background:${plus('text-on-accent')},${v('accent-default')}}
 .faq .answer{padding:0 ${px(S[10])} ${px(S[6])} 0;color:${v('text-secondary')}}
 .faq .answer p{margin:0}
 .section-split .faq{max-width:none}
@@ -163,7 +184,7 @@ function navigationCss(): string {
   border-radius:${px(R.full)};background:transparent;color:${v('text-secondary')};font:inherit;
   ${type(T.bodyStrong)};cursor:pointer}
 .tab:hover{color:${v('text-primary')}}
-.tab[aria-selected="true"]{background:${v('surface-base')};border-color:${v('border-subtle')};
+.tab[aria-selected="true"]{background:${v('surface-overlay')};border-color:${v('border-subtle')};
   color:${v('text-primary')};box-shadow:${shadow('sm')}}
 .link-list{display:flex;flex-wrap:wrap;gap:0 ${px(S[4])};list-style:none;margin:0;padding:0}
 .link-list a{display:inline-flex;align-items:center;min-height:${px(L.minTapTarget)}}

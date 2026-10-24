@@ -1,4 +1,4 @@
-import { colorLight as color, space, typography } from '@clickco/design-tokens';
+import { colorDaylight as color, space, typography } from '@clickco/design-tokens';
 import { ImageResponse } from 'next/og';
 import { LAUNCH_CITIES } from '../../src/content/cities';
 import { SITE } from '../../src/content/site';

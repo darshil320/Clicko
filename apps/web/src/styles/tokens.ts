@@ -1,5 +1,9 @@
 import {
-  colorLight,
+  colorDaylight,
+  daylightElevation,
+  daylightExtras,
+  daylightRadius,
+  daylightType,
   elevation,
   icon,
   layout,
@@ -11,7 +15,7 @@ import {
 } from '@clickco/design-tokens';
 
 /**
- * CSS building blocks derived from @clickco/design-tokens (white theme, ADR-0017).
+ * CSS building blocks derived from @clickco/design-tokens (Daylight, ADR-0018, on ADR-0017).
  * This is the ONLY web module allowed to hold numbers that are not tokens: every ratio, fluid
  * range and ambient duration below is named and derived here, and the style modules use them.
  */
@@ -24,10 +28,13 @@ export const R = radius;
 export const T = typography.scale;
 export const ICON = icon;
 
-/** The site palette. The marketing website is a white-theme surface (ADR-0017). */
-export const palette = colorLight;
-export const shadows = elevation;
-export const shadow = (level: keyof typeof elevation): string => `var(--shadow-${level})`;
+/** The site palette: Daylight, with colorLight's names (ADR-0018). Extras are website-only. */
+export const palette = colorDaylight;
+export const extras = daylightExtras;
+export const shadows = { ...elevation, ...daylightElevation };
+export const shadow = (level: keyof typeof shadows): string => `var(--shadow-${level})`;
+/** Photo frames and full-width panels (ADR-0018). Cards keep R.lg. */
+export const RD = daylightRadius;
 
 type Step = (typeof typography.scale)[keyof typeof typography.scale];
 
@@ -47,8 +54,19 @@ const fallbacks = [
   'sans-serif',
 ].join(',');
 
-export const fontBody = `${quote(typography.family.body)},${fallbacks}`;
-export const fontDisplay = `${quote(typography.family.display)},${quote(typography.family.body)},${fallbacks}`;
+/**
+ * next/font self-hosts the Daylight families under hashed names and exposes each one as a CSS
+ * variable on <html> (app/fonts.ts). The named family follows it for tools that skip next/font.
+ */
+export const fontVar = { display: '--font-display', body: '--font-body', mono: '--font-mono' } as const;
+const family = daylightType.family;
+export const fontBody = `var(${fontVar.body}),${quote(family.body)},${fallbacks}`;
+export const fontDisplay = `var(${fontVar.display}),${quote(family.display)},Georgia,"Times New Roman",serif`;
+export const fontMono = `var(${fontVar.mono}),${quote(family.mono)},ui-monospace,"SF Mono",Menlo,monospace`;
+
+/** Uppercase mono labels: eyebrows, chips, camera captions (DESIGN-DAYLIGHT §Type). */
+export const label = `font-family:${fontMono};font-size:${px(T.micro.size)};line-height:${px(T.micro.lineHeight)};
+  font-weight:${T.micro.weight};text-transform:uppercase;letter-spacing:${daylightType.labelTrackingEm}em`;
 
 /* ── Fluid web type ─────────────────────────────────────────────────────────────────────────
  * DESIGN.md defines a mobile scale only. The web display scale grows from those steps at a
@@ -74,40 +92,25 @@ interface FluidStep {
   readonly weight: string;
 }
 
-const d = T.display.size;
+/** The serif display face has one regular weight; it is never set bold (DESIGN-DAYLIGHT §Type). */
+const SERIF_WEIGHT = T.body.weight;
+const serif = (step: { readonly min: number; readonly max: number; readonly leading: number }) => ({
+  min: step.min,
+  max: step.max,
+  leading: step.leading,
+  tracking: tracking.title * 2,
+  weight: SERIF_WEIGHT,
+});
+
 export const webType = {
-  /** Home hero: 32 → 56. */
-  hero: {
-    min: d,
-    max: (d * 7) / 4,
-    leading: leading.display,
-    tracking: tracking.display,
-    weight: T.display.weight,
-  },
-  /** Page heroes (city, category, legal): 28 → 48. */
-  page: {
-    min: (d * 7) / 8,
-    max: (d * 3) / 2,
-    leading: leading.heading,
-    tracking: tracking.heading,
-    weight: T.display.weight,
-  },
-  /** Section headings: 28 → 44. */
-  section: {
-    min: (d * 7) / 8,
-    max: (d * 11) / 8,
-    leading: leading.heading,
-    tracking: tracking.heading,
-    weight: T.display.weight,
-  },
-  /** Prices and step numerals: 24 → 32. */
-  figure: {
-    min: T.h1.size,
-    max: d,
-    leading: leading.heading,
-    tracking: tracking.heading,
-    weight: T.h1.weight,
-  },
+  /** Home hero: 44 → 96. */
+  hero: serif(daylightType.fluid.hero),
+  /** Page heroes (city, category, legal): 40 → 72. */
+  page: serif(daylightType.fluid.page),
+  /** Section headings: 36 → 64. */
+  section: serif(daylightType.fluid.section),
+  /** Prices and big numerals: 32 → 48. */
+  figure: serif(daylightType.fluid.figure),
   /** Card and sub-section titles: 17 → 20. */
   title: {
     min: T.h3.size,
@@ -178,6 +181,7 @@ export const fx = {
   glowAspect: 2,
   marqueeFade: 12,
   selectionPercent: 40,
+  linkUnderlinePercent: 40,
   focusHaloPercent: 45,
   noticeTint: 6,
   noticeEdge: 24,

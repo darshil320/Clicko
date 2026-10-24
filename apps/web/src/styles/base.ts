@@ -1,6 +1,7 @@
 import { colourEntries } from '@clickco/design-tokens';
 import {
   bp,
+  extras,
   fluid,
   fluidType,
   fontBody,
@@ -8,8 +9,8 @@ import {
   fx,
   hairline,
   L,
+  label,
   measure,
-  micro,
   mq,
   palette,
   prose,
@@ -30,6 +31,7 @@ import {
 const rootVariables = (): string =>
   [
     ...colourEntries(palette).map(([name, value]) => `--color-${name}:${value};`),
+    ...colourEntries(extras).map(([name, value]) => `--color-${name}:${value};`),
     ...Object.entries(shadows).map(([level, value]) => `--shadow-${level}:${value};`),
   ].join('');
 
@@ -41,16 +43,18 @@ export function baseCss(): string {
 html{-webkit-text-size-adjust:100%;text-rendering:optimizeLegibility}
 body{margin:0;background:${v('surface-base')};color:${v('text-primary')};font-family:${fontBody};
   ${type(T.body)};-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-h1,h2,h3{font-family:${fontDisplay};margin:0 0 ${px(S[3])};text-wrap:balance}
+h1,h2,h3{margin:0 0 ${px(S[3])};text-wrap:balance}
+h1,h2{font-family:${fontDisplay};font-weight:${webType.page.weight}}
 h1{${fluidType(webType.page)}}
-h2{${type(T.h2)}}
-h3{${fluidType(webType.title)}}
+h2{${fluidType(webType.figure)}}
+h3{font-family:${fontBody};${fluidType(webType.title)}}
+h1 em,h2 em{font-style:italic;color:${v('accent-text')}}
 p{margin:0 0 ${px(S[4])};text-wrap:pretty}
 ul,ol{margin:0 0 ${px(S[4])};padding-left:${px(S[5])}}
 img,svg{display:block;max-width:100%;height:auto}
-a{color:${v('text-primary')};text-decoration:underline;text-decoration-thickness:${px(stroke.hairline)};
-  text-decoration-color:${v('text-tertiary')};text-underline-offset:${px(S[1])}}
-a:hover{text-decoration-color:${v('text-primary')}}
+a{color:${v('accent-text')};text-decoration:underline;text-decoration-thickness:${px(stroke.hairline)};
+  text-decoration-color:${tint('accent-text', fx.linkUnderlinePercent)};text-underline-offset:${px(S[1])}}
+a:hover{text-decoration-color:${v('accent-text')}}
 ::selection{background:${tint('accent-default', fx.selectionPercent)};color:${v('text-primary')}}
 :focus-visible{outline:${px(stroke.thick)} solid ${v('text-primary')};outline-offset:${px(stroke.thick)};
   border-radius:${px(R.sm)}}
@@ -64,7 +68,7 @@ hr{border:0;border-top:${hairline()};margin:${px(S[8])} 0}
 table{border-collapse:collapse;width:100%}
 th,td{border-bottom:${hairline()};padding:${px(S[3])} ${px(S[3])};text-align:left;vertical-align:top}
 th{${type(T.bodyStrong)};color:${v('text-primary')}}
-.eyebrow{${micro};color:${v('text-secondary')};margin:0 0 ${px(S[3])}}
+.eyebrow{${label};color:${v('text-tertiary')};margin:0 0 ${px(S[4])}}
 .muted{color:${v('text-secondary')}}
 .num{font-variant-numeric:tabular-nums}
 ${legalCss()}`;

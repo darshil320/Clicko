@@ -1,4 +1,4 @@
-import { colorLight } from '@clickco/design-tokens';
+import { colorDaylight } from '@clickco/design-tokens';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { SiteFooter } from '../src/components/site/SiteFooter';
@@ -6,6 +6,7 @@ import { SiteHeader } from '../src/components/site/SiteHeader';
 import { SITE } from '../src/content/site';
 import { OG_IMAGE } from '../src/lib/metadata';
 import { siteCss } from '../src/theme';
+import { fontClassName } from './fonts';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: colorLight.surface.base,
+  themeColor: colorDaylight.surface.base,
   colorScheme: 'light',
   width: 'device-width',
   initialScale: 1,
@@ -38,7 +39,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (
-    <html lang="en-IN">
+    <html lang="en-IN" className={fontClassName}>
       <head>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: token-generated CSS, no user input */}
         <style dangerouslySetInnerHTML={{ __html: siteCss() }} />
