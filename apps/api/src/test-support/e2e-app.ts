@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -110,9 +113,13 @@ export async function startE2eApp(opts: {
   await seedLaunchCities(db.sql);
   await seedLaunchRuleset(db.sql);
   const prefix = `clickco-test-${randomBytes(4).toString('hex')}`;
+  // Each app gets its own storage folder, removed on close (uploads used to pile up in the OS
+  // temp dir, and in apps/api/.storage for development-mode apps).
+  const storageRoot = await mkdtemp(join(tmpdir(), 'clickco-e2e-storage-'));
   const env = loadEnv({
     NODE_ENV: opts.nodeEnv,
     PORT: '0',
+    STORAGE_LOCAL_ROOT: storageRoot,
     DATABASE_URL: db.url,
     REDIS_URL: TEST_REDIS_URL,
     QUEUE_PREFIX: prefix,
@@ -190,6 +197,7 @@ export async function startE2eApp(opts: {
       await app.close();
       await db.drop();
       await dropRedisPrefix(prefix);
+      await rm(storageRoot, { recursive: true, force: true });
     },
   };
 }
