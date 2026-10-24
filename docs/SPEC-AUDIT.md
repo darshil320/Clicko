@@ -38,6 +38,7 @@ BLOCKER = code cannot be written correctly without a decision. MAJOR = will prod
 | SA-19 | MINOR | Schema vs SLA ladder | DOMAIN §4 (BALANCE_REMINDER +24h / +72h / +7d), schema §10 (`sla_clocks_uq (booking_id, kind)`) | Three reminders, but one row per kind. | ADR-0016 D8: one BALANCE_REMINDER row re-armed through the three due times. |
 | SA-20 | MINOR | State machine gap | T&C §3.8, ADR-0013 D12 (client non-attendance: checked out with 0 frames), DOMAIN §2 | A client-absent booking reaches CHECKED_OUT with nothing to upload, so no path leads to BALANCE_PENDING or CLOSED, and production SLA clocks would only breach. | ADR-0016 D12: no production clocks; the booking waits for the existing CLIENT_NON_ATTENDANCE review, which the S9 ops desk resolves. Add the outcome edge to DOMAIN v2. |
 | SA-21 | MAJOR | Missing numbers | DOMAIN §4 (breach bands H0_6 … H72_PLUS), schema §10 (`client_remedy_*`, `payout_deduction_bps`), T&C §5 (no delay compensation stated) | The breach ladder has bands but no remedy amounts or payout deductions anywhere. | ADR-0016 D9: a provisional table in `SLA_CONFIG`, recorded on every breach but never applied automatically. Darshil to confirm. |
+| SA-22 | MAJOR | Design direction changed | `clickco-01-design-pipeline.md` §4 ("Theme: dark-first"), owner direction 24 Oct 2026 | The owner chose a white theme with the amber accent for the client app, the website and the upload portal. The spec still says dark-first, and docs/DESIGN.md (its verbatim extract) is dark. | ADR-0017: `colorLight` from docs/DESIGN-LIGHT.md with the same token names; the console stays dark. Darshil: update clickco-01 §4 in v2 (and brief Figma Wave 1 in white). |
 **Areas checked and found clean** (no findings):
 
 - **A. State machine** — the 24-value `booking_status` enum (schema §1) and the v0.2 §6 lifecycle diagram, including all 8 exception/terminal states (CANCELLED_CLIENT, CANCELLED_PRO, PRO_NO_SHOW, ACCESS_DENIED, UNSAFE_SITE, DATA_LOSS, QUALITY_ESCALATION, ABANDONED), match exactly in both directions. No orphans.
@@ -53,7 +54,7 @@ BLOCKER = code cannot be written correctly without a decision. MAJOR = will prod
 ## Summary
 
 - **BLOCKER: 1** (SA-11, found 21 Oct 2026 by the migration integration test; patched)
-- **MAJOR: 9** (SA-01, SA-02, SA-03, SA-13, SA-14, SA-15, SA-16, SA-21; SA-15–21 found 24 Oct 2026 designing S8)
+- **MAJOR: 10** (SA-01, SA-02, SA-03, SA-13, SA-14, SA-15, SA-16, SA-21, SA-22; SA-15–21 found 24 Oct 2026 designing S8; SA-22 the white theme)
 - **MINOR: 9** (SA-04, SA-05, SA-06, SA-07, SA-12, SA-17, SA-18, SA-19, SA-20)
 
 No blocking internal contradictions were found — the spec set is unusually well cross-referenced for a first pass (doc 05 explicitly cites doc v0.2 and the T&C by section number in several places, which is why so few real conflicts turned up). The three MAJOR items are all coverage gaps (T&C clauses with no corresponding schema surface, or a latent type-safety gap) rather than the documents disagreeing with each other. None of them require a business decision to fix — they're schema/type additions — which is why none are rated BLOCKER despite being real.

@@ -1,4 +1,4 @@
-import { color, layout, radius, space, typography } from './tokens.js';
+import { color, colorLight, layout, type Palette, radius, space, typography } from './tokens.js';
 
 const px = (n: number): string => `${n}px`;
 
@@ -14,8 +14,8 @@ function mapValues<T, U>(obj: Record<string, T>, fn: (v: T) => U): Record<string
 }
 
 /** Flat list of [css-name, value] for every colour token, e.g. ["accent-default", "#FFB63D"]. */
-export function colourEntries(): Array<[string, string]> {
-  return Object.entries(color).flatMap(([group, value]) =>
+export function colourEntries(palette: Palette = color): Array<[string, string]> {
+  return Object.entries(palette).flatMap(([group, value]) =>
     typeof value === 'string'
       ? [[group, value] as [string, string]]
       : Object.entries(value).map(
@@ -24,32 +24,40 @@ export function colourEntries(): Array<[string, string]> {
   );
 }
 
-/** `:root { --color-…: … }` for the web surfaces (admin, portal, web). */
-export function cssVariables(): string {
-  const lines = colourEntries().map(([name, hex]) => `  --color-${name}: ${hex};`);
+/** `:root { --color-…: … }` for the web surfaces; pass `colorLight` for the white theme. */
+export function cssVariables(palette: Palette = color): string {
+  const lines = colourEntries(palette).map(([name, hex]) => `  --color-${name}: ${hex};`);
   return [':root {', ...lines, '}'].join('\n');
 }
 
-/** Tailwind / NativeWind preset. Apps extend it; they never add raw values. */
-export const tailwindPreset = {
-  theme: {
-    extend: {
-      colors: color,
-      spacing: mapValues(space as unknown as Record<string, number>, px),
-      borderRadius: mapValues(radius, px),
-      fontFamily: {
-        display: [typography.family.display, ...typography.family.indicFallback],
-        sans: [typography.family.body, ...typography.family.indicFallback],
+/** Tailwind / NativeWind preset for a palette. Apps extend it; they never add raw values. */
+export function makeTailwindPreset<P extends Palette>(palette: P) {
+  return {
+    theme: {
+      extend: {
+        colors: palette,
+        spacing: mapValues(space as unknown as Record<string, number>, px),
+        borderRadius: mapValues(radius, px),
+        fontFamily: {
+          display: [typography.family.display, ...typography.family.indicFallback],
+          sans: [typography.family.body, ...typography.family.indicFallback],
+        },
+        fontSize: mapValues(typography.scale, (s) => [
+          px(s.size),
+          { lineHeight: px(s.lineHeight), fontWeight: s.weight },
+        ]),
+        letterSpacing: { micro: `${typography.microTrackingEm}em` },
+        height: sizes,
+        minHeight: sizes,
+        width: { tap: sizes.tap },
+        minWidth: { tap: sizes.tap },
       },
-      fontSize: mapValues(typography.scale, (s) => [
-        px(s.size),
-        { lineHeight: px(s.lineHeight), fontWeight: s.weight },
-      ]),
-      letterSpacing: { micro: `${typography.microTrackingEm}em` },
-      height: sizes,
-      minHeight: sizes,
-      width: { tap: sizes.tap },
-      minWidth: { tap: sizes.tap },
     },
-  },
-} as const;
+  } as const;
+}
+
+/** The dark preset (DESIGN.md) — the ops console. */
+export const tailwindPreset = makeTailwindPreset(color);
+
+/** The white preset (DESIGN-LIGHT.md, ADR-0017) — the client app. */
+export const lightTailwindPreset = makeTailwindPreset(colorLight);

@@ -16,6 +16,48 @@ export const color = {
   danger: '#EF4444',
 } as const;
 
+/**
+ * ADR-0017 — the white theme (client app, marketing website, upload portal). Same keys as
+ * `color`, so a surface switches theme by switching palette. Source: docs/DESIGN-LIGHT.md.
+ */
+export const colorLight = {
+  surface: { base: '#FFFFFF', raised: '#FAFAF8', overlay: '#FFFFFF' },
+  border: { subtle: '#ECECE7', strong: '#D6D6CF' },
+  text: { primary: '#0E0E10', secondary: '#52525B', tertiary: '#71717A', 'on-accent': '#1A1206' },
+  accent: { default: '#FFB63D', hover: '#F5A524', subtle: '#FFF5E1' },
+  emergency: { default: '#C8262D', subtle: '#FFF1F1' },
+  success: '#15803D',
+  warning: '#B45309',
+  danger: '#DC2626',
+} as const satisfies { readonly [K in keyof typeof color]: unknown };
+
+export type Palette = typeof color | typeof colorLight;
+
+/** Light theme only: soft shadows (the dark theme uses surface layering instead). */
+export const elevation = {
+  sm: '0 1px 2px rgba(14,14,16,0.04)',
+  md: '0 2px 8px rgba(14,14,16,0.04), 0 8px 24px rgba(14,14,16,0.06)',
+  lg: '0 24px 64px rgba(14,14,16,0.10)',
+} as const;
+
+/** Web vertical rhythm between sections, and content widths (DESIGN-LIGHT §Whitespace). */
+export const sectionSpace = {
+  mobile: 48,
+  tablet: 80,
+  desktop: 120,
+  contentMax: 1120,
+  readingMax: 680,
+} as const;
+
+/** DESIGN-LIGHT §Motion. Consumers must honour prefers-reduced-motion. */
+export const motion = {
+  fastMs: 160,
+  revealMs: 240,
+  heroMs: 600,
+  easeOut: 'cubic-bezier(0.22, 1, 0.36, 1)',
+  revealRisePx: 8,
+} as const;
+
 /** 4pt base. Keys are Tailwind steps (1 = 4px). */
 export const space = {
   1: 4,
