@@ -19,6 +19,7 @@ import type { Tx } from './onsite.types';
 import { type OnsiteContext, OnsiteContextLoader } from './onsite-context';
 import { emit, needsReview } from './onsite-outbox';
 import { AssignmentEventsRepository } from './repositories/assignment-events.repository';
+import { deliveryDueAt } from './rules/timing';
 
 const REPORT = {
   ACCESS_DENIED: { kind: 'ACCESS_DENIED_REPORTED', event: 'assignment.access_denied_reported' },
@@ -103,7 +104,8 @@ export class IncidentsService {
   /**
    * Dev-only stand-in for the S9 staff confirmation: needs a matching report; ACCESS_DENIED from
    * CHECKED_IN / IN_PROGRESS, UNSAFE_SITE from IN_PROGRESS (a CHECKED_IN booking walks there
-   * first). The assignment completes without a check-out, so no SLA T0 (Invariant 2).
+   * first). The assignment completes without a check-out. An unsafe site's T0 is the
+   * confirmation (ADR-0016 D11); an access denial has none.
    */
   async confirm(assignmentId: string, incident: IncidentKind): Promise<ConfirmIncidentResponse> {
     const now = this.clock();
@@ -136,6 +138,15 @@ export class IncidentsService {
     }
     await this.extensions.closeUnresolved(tx, ctx, STAFF_ACTOR, now);
     await this.assignments.completeWithoutCheckOut(tx, ctx.assignment.id);
+    if (incident === 'UNSAFE_SITE') {
+      // ADR-0016 D11: what was shot is delivered; T0 is this confirmation (no check-out exists).
+      await this.bookings.recordSlaAnchor(
+        tx,
+        bookingId,
+        now,
+        deliveryDueAt(now, ctx.booking.hasRushDelivery),
+      );
+    }
     await this.bookings.transition(tx, {
       bookingId,
       to: incident,

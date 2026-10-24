@@ -66,3 +66,10 @@ export interface UploadBookingFacts {
   readonly tier: string;
   readonly scheduledStart: Date;
 }
+
+/** What a delivery holds, per kind (ADR-0016 D1). */
+export interface DeliveryInventory {
+  readonly raw: { readonly files: number; readonly bytes: number };
+  readonly jpeg: { readonly files: number; readonly bytes: number };
+  readonly video: { readonly files: number; readonly bytes: number };
+}

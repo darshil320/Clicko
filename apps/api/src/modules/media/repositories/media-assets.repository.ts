@@ -1,7 +1,7 @@
 import type { AssetKind } from '@clickco/contracts';
 import { Injectable } from '@nestjs/common';
 import type { FolderFill } from '../../../infra/storage/folder-layout';
-import type { Db, MediaAssetRecord, NewMediaAsset, Tx } from '../media.types';
+import type { Db, DeliveryInventory, MediaAssetRecord, NewMediaAsset, Tx } from '../media.types';
 
 interface Row {
   id: string;
@@ -77,6 +77,43 @@ export class MediaAssetsRepository {
     const rows = await db<Row[]>`
       SELECT ${db.unsafe(COLUMNS)} FROM media_assets
       WHERE upload_session_id = ${sessionId} AND purged_at IS NULL`;
+    return rows.map(toRecord);
+  }
+
+  /** Delivered files: unpurged, checksum-verified, by kind (ADR-0016 D1). */
+  async inventory(db: Db, bookingId: string): Promise<DeliveryInventory> {
+    const rows = await db<{ kind: AssetKind; files: number; bytes: string }[]>`
+      SELECT kind, count(*)::int AS files, coalesce(sum(size_bytes), 0)::text AS bytes
+      FROM media_assets
+      WHERE booking_id = ${bookingId} AND purged_at IS NULL AND checksum_verified_at IS NOT NULL
+        AND kind IN ('RAW_PHOTO', 'JPEG_PHOTO', 'VIDEO')
+      GROUP BY kind`;
+    const of = (kind: AssetKind) => {
+      const r = rows.find((x) => x.kind === kind);
+      return { files: r?.files ?? 0, bytes: Number(r?.bytes ?? 0) };
+    };
+    return { raw: of('RAW_PHOTO'), jpeg: of('JPEG_PHOTO'), video: of('VIDEO') };
+  }
+
+  /** Invariant 7: retention from delivery — RAW +7 d, JPEG/VIDEO +30 d (ADR-0016 D5). */
+  async schedulePurge(tx: Tx, bookingId: string, rawAt: Date, jpegAt: Date): Promise<void> {
+    await tx`
+      UPDATE media_assets
+         SET purge_after = CASE WHEN kind = 'RAW_PHOTO' THEN ${rawAt}::timestamptz ELSE ${jpegAt}::timestamptz END
+       WHERE booking_id = ${bookingId} AND purged_at IS NULL`;
+  }
+
+  /** Unpurged assets of these kinds (every kind when `kinds` is empty). */
+  async unpurgedOfKinds(
+    db: Db,
+    bookingId: string,
+    kinds: readonly AssetKind[],
+  ): Promise<MediaAssetRecord[]> {
+    const rows = await db<Row[]>`
+      SELECT ${db.unsafe(COLUMNS)} FROM media_assets r
+      WHERE r.booking_id = ${bookingId} AND r.purged_at IS NULL
+        AND (${kinds.length === 0} OR r.kind = ANY(${db.array([...kinds])}::asset_kind[]))
+      ORDER BY r.id`;
     return rows.map(toRecord);
   }
 

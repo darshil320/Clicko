@@ -12,12 +12,14 @@ import { QueuesModule } from './infra/queues/queues.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
+import { DeliveryModule } from './modules/delivery/delivery.module';
 import { DispatchModule } from './modules/dispatch/dispatch.module';
 import { MediaModule } from './modules/media/media.module';
 import { OnsiteModule } from './modules/onsite/onsite.module';
 import { OpsModule } from './modules/ops/ops.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { ServiceabilityModule } from './modules/serviceability/serviceability.module';
+import { SlaModule } from './modules/sla/sla.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Global()
@@ -47,6 +49,8 @@ class CoreModule {}
     CheckoutModule,
     DispatchModule,
     OnsiteModule,
+    SlaModule,
+    DeliveryModule,
     MediaModule,
     OpsModule,
     JobsModule,

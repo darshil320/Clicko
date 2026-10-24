@@ -3,6 +3,7 @@ export * from './booking.js';
 export * from './booking-flow.js';
 export * from './city.js';
 export * from './common.js';
+export * from './delivery.js';
 export * from './dispatch.js';
 export * from './enums.js';
 export * from './media.js';

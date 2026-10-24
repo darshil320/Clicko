@@ -47,10 +47,12 @@ export async function checkedOutBooking(
     readonly clientPhone: string;
     readonly proToken: string;
     readonly declaredFrames: number;
+    /** Lead time (default 5 days, a 50/50 booking; under 24 h is an emergency paid in full). */
+    readonly startInMs?: number;
   },
-): Promise<{ bookingId: string; assignmentId: string; checkedOutAt: Date }> {
+): Promise<{ bookingId: string; assignmentId: string; checkedOutAt: Date; userId: string }> {
   const userId = await insertUser(e2e.db.sql, opts.clientPhone);
-  const start = new Date(e2e.now().getTime() + 5 * 86_400_000);
+  const start = new Date(e2e.now().getTime() + (opts.startInMs ?? 5 * 86_400_000));
   const { bookingId } = await confirmedBooking(e2e, userId, start, { categoryCode: 'PORTRAIT' });
   await drainOutbox(e2e);
   const offers = await e2e.call('GET', '/pro/offers', { token: opts.proToken });
@@ -65,7 +67,7 @@ export async function checkedOutBooking(
   const assignmentId = accepted.json.data.assignmentId as string;
   await drainOutbox(e2e);
   await walkTo(e2e, bookingId, assignmentId, 'CHECKED_OUT', opts.declaredFrames);
-  return { bookingId, assignmentId, checkedOutAt: e2e.now() };
+  return { bookingId, assignmentId, checkedOutAt: e2e.now(), userId };
 }
 
 /** Walks an ASSIGNED booking forward through BookingsService.transition (never a raw UPDATE). */
@@ -96,6 +98,8 @@ export async function walkTo(
           UPDATE assignments SET status = 'COMPLETED', check_out_at = ${new Date(now.getTime() + 1_000)},
                  declared_frame_count = ${declaredFrames}
           WHERE id = ${assignmentId}`;
+        // sla_t0 = the check-out, as CheckOutService records it (Invariant 2; arms the SLA clocks).
+        await bookings.recordCheckOut(tx, bookingId, now, new Date(now.getTime() + 48 * 3_600_000));
       }
     });
     if (to === 'EN_ROUTE') {

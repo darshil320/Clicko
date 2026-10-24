@@ -131,7 +131,7 @@ export class UploadSessionsService {
           }),
           now,
         });
-        if (locked.status === 'CHECKED_OUT') {
+        if (locked.status === 'CHECKED_OUT' || locked.status === 'UNSAFE_SITE') {
           await this.bookings.transition(tx, {
             bookingId,
             to: 'UPLOADING',

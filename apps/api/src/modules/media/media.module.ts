@@ -14,6 +14,7 @@ import { IntegrityAuditService } from './integrity-audit.service';
 import { JpegExportService } from './jpeg-export.service';
 import { MEDIA_CONFIG } from './media.config';
 import { MediaSubscribers } from './media.subscribers';
+import { MediaRetentionService } from './media-retention.service';
 import { ProUploadsController } from './pro-uploads.controller';
 import { QuotaMonitorService } from './quota-monitor.service';
 import { MediaAssetsRepository } from './repositories/media-assets.repository';
@@ -65,8 +66,15 @@ export function createJpegExporter(env: Env): JpegExportPort {
     IntegrityAuditService,
     QuotaMonitorService,
     UploadReaperService,
+    MediaRetentionService,
     MediaSubscribers,
   ],
-  exports: [JpegExportService, IntegrityAuditService, QuotaMonitorService, UploadReaperService],
+  exports: [
+    JpegExportService,
+    IntegrityAuditService,
+    QuotaMonitorService,
+    UploadReaperService,
+    MediaRetentionService,
+  ],
 })
 export class MediaModule {}

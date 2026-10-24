@@ -29,11 +29,16 @@ export const MEDIA_CONFIG = {
 } as const;
 
 /** Where a new upload session may open (ADR-0014 D2). */
-export const UPLOADABLE_STATUSES: readonly BookingStatus[] = ['CHECKED_OUT', 'UPLOADING'];
+export const UPLOADABLE_STATUSES: readonly BookingStatus[] = [
+  'CHECKED_OUT',
+  'UNSAFE_SITE', // ADR-0016 D11
+  'UPLOADING',
+];
 
 /** What the portal's Jobs and Status pages show. */
 export const UPLOAD_JOB_STATUSES: readonly BookingStatus[] = [
   'CHECKED_OUT',
+  'UNSAFE_SITE',
   'UPLOADING',
   'PROCESSING',
   'QA',
