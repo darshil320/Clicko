@@ -58,11 +58,11 @@ const fallbacks = [
  * next/font self-hosts the Daylight families under hashed names and exposes each one as a CSS
  * variable on <html> (app/fonts.ts). The named family follows it for tools that skip next/font.
  */
-export const fontVar = { sans: '--font-sans', display: '--font-display' } as const;
+export const fontVar = { sans: '--font-sans' } as const;
 const family = daylightType.family;
 export const fontBody = `var(${fontVar.sans}),${quote(family.body)},${fallbacks}`;
-/** Headlines, prices and big numerals (ADR-0021). */
-export const fontDisplay = `var(${fontVar.display}),${quote(family.display)},${fallbacks}`;
+/** Headlines, prices and big numerals: the same face at display weight (ADR-0022). */
+export const fontDisplay = fontBody;
 
 /** Uppercase labels: eyebrows, chips, photo captions (DESIGN-DAYLIGHT §Type). */
 export const label = `font-family:${fontBody};font-size:${px(T.micro.size)};line-height:${px(T.micro.lineHeight)};

@@ -1,21 +1,14 @@
-import { Figtree, Outfit } from 'next/font/google';
+import { Onest } from 'next/font/google';
 
 /**
- * Daylight families (ADR-0021), self-hosted at build time: visitors never call Google. Each one
- * is exposed as the CSS variable that src/styles/tokens.ts `fontVar` reads.
+ * Daylight family (ADR-0022), self-hosted at build time: visitors never call Google. Exposed as
+ * the CSS variable that src/styles/tokens.ts `fontVar` reads.
  */
-const display = Outfit({
-  weight: ['400', '500', '600', '700'],
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-display',
-});
-
-const body = Figtree({
+const sans = Onest({
   weight: ['400', '500', '600', '700'],
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-sans',
 });
 
-export const fontClassName = [display.variable, body.variable].join(' ');
+export const fontClassName = sans.variable;
