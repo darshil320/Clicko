@@ -2,6 +2,22 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-25 · Home hero: shoot picker + sample photography (ADR-0019, branch main)
+**Shipped**
+- apps/web home hero rebuilt after Urban Company's service picker: headline across the page, then
+  a picker (7 category tiles, city, hours 2–8, tier) with the live total with GST from the rate
+  card (`quoteFor`, tested), a waitlist CTA, a link to the city × category page, and a photo of the
+  chosen category. Works without JS (radios + opening quote are server-rendered).
+- Removed the template patterns: live-dot chip, photo pill in the headline, collage, floating
+  status cards, camera captions, corner marks, glows, and the category marquee under the hero.
+- 15 licensed sample photos (Unsplash/Pexels licence, 1600 px, metadata stripped) in
+  `public/photos`, credited in `src/content/photos.ts`; used by the hero, steps, categories,
+  cities, the app panel and the city/category page heroes. Footer says they are samples.
+- New site primitives: `.seg` (segmented radios) and `.stepper`. Web tests 133.
+
+**Not done:** Clickco's own photography (replace `public/photos/*` file for file); identifiable
+people in stock photos have no model releases, so keep them out of paid ads and print.
+
 ## 2026-10-24 · Daylight — desktop header gap fix (branch feat/web-daylight)
 **Shipped**
 - apps/web: on desktop the floating header sat in its own flat 80px strip, so each hero's
