@@ -127,10 +127,25 @@ describe('Daylight contrast (WCAG AA)', () => {
 });
 
 describe('Daylight type, shape and depth', () => {
-  it('names the three families in DESIGN-DAYLIGHT.md', () => {
+  it('names every family in DESIGN-DAYLIGHT.md', () => {
     for (const family of Object.values(daylightType.family)) {
       expect(DESIGN_DAYLIGHT_MD).toContain(family);
     }
+  });
+
+  it('sets headlines and UI in one sans, with the serif kept for the accent phrase (ADR-0020)', () => {
+    expect(daylightType.family.display).toBe(daylightType.family.body);
+    expect(daylightType.family.accent).not.toBe(daylightType.family.display);
+    expect(daylightType.weight.display).toBeGreaterThanOrEqual(700);
+    expect(daylightType.weight.label).toBeGreaterThanOrEqual(600);
+    expect(daylightType.trackingEm.display).toBeLessThan(0);
+    expect(daylightType.trackingEm.label).toBeGreaterThan(0);
+    expect(DESIGN_DAYLIGHT_MD).toMatch(
+      new RegExp(
+        `^display\\s+${daylightType.family.display} ${daylightType.weight.display}\\b`,
+        'm',
+      ),
+    );
   });
 
   it('documents every fluid step as "min → max"', () => {

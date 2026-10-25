@@ -89,15 +89,21 @@ export const daylightRadius = { photo: 28, panel: 40 } as const;
  * camera captions, and fluid display steps from a small phone to the content max width.
  */
 export const daylightType = {
-  family: { display: 'Instrument Serif', body: 'Inter Tight', mono: 'Geist Mono' },
+  /**
+   * ADR-0020: one premium geometric sans for headlines and UI, and a serif italic kept only for
+   * the one accent phrase in a headline.
+   */
+  family: { display: 'Plus Jakarta Sans', body: 'Plus Jakarta Sans', accent: 'Instrument Serif' },
+  weight: { display: 700, label: 600 },
+  trackingEm: { display: -0.035, label: 0.1 },
+  /** The serif accent runs a touch larger to match the sans x-height. */
+  accentScale: 1.08,
   fluid: {
-    hero: { min: 44, max: 96, leading: 0.94 },
-    page: { min: 40, max: 72, leading: 0.98 },
-    section: { min: 36, max: 64, leading: 1 },
-    figure: { min: 32, max: 48, leading: 1 },
+    hero: { min: 40, max: 76, leading: 1 },
+    page: { min: 36, max: 60, leading: 1.04 },
+    section: { min: 32, max: 52, leading: 1.06 },
+    figure: { min: 28, max: 40, leading: 1.1 },
   },
-  /** Uppercase mono labels. */
-  labelTrackingEm: 0.12,
 } as const;
 
 /** Web vertical rhythm between sections, and content widths (DESIGN-LIGHT §Whitespace). */

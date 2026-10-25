@@ -54,16 +54,17 @@ photo/sea             #7FA3BF
 photo/cream           #F6EBD9
 photo/dusk            #3B3330
 
-## Type
-display   Instrument Serif, regular and italic — headlines, prices, big numerals. Never bold.
-body      Inter Tight — all UI and running text (unchanged).
-mono      Geist Mono — uppercase labels (0.12em tracking) and camera captions.
+## Type (ADR-0020)
+display   Plus Jakarta Sans 700 — headlines, prices, big numerals. Tracking -0.035em.
+body      Plus Jakarta Sans 400–600 — all UI and running text.
+accent    Instrument Serif italic — only the one accent phrase in a headline, 1.08× its size.
+labels    Plus Jakarta Sans 600, uppercase, 0.1em tracking — eyebrows, chips, photo captions.
 Fluid web steps, phone → 1120 wide:
-hero      44 → 96   leading 0.94
-page      40 → 72   leading 0.98
-section   36 → 64   leading 1.0
-figure    32 → 48   leading 1.0
-Headlines may italicise one phrase in accent/text.
+hero      40 → 76   leading 1.0
+page      36 → 60   leading 1.04
+section   32 → 52   leading 1.06
+figure    28 → 40   leading 1.1
+All families are OFL and self-hosted. Indic scripts fall back to Noto Sans Devanagari / Gujarati.
 
 ## Shape and depth
 radius/photo   28   photo frames, bento tiles, city cards
