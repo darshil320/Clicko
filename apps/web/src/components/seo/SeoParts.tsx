@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { CATEGORIES, type Category } from '../../content/categories';
 import { LAUNCH_CITIES, type LaunchCity, statusLabel } from '../../content/cities';
+import { CATEGORY_PHOTOS, type SitePhoto } from '../../content/photos';
 import { CATEGORY_UPLIFT_BPS } from '../../content/rate-card';
 import type { Crumb } from '../../lib/jsonld';
 import { formatRupees } from '../../lib/money';
@@ -23,14 +24,17 @@ export function PageHero({
   city,
   title,
   mood,
+  photo,
   caption,
   children,
 }: {
   readonly crumbs: readonly Crumb[];
   readonly city: LaunchCity;
   readonly title: string;
-  /** The hero photograph's placeholder light (ADR-0018: every section carries a photo). */
+  /** The hero photograph's light while it loads (ADR-0018: every section carries a photo). */
   readonly mood: PhotoMood;
+  /** A licensed sample until Clickco's own shoot replaces it (ADR-0019). */
+  readonly photo?: SitePhoto;
   readonly caption: string;
   readonly children: ReactNode;
 }) {
@@ -43,7 +47,7 @@ export function PageHero({
           <h1>{title}</h1>
           <div className="prose-block">{children}</div>
         </div>
-        <PhotoFrame mood={mood} caption={caption} corners />
+        <PhotoFrame mood={mood} src={photo?.src} alt={photo?.alt} caption={caption} priority />
       </div>
     </header>
   );
@@ -87,7 +91,10 @@ export function CategoryLinks({
         const price = fromPrice('BASIC', city.tier, CATEGORY_UPLIFT_BPS[category.code]);
         return (
           <li key={category.slug} className="card card-photo lift">
-            <PhotoFrame mood={CATEGORY_MOOD[category.code]} />
+            <PhotoFrame
+              mood={CATEGORY_MOOD[category.code]}
+              src={CATEGORY_PHOTOS[category.code].src}
+            />
             <div className="card-body">
               <h3>
                 <a className="card-link" href={paths.cityCategory(city, category)}>

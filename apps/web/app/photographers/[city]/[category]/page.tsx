@@ -15,6 +15,7 @@ import { Section } from '../../../../src/components/ui/Section';
 import { findCategory } from '../../../../src/content/categories';
 import { findCity } from '../../../../src/content/cities';
 import { localAngle } from '../../../../src/content/local-angles';
+import { CATEGORY_PHOTOS } from '../../../../src/content/photos';
 import { TIERS } from '../../../../src/content/tiers';
 import { breadcrumbLd, faqPageLd, serviceLd } from '../../../../src/lib/jsonld';
 import { pageMetadata } from '../../../../src/lib/metadata';
@@ -79,7 +80,8 @@ export default async function CityCategoryPage({ params }: Props) {
         city={city}
         title={content.h1}
         mood={CATEGORY_MOOD[category.code]}
-        caption={`${category.label} · ${city.name}`}
+        photo={CATEGORY_PHOTOS[category.code]}
+        caption={`${category.label} · sample photo`}
       >
         <p className="lead">{category.summary}</p>
         <p className="muted">{angle}</p>

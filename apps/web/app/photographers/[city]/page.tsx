@@ -14,6 +14,7 @@ import { JsonLd } from '../../../src/components/ui/JsonLd';
 import { CITY_MOOD } from '../../../src/components/ui/PhotoFrame';
 import { Section } from '../../../src/components/ui/Section';
 import { findCity } from '../../../src/content/cities';
+import { CITY_PHOTOS } from '../../../src/content/photos';
 import { breadcrumbLd, faqPageLd, serviceLd } from '../../../src/lib/jsonld';
 import { pageMetadata } from '../../../src/lib/metadata';
 import { cityHubContent } from '../../../src/lib/page-content';
@@ -67,7 +68,8 @@ export default async function CityHub({ params }: Props) {
         city={city}
         title={content.h1}
         mood={CITY_MOOD[city.slug] ?? 'golden'}
-        caption={city.name}
+        photo={CITY_PHOTOS[city.slug]}
+        caption={`${city.name} · sample photo`}
       >
         <p className="lead">{city.intro}</p>
       </PageHero>

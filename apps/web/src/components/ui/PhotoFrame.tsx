@@ -28,11 +28,10 @@ export interface PhotoFrameProps {
   readonly alt?: string;
   /** What belongs in the frame, e.g. "Wedding · Surat". */
   readonly caption?: string;
-  /** Camera line, e.g. "85mm · f/1.8". */
-  readonly meta?: string;
-  readonly corners?: boolean;
-  readonly shape?: 'portrait' | 'wide' | 'square' | 'fill' | 'pill';
+  readonly shape?: 'portrait' | 'wide' | 'square' | 'fill';
   readonly className?: string;
+  /** Above-the-fold photos load at once and first; everything else waits until it is near. */
+  readonly priority?: boolean;
 }
 
 const SHAPE_CLASS = {
@@ -40,7 +39,6 @@ const SHAPE_CLASS = {
   wide: 'photo-wide',
   square: 'photo-square',
   fill: 'photo-fill',
-  pill: 'photo-pill',
 } as const;
 
 /**
@@ -52,24 +50,26 @@ export function PhotoFrame({
   src,
   alt = '',
   caption,
-  meta,
-  corners = false,
   shape = 'portrait',
   className,
+  priority = false,
 }: PhotoFrameProps) {
-  const classes = ['photo', `mood-${mood}`, SHAPE_CLASS[shape], className]
+  const classes = ['photo', `mood-${mood}`, SHAPE_CLASS[shape], src ? 'photo-real' : '', className]
     .filter(Boolean)
     .join(' ');
-  const Tag = shape === 'pill' ? 'span' : 'figure';
   return (
-    <Tag className={classes} aria-hidden={src ? undefined : true}>
+    <figure className={classes} aria-hidden={src ? undefined : true}>
       {src ? (
         // biome-ignore lint/performance/noImgElement: static export has no image optimiser (next.config output: 'export')
-        <img src={src} alt={alt} loading="lazy" />
+        <img
+          src={src}
+          alt={alt}
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
+          decoding="async"
+        />
       ) : null}
-      {corners ? <span className="photo-corners" /> : null}
-      {meta ? <span className="photo-meta">{meta}</span> : null}
       {caption ? <span className="photo-cap">{caption}</span> : null}
-    </Tag>
+    </figure>
   );
 }

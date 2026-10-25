@@ -1,5 +1,6 @@
 import { CATEGORIES } from '../../content/categories';
 import { LAUNCH_CITIES } from '../../content/cities';
+import { CATEGORY_PHOTOS } from '../../content/photos';
 import { CATEGORY_UPLIFT_BPS } from '../../content/rate-card';
 import { formatRupees } from '../../lib/money';
 import { fromPrice } from '../../lib/pricing';
@@ -28,7 +29,10 @@ export function Categories() {
             : undefined;
           return (
             <li key={category.slug} className="card card-photo lift">
-              <PhotoFrame mood={CATEGORY_MOOD[category.code]} />
+              <PhotoFrame
+                mood={CATEGORY_MOOD[category.code]}
+                src={CATEGORY_PHOTOS[category.code].src}
+              />
               <div className="card-body">
                 <h3>{category.label}</h3>
                 <p className="muted">{category.summary}</p>

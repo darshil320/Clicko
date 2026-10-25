@@ -1,4 +1,4 @@
-import { label, px, R, RD, S, stroke, tint, v } from './tokens';
+import { px, R, RD, S, stroke, T, tint, type, v } from './tokens';
 
 /**
  * Placeholder moods for photo frames (DESIGN-DAYLIGHT §Imagery): soft, photographic light painted
@@ -87,16 +87,6 @@ const GRAIN =
 const GRAIN_OPACITY = 0.22;
 const PLATE_PERCENT = 72;
 const PLATE_BLUR = S[3];
-const CORNER = S[4];
-
-function cornersCss(): string {
-  const line = `linear-gradient(${tint('surface-overlay', 85)},${tint('surface-overlay', 85)})`;
-  const w = px(stroke.thick);
-  const arm = px(CORNER);
-  return ['left top', 'right bottom']
-    .flatMap((at) => [`${line} ${at}/${arm} ${w} no-repeat`, `${line} ${at}/${w} ${arm} no-repeat`])
-    .join(',');
-}
 
 /** Photo frames, their caption plates and the inline headline pill. */
 export function photoCss(): string {
@@ -110,20 +100,15 @@ export function photoCss(): string {
 .photo::before{z-index:-1}
 .photo::after{opacity:${GRAIN_OPACITY};mix-blend-mode:soft-light;background-image:${GRAIN}}
 .photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-1}
+.photo-real::after{content:none}
 .photo-wide{aspect-ratio:16/10}
 .photo-square{aspect-ratio:1}
 .photo-fill{position:absolute;inset:0;aspect-ratio:auto;border-radius:0}
 .photo-cap{position:absolute;z-index:1;left:${px(S[4])};bottom:${px(S[4])};max-width:calc(100% - ${px(S[8])});
   padding:${px(S[1] + stroke.hairline)} ${px(S[2] + stroke.thick)};border-radius:${px(R.sm)};
   background:${tint('surface-overlay', PLATE_PERCENT)};-webkit-backdrop-filter:blur(${px(PLATE_BLUR)});
-  backdrop-filter:blur(${px(PLATE_BLUR)});${label};letter-spacing:normal;text-transform:none;color:${p('dusk')};
+  backdrop-filter:blur(${px(PLATE_BLUR)});${type(T.caption)};font-weight:${T.bodyStrong.weight};color:${p('dusk')};
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.photo-meta{position:absolute;z-index:1;top:${px(S[4])};right:${px(S[4])};${label};color:${v('surface-overlay')};
-  text-shadow:0 ${px(stroke.hairline)} ${px(S[2])} ${tint('photo-dusk', 45)}}
-.photo-corners{position:absolute;inset:${px(S[4])};z-index:1;background:${cornersCss()}}
-.photo-pill{display:inline-block;width:1.35em;height:.78em;aspect-ratio:auto;vertical-align:baseline;
-  margin:0 .08em;border-radius:${px(R.full)};translate:0 .06em}
-.photo-pill::after{opacity:${GRAIN_OPACITY / 2}}
 ${moods}
 `;
 }

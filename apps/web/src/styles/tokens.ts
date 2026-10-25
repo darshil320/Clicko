@@ -174,18 +174,19 @@ export const headerInset = S[4];
  */
 export const headerOverlay = headerInset + headerHeight;
 
-/**
- * The hero collage (desktop): a stage height and each frame's box as % of the stage, so the
- * composition scales with the column. Frames overlap on purpose (DESIGN-DAYLIGHT §Imagery).
- */
-export const collage = {
-  height: S[14] * 10 + S[10],
-  main: { left: 6, top: 2, width: 58, height: 78 },
-  sideTop: { right: 0, top: 0, width: 33, height: 40 },
-  sideBottom: { right: 0, bottom: 14, width: 33, height: 40 },
-  /** Mobile: the main photo's cap and how far the quote card climbs onto it. */
-  phoneMax: measure.stage,
-  quoteOverlap: S[14] * 2,
+/** A container query: styles that follow a component's own width, not the viewport's. */
+export const cq = (min: number): string => `@container (min-width:${px(min)})`;
+
+/** The home hero's shoot picker (ADR-0019). Widths are the picker card's, read by `cq`. */
+export const picker = {
+  /** Wide enough for the seven category tiles in one row. */
+  tilesInRow: S[14] * 10,
+  /** Wide enough for each row's label to sit beside its control. */
+  rowsInline: S[14] * 8 + S[8],
+  labelColumn: S[14] * 2,
+  tileHeight: S[14] + S[6],
+  /** Desktop: the photo beside the picker never gets shorter than this. */
+  photoMin: S[14] * 8,
 } as const;
 
 /** Photo heights inside cards: category tiles, step cards and city cards. */
@@ -209,25 +210,16 @@ export const tint = (name: string, percent: number): string =>
 
 /* ── Effects ────────────────────────────────────────────────────────────────────────────── */
 
-/** The glass header, the hero dot grid and the soft amber glow. */
+/** The glass header, selection, link underlines, notices and the darkroom band. */
 export const fx = {
   glassPercent: 86,
   glassBlur: S[3],
   glassSaturate: 1.8,
-  dotGap: S[6],
-  dotRadius: stroke.hairline,
-  dotFade: 72,
-  glowSize: sectionSpace.readingMax,
-  glowPercent: 26,
-  glowBlur: S[10],
-  glowAspect: 2,
-  marqueeFade: 12,
   selectionPercent: 40,
   linkUnderlinePercent: 40,
-  /** The darkroom band: hairlines, inset wells and the amber glow, as % of their colour. */
+  /** The darkroom band: hairlines and inset wells, as % of their colour. */
   darkRulePercent: 14,
   darkWellPercent: 5,
-  darkGlowPercent: 30,
   focusHaloPercent: 45,
   noticeTint: 6,
   noticeEdge: 24,
@@ -249,13 +241,3 @@ export const revealBlurPx = S[1];
 export const staggerMs = motion.fastMs / 2;
 /** Scroll-driven reveal window, as % of the element's entry into the viewport. */
 export const revealRange = { from: 5, to: 55 } as const;
-
-/** Slow ambient loops (seconds), for the city marquee, the live dot and the floating cards. */
-export const ambient = {
-  marqueeS: 48,
-  pulseS: 2.4,
-  pulseScale: 2.6,
-  pulseOpacity: 0.55,
-  floatS: 7,
-  floatPx: motion.revealRisePx * 0.75,
-} as const;

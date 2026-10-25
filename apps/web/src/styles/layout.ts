@@ -105,7 +105,6 @@ ${mq(bp.lg)}{
 }
 .page-hero{position:relative;overflow:hidden;isolation:isolate;padding-top:${px(S[8])};
   padding-bottom:${px(rhythm.mobile)}}
-.page-hero::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;${daylightGlow()}}
 .page-hero h1{${fluidType(webType.page)};max-width:${px(measure.hero)};margin-bottom:${px(S[5])}}
 .page-hero .lead{max-width:${px(measure.prose)}}
 .page-hero-grid{display:grid;gap:${px(S[10])};align-items:center}
@@ -118,12 +117,6 @@ ${mq(bp.lg)}{
 `;
 }
 
-/** Two soft daylight pools — amber wash and haze — behind heroes (replaces ADR-0017's dot grid). */
-export function daylightGlow(): string {
-  return `background:radial-gradient(40% 50% at 85% 10%,${v('accent-subtle')} 0,transparent 70%),
-  radial-gradient(35% 45% at 5% 0%,${v('haze-default')} 0,transparent 70%)`;
-}
-
 /** The one darkroom band per page (DESIGN-DAYLIGHT §Rules): Emergency on the home page. */
 function darkCss(): string {
   const on = 'darkroom-text';
@@ -132,8 +125,6 @@ function darkCss(): string {
   return `
 .section-dark{margin:0 ${px(S[2])};border-radius:${px(RD.photo)};background:${v('darkroom-default')};
   color:${v(on)};overflow:hidden;isolation:isolate}
-.section-dark::before{content:"";position:absolute;right:-10%;top:-30%;width:60%;height:120%;z-index:-1;
-  pointer-events:none;background:radial-gradient(closest-side,${tint('accent-default', fx.darkGlowPercent)},transparent)}
 .section-dark .eyebrow,.section-dark .lead,.section-dark .muted,.section-dark .notice p{color:${v(muted)}}
 .section-dark h2,.section-dark h3,.section-dark .notice-title{color:${v(on)}}
 .section-dark h2 em{color:${v('accent-default')}}

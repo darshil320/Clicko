@@ -1,4 +1,5 @@
 import { LAUNCH_CITIES, statusLabel, WAITLIST_EXAMPLES } from '../../content/cities';
+import { CITY_PHOTOS } from '../../content/photos';
 import { paths } from '../../lib/routes';
 import { Icon } from '../ui/Icon';
 import { CITY_MOOD, PhotoFrame } from '../ui/PhotoFrame';
@@ -12,7 +13,11 @@ export function CityCards() {
     <ul className="grid grid-3">
       {LAUNCH_CITIES.map((city) => (
         <li key={city.slug} className="card card-photo lift city-card">
-          <PhotoFrame mood={CITY_MOOD[city.slug] ?? 'golden'} caption={city.name} />
+          <PhotoFrame
+            mood={CITY_MOOD[city.slug] ?? 'golden'}
+            src={CITY_PHOTOS[city.slug]?.src}
+            caption={city.name}
+          />
           <div className="card-body">
             <span className={`badge ${city.status === 'LIVE' ? 'badge-live' : 'badge-pilot'}`}>
               {statusLabel(city.status)}

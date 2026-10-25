@@ -1,3 +1,4 @@
+import type { BookableTier } from './rate-card';
 import type { Faq } from './types';
 
 export interface Step {
@@ -81,11 +82,14 @@ export const TRUST_POINTS: readonly TrustPoint[] = [
  * Illustrative app activity beside the hero's sample quote. It is a mock of the app, so it uses
  * a mock name (DESIGN.md §Content rules) and is hidden from assistive tech.
  */
-export const HERO_ACTIVITY = {
-  photographer: 'Rahul Mehta',
-  assigned: 'Photographer assigned',
-  delivered: 'Photos delivered',
-} as const;
+/**
+ * The home hero's shoot picker (ADR-0019). It opens on the first category in seed order with
+ * the tier we recommend most, and stops at a full day: longer shoots are quoted in the app.
+ */
+export const HERO_PICKER = {
+  defaultTier: 'PROFESSIONAL',
+  maxHours: 8,
+} as const satisfies { readonly defaultTier: BookableTier; readonly maxHours: number };
 
 export const HOME_FAQS: readonly Faq[] = [
   {

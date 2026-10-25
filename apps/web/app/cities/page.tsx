@@ -6,7 +6,8 @@ import { JsonLd } from '../../src/components/ui/JsonLd';
 import { PhotoFrame } from '../../src/components/ui/PhotoFrame';
 import { Section } from '../../src/components/ui/Section';
 import { WaitlistSection } from '../../src/components/waitlist/WaitlistSection';
-import { LAUNCH_CITIES, WAITLIST_EXAMPLES } from '../../src/content/cities';
+import { WAITLIST_EXAMPLES } from '../../src/content/cities';
+import { CITY_PHOTOS } from '../../src/content/photos';
 import { breadcrumbLd, type Crumb } from '../../src/lib/jsonld';
 import { pageMetadata } from '../../src/lib/metadata';
 import { paths } from '../../src/lib/routes';
@@ -40,8 +41,10 @@ export default function CitiesPage() {
           </div>
           <PhotoFrame
             mood="coast"
-            caption={LAUNCH_CITIES.map((city) => city.name).join(' · ')}
-            corners
+            src={CITY_PHOTOS.mumbai?.src}
+            alt={CITY_PHOTOS.mumbai?.alt}
+            caption="Mumbai · sample photo"
+            priority
           />
         </div>
       </header>

@@ -1,3 +1,4 @@
+import { PRE_WEDDING_PHOTO } from '../../content/photos';
 import { Icon } from '../ui/Icon';
 import { PhotoFrame } from '../ui/PhotoFrame';
 
@@ -28,7 +29,12 @@ export function AppDownload() {
               ))}
             </ul>
           </div>
-          <PhotoFrame mood="golden" caption="Pre-wedding · Surat" meta="50mm · f/2" corners />
+          <PhotoFrame
+            mood="golden"
+            src={PRE_WEDDING_PHOTO.src}
+            alt={PRE_WEDDING_PHOTO.alt}
+            caption="Pre-wedding · sample photo"
+          />
         </div>
       </div>
     </section>

@@ -31,6 +31,7 @@ export function componentsCss(): string {
     badgesCss(),
     disclosureCss(),
     navigationCss(),
+    controlsCss(),
     noticeCss(),
   ].join('\n');
 }
@@ -134,9 +135,6 @@ ${dot('pilot')}
 ${TONES.map((tone) => `.badge-${tone}{background:${v(`${tone}-default`)};border-color:transparent;color:${v(`${tone}-deep`)}}`).join('\n')}
 .pill{display:inline-flex;align-items:center;gap:${px(S[2])};min-height:${px(S[8])};padding:0 ${px(S[4])};
   border-radius:${px(R.full)};background:${v('accent-subtle')};${label};color:${v('text-primary')}}
-.live-dot{position:relative;display:inline-block;flex-shrink:0;width:${px(S[2])};height:${px(S[2])};
-  border-radius:${px(R.full)};background:${v('accent-default')};box-shadow:0 0 0 ${px(S[1])} ${v('surface-overlay')}}
-.live-dot::after{content:"";position:absolute;inset:0;border-radius:inherit;background:inherit;opacity:0}
 .chips{display:flex;flex-wrap:wrap;gap:${px(S[2])};list-style:none;margin:0;padding:0}
 .chip{display:inline-flex;align-items:center;gap:${px(S[2])};min-height:${px(S[8])};padding:0 ${px(S[3])};
   border-radius:${px(R.full)};background:${v('surface-overlay')};border:${hairline()};
@@ -191,6 +189,36 @@ function navigationCss(): string {
   color:${v('text-primary')};box-shadow:${shadow('sm')}}
 .link-list{display:flex;flex-wrap:wrap;gap:0 ${px(S[4])};list-style:none;margin:0;padding:0}
 .link-list a{display:inline-flex;align-items:center;min-height:${px(L.minTapTarget)}}
+`;
+}
+
+/**
+ * Segmented radios and the +/- stepper. Each segment is a <label> holding a radio and a <span>;
+ * the span is what you see. `.seg-wide` (four or more options) sits two by two.
+ */
+function controlsCss(): string {
+  return `
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:${px(S[1])};padding:${px(S[1])};
+  background:${v('surface-raised')};border:${hairline()};border-radius:${px(R.full)}}
+.seg-wide{grid-auto-flow:row;grid-template-columns:repeat(2,minmax(0,1fr));border-radius:${px(R.lg)}}
+.seg-opt{position:relative;display:flex;min-width:0}
+.seg-opt>span{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:${px(S[1])};
+  min-height:${px(L.minTapTarget - S[2])};padding:0 ${px(S[2])};border-radius:${px(R.full)};${type(T.caption)};
+  font-weight:${T.bodyStrong.weight};color:${v('text-secondary')};white-space:nowrap}
+.seg-wide .seg-opt>span{border-radius:${px(R.md)}}
+.seg-opt:hover>span{color:${v('text-primary')}}
+.seg-opt:has(:checked)>span{background:${v('surface-overlay')};color:${v('text-primary')};box-shadow:${shadow('sm')}}
+.seg-rec{width:${px(S[1] + stroke.thick)};height:${px(S[1] + stroke.thick)};border-radius:${px(R.full)};
+  background:${v('accent-default')};flex-shrink:0}
+.stepper{display:inline-flex;align-items:center;gap:${px(S[2])}}
+.stepper button{display:inline-grid;place-items:center;width:${px(L.minTapTarget)};height:${px(L.minTapTarget)};
+  padding:0;border:${hairline('border-strong')};border-radius:${px(R.full)};background:${v('surface-overlay')};
+  color:${v('text-primary')};cursor:pointer}
+.stepper button svg{width:${px(S[5])};height:${px(S[5])}}
+.stepper button:hover:not(:disabled,[aria-disabled="true"]){border-color:${v('text-tertiary')}}
+.stepper button:is(:disabled,[aria-disabled="true"]){border-color:${v('border-subtle')};color:${v('text-tertiary')};
+  cursor:not-allowed}
+.stepper output{min-width:${px(S[14] + S[6])};text-align:center;${type(T.bodyStrong)}}
 `;
 }
 
