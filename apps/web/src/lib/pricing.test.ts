@@ -6,6 +6,7 @@ import {
   fromPrice,
   multiplierLabel,
   percentAbove,
+  quoteFor,
   toCardData,
 } from './pricing';
 
@@ -56,6 +57,39 @@ describe('2-hour "from" prices (doc 05 §5 launch rate card)', () => {
       extraHour: '₹8,200',
       hours: 2,
     });
+  });
+});
+
+describe('hero quote (category × city × tier × hours)', () => {
+  it('quotes the reference shoot exactly as the rate card does', () => {
+    expect(quoteFor('PROFESSIONAL', 'TIER_1', 'PORTRAIT', 2)).toEqual({
+      base: '₹8,500',
+      gst: '₹1,530',
+      total: '₹10,030',
+      frames: 120,
+    });
+  });
+
+  it('applies the category uplift, then GST, and shows paise only when there are some', () => {
+    expect(quoteFor('PROFESSIONAL', 'TIER_1', 'FOOD', 2)).toEqual({
+      base: '₹9,775',
+      gst: '₹1,759.50',
+      total: '₹11,534.50',
+      frames: 120,
+    });
+  });
+
+  it('scales base, GST and delivered frames with the hours booked', () => {
+    expect(quoteFor('EXPERT', 'METRO', 'WEDDING', 4)).toEqual({
+      base: '₹41,000',
+      gst: '₹7,380',
+      total: '₹48,380',
+      frames: 300,
+    });
+  });
+
+  it('refuses durations under the 2-hour minimum', () => {
+    expect(() => quoteFor('BASIC', 'TIER_1', 'EVENT', 1)).toThrow(RangeError);
   });
 });
 

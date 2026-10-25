@@ -10,6 +10,7 @@ import {
   RATE_PER_HOUR_PAISE,
   REFERENCE_UPLIFT_BPS,
 } from '../content/rate-card';
+import { TIERS } from '../content/tiers';
 import { formatRupees, roundHalfUp } from './money';
 
 /** A "from" price: weekday daytime, booked 2+ days ahead, no add-ons, no travel. */
@@ -99,5 +100,30 @@ export function toCardData(price: FromPrice): PriceCardData {
     total: formatRupees(price.totalPaise),
     extraHour: formatRupees(price.extraHourPaise),
     hours: price.hours,
+  };
+}
+
+/** A live quote as display strings, for the home hero's shoot picker. */
+export interface Quote {
+  readonly base: string;
+  readonly gst: string;
+  readonly total: string;
+  /** Delivered frames: the tier's frames per hour × hours booked. */
+  readonly frames: number;
+}
+
+/** The same "from" conditions as fromPrice, with the category's uplift and any whole hours ≥ 2. */
+export function quoteFor(
+  tier: BookableTier,
+  cityTier: LaunchCityTier,
+  category: CategoryCode,
+  hours: number,
+): Quote {
+  const price = fromPrice(tier, cityTier, CATEGORY_UPLIFT_BPS[category], hours);
+  return {
+    base: formatRupees(price.basePaise),
+    gst: formatRupees(price.gstPaise),
+    total: formatRupees(price.totalPaise),
+    frames: TIERS[tier].framesPerHour * hours,
   };
 }
