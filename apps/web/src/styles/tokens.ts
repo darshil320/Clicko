@@ -58,19 +58,17 @@ const fallbacks = [
  * next/font self-hosts the Daylight families under hashed names and exposes each one as a CSS
  * variable on <html> (app/fonts.ts). The named family follows it for tools that skip next/font.
  */
-export const fontVar = {
-  display: '--font-display',
-  body: '--font-body',
-  mono: '--font-mono',
-} as const;
+export const fontVar = { sans: '--font-sans', accent: '--font-accent' } as const;
 const family = daylightType.family;
-export const fontBody = `var(${fontVar.body}),${quote(family.body)},${fallbacks}`;
-export const fontDisplay = `var(${fontVar.display}),${quote(family.display)},Georgia,"Times New Roman",serif`;
-export const fontMono = `var(${fontVar.mono}),${quote(family.mono)},ui-monospace,"SF Mono",Menlo,monospace`;
+export const fontBody = `var(${fontVar.sans}),${quote(family.body)},${fallbacks}`;
+/** Headlines use the same sans as the UI, at display weight (ADR-0020). */
+export const fontDisplay = fontBody;
+/** The serif italic for the one accent phrase in a headline. */
+export const fontAccent = `var(${fontVar.accent}),${quote(family.accent)},Georgia,"Times New Roman",serif`;
 
-/** Uppercase mono labels: eyebrows, chips, camera captions (DESIGN-DAYLIGHT §Type). */
-export const label = `font-family:${fontMono};font-size:${px(T.micro.size)};line-height:${px(T.micro.lineHeight)};
-  font-weight:${T.micro.weight};text-transform:uppercase;letter-spacing:${daylightType.labelTrackingEm}em`;
+/** Uppercase labels: eyebrows, chips, photo captions (DESIGN-DAYLIGHT §Type). */
+export const label = `font-family:${fontBody};font-size:${px(T.micro.size)};line-height:${px(T.micro.lineHeight)};
+  font-weight:${daylightType.weight.label};text-transform:uppercase;letter-spacing:${daylightType.trackingEm.label}em`;
 
 /* ── Fluid web type ─────────────────────────────────────────────────────────────────────────
  * DESIGN.md defines a mobile scale only. The web display scale grows from those steps at a
@@ -103,25 +101,28 @@ interface FluidStep {
   readonly weight: string;
 }
 
-/** The serif display face has one regular weight; it is never set bold (DESIGN-DAYLIGHT §Type). */
-const SERIF_WEIGHT = T.body.weight;
-const serif = (step: { readonly min: number; readonly max: number; readonly leading: number }) => ({
+/** Display steps: the sans at display weight with tight tracking (DESIGN-DAYLIGHT §Type). */
+const display = (step: {
+  readonly min: number;
+  readonly max: number;
+  readonly leading: number;
+}) => ({
   min: step.min,
   max: step.max,
   leading: step.leading,
-  tracking: tracking.title * 2,
-  weight: SERIF_WEIGHT,
+  tracking: daylightType.trackingEm.display,
+  weight: `${daylightType.weight.display}`,
 });
 
 export const webType = {
-  /** Home hero: 44 → 96. */
-  hero: serif(daylightType.fluid.hero),
-  /** Page heroes (city, category, legal): 40 → 72. */
-  page: serif(daylightType.fluid.page),
-  /** Section headings: 36 → 64. */
-  section: serif(daylightType.fluid.section),
-  /** Prices and big numerals: 32 → 48. */
-  figure: serif(daylightType.fluid.figure),
+  /** Home hero: 40 → 76. */
+  hero: display(daylightType.fluid.hero),
+  /** Page heroes (city, category, legal): 36 → 60. */
+  page: display(daylightType.fluid.page),
+  /** Section headings: 32 → 52. */
+  section: display(daylightType.fluid.section),
+  /** Prices and big numerals: 28 → 40. */
+  figure: display(daylightType.fluid.figure),
   /** Card and sub-section titles: 17 → 20. */
   title: {
     min: T.h3.size,

@@ -1,28 +1,23 @@
-import { Geist_Mono, Instrument_Serif, Inter_Tight } from 'next/font/google';
+import { Instrument_Serif, Plus_Jakarta_Sans } from 'next/font/google';
 
 /**
- * Daylight families (ADR-0018), self-hosted at build time: visitors never call Google. Each one
+ * Daylight families (ADR-0020), self-hosted at build time: visitors never call Google. Each one
  * is exposed as the CSS variable that src/styles/tokens.ts `fontVar` reads.
  */
-const display = Instrument_Serif({
+const sans = Plus_Jakarta_Sans({
+  weight: ['400', '500', '600', '700', '800'],
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+});
+
+/** Only the one accent phrase per headline uses the serif, always italic. */
+const accent = Instrument_Serif({
   weight: '400',
-  style: ['normal', 'italic'],
+  style: 'italic',
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-display',
+  variable: '--font-accent',
 });
 
-const body = Inter_Tight({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-body',
-});
-
-const mono = Geist_Mono({
-  weight: ['400', '500'],
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-mono',
-});
-
-export const fontClassName = [display.variable, body.variable, mono.variable].join(' ');
+export const fontClassName = [sans.variable, accent.variable].join(' ');

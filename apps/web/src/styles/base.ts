@@ -1,9 +1,10 @@
-import { colourEntries } from '@clickco/design-tokens';
+import { colourEntries, daylightType } from '@clickco/design-tokens';
 import {
   bp,
   extras,
   fluid,
   fluidType,
+  fontAccent,
   fontBody,
   fontDisplay,
   fx,
@@ -49,7 +50,8 @@ h1,h2{font-family:${fontDisplay};font-weight:${webType.page.weight}}
 h1{${fluidType(webType.page)}}
 h2{${fluidType(webType.figure)}}
 h3{font-family:${fontBody};${fluidType(webType.title)}}
-h1 em,h2 em{font-style:italic;color:${v('accent-text')}}
+h1 em,h2 em{font-family:${fontAccent};font-style:italic;font-weight:${T.body.weight};
+  font-size:${daylightType.accentScale}em;letter-spacing:0;color:${v('accent-text')}}
 p{margin:0 0 ${px(S[4])};text-wrap:pretty}
 ul,ol{margin:0 0 ${px(S[4])};padding-left:${px(S[5])}}
 img,svg{display:block;max-width:100%;height:auto}
