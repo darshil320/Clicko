@@ -54,17 +54,17 @@ photo/sea             #7FA3BF
 photo/cream           #F6EBD9
 photo/dusk            #3B3330
 
-## Type (ADR-0021)
-display   Outfit 600 — headlines, prices, big numerals. Tracking -0.04em.
-body      Figtree 400–600 — all UI and running text.
-accent    Outfit 400 in accent/text — the one accent phrase in a headline. Never italic, no serif.
-labels    Figtree 600, uppercase, 0.08em tracking — eyebrows, chips, photo captions.
+## Type (ADR-0022)
+display   Onest 700 — headlines, prices, big numerals. Tracking -0.04em.
+body      Onest 400–600 — all UI and running text.
+accent    Onest 500 in accent/text — the one accent phrase in a headline. Never italic.
+labels    Onest 600, uppercase, 0.08em tracking — eyebrows, chips, photo captions.
 Fluid web steps, phone → 1120 wide:
 hero      40 → 80   leading 1.0
 page      36 → 64   leading 1.04
 section   32 → 56   leading 1.06
 figure    28 → 44   leading 1.08
-Both families are OFL and self-hosted. Indic scripts fall back to Noto Sans Devanagari / Gujarati.
+Onest is OFL and self-hosted. Indic scripts fall back to Noto Sans Devanagari / Gujarati.
 
 ## Shape and depth
 radius/photo   28   photo frames, bento tiles, city cards

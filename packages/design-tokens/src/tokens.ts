@@ -90,11 +90,11 @@ export const daylightRadius = { photo: 28, panel: 40 } as const;
  */
 export const daylightType = {
   /**
-   * ADR-0021: a modern geometric display sans for headlines and prices, a humanist sans for text.
-   * The accent phrase in a headline is the display face at a lighter weight, in accent/text.
+   * ADR-0022: one modern grotesk, Onest, for headlines, prices and text. The accent phrase in a
+   * headline is the same face at a lighter weight, in accent/text.
    */
-  family: { display: 'Outfit', body: 'Figtree', accent: 'Outfit' },
-  weight: { display: 600, accent: 400, label: 600 },
+  family: { display: 'Onest', body: 'Onest', accent: 'Onest' },
+  weight: { display: 700, accent: 500, label: 600 },
   trackingEm: { display: -0.04, label: 0.08 },
   fluid: {
     hero: { min: 40, max: 80, leading: 1 },

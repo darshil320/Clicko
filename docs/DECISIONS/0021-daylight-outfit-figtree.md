@@ -1,6 +1,6 @@
 # ADR-0021 — Daylight typography: Outfit and Figtree
 
-**Status:** Accepted 25 Oct 2026, at the owner's direction (picked pairing D from five live
+**Status:** Superseded by ADR-0022 (25 Oct 2026). Accepted 25 Oct 2026, at the owner's direction (picked pairing D from five live
 specimens: "Outfit for headlines and prices, Figtree for text, but modern").
 **Supersedes:** ADR-0020. **Applies to:** `apps/web` only; the apps keep `typography` (Inter).
 

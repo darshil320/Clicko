@@ -133,9 +133,10 @@ describe('Daylight type, shape and depth', () => {
     }
   });
 
-  it('pairs a geometric display sans with a text sans, no serif (ADR-0021)', () => {
+  it('sets headlines, prices and text in one family, Onest (ADR-0022)', () => {
     const { family, weight } = daylightType;
-    expect(family.display).not.toBe(family.body);
+    expect(family.display).toBe('Onest');
+    expect(family.body).toBe(family.display);
     expect(family.accent).toBe(family.display);
     expect(weight.display).toBeGreaterThanOrEqual(600);
     expect(weight.accent).toBeLessThan(weight.display);
@@ -145,7 +146,6 @@ describe('Daylight type, shape and depth', () => {
     expect(DESIGN_DAYLIGHT_MD).toMatch(
       new RegExp(`^display\\s+${family.display} ${weight.display}\\b`, 'm'),
     );
-    expect(DESIGN_DAYLIGHT_MD).toMatch(new RegExp(`^body\\s+${family.body}\\b`, 'm'));
   });
 
   it('documents every fluid step as "min → max"', () => {
