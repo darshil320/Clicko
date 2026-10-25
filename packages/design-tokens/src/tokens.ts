@@ -90,19 +90,17 @@ export const daylightRadius = { photo: 28, panel: 40 } as const;
  */
 export const daylightType = {
   /**
-   * ADR-0020: one premium geometric sans for headlines and UI, and a serif italic kept only for
-   * the one accent phrase in a headline.
+   * ADR-0021: a modern geometric display sans for headlines and prices, a humanist sans for text.
+   * The accent phrase in a headline is the display face at a lighter weight, in accent/text.
    */
-  family: { display: 'Plus Jakarta Sans', body: 'Plus Jakarta Sans', accent: 'Instrument Serif' },
-  weight: { display: 700, label: 600 },
-  trackingEm: { display: -0.035, label: 0.1 },
-  /** The serif accent runs a touch larger to match the sans x-height. */
-  accentScale: 1.08,
+  family: { display: 'Outfit', body: 'Figtree', accent: 'Outfit' },
+  weight: { display: 600, accent: 400, label: 600 },
+  trackingEm: { display: -0.04, label: 0.08 },
   fluid: {
-    hero: { min: 40, max: 76, leading: 1 },
-    page: { min: 36, max: 60, leading: 1.04 },
-    section: { min: 32, max: 52, leading: 1.06 },
-    figure: { min: 28, max: 40, leading: 1.1 },
+    hero: { min: 40, max: 80, leading: 1 },
+    page: { min: 36, max: 64, leading: 1.04 },
+    section: { min: 32, max: 56, leading: 1.06 },
+    figure: { min: 28, max: 44, leading: 1.08 },
   },
 } as const;
 

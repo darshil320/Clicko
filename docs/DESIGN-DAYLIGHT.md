@@ -54,17 +54,17 @@ photo/sea             #7FA3BF
 photo/cream           #F6EBD9
 photo/dusk            #3B3330
 
-## Type (ADR-0020)
-display   Plus Jakarta Sans 700 — headlines, prices, big numerals. Tracking -0.035em.
-body      Plus Jakarta Sans 400–600 — all UI and running text.
-accent    Instrument Serif italic — only the one accent phrase in a headline, 1.08× its size.
-labels    Plus Jakarta Sans 600, uppercase, 0.1em tracking — eyebrows, chips, photo captions.
+## Type (ADR-0021)
+display   Outfit 600 — headlines, prices, big numerals. Tracking -0.04em.
+body      Figtree 400–600 — all UI and running text.
+accent    Outfit 400 in accent/text — the one accent phrase in a headline. Never italic, no serif.
+labels    Figtree 600, uppercase, 0.08em tracking — eyebrows, chips, photo captions.
 Fluid web steps, phone → 1120 wide:
-hero      40 → 76   leading 1.0
-page      36 → 60   leading 1.04
-section   32 → 52   leading 1.06
-figure    28 → 40   leading 1.1
-All families are OFL and self-hosted. Indic scripts fall back to Noto Sans Devanagari / Gujarati.
+hero      40 → 80   leading 1.0
+page      36 → 64   leading 1.04
+section   32 → 56   leading 1.06
+figure    28 → 44   leading 1.08
+Both families are OFL and self-hosted. Indic scripts fall back to Noto Sans Devanagari / Gujarati.
 
 ## Shape and depth
 radius/photo   28   photo frames, bento tiles, city cards

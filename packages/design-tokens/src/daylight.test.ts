@@ -133,19 +133,19 @@ describe('Daylight type, shape and depth', () => {
     }
   });
 
-  it('sets headlines and UI in one sans, with the serif kept for the accent phrase (ADR-0020)', () => {
-    expect(daylightType.family.display).toBe(daylightType.family.body);
-    expect(daylightType.family.accent).not.toBe(daylightType.family.display);
-    expect(daylightType.weight.display).toBeGreaterThanOrEqual(700);
-    expect(daylightType.weight.label).toBeGreaterThanOrEqual(600);
+  it('pairs a geometric display sans with a text sans, no serif (ADR-0021)', () => {
+    const { family, weight } = daylightType;
+    expect(family.display).not.toBe(family.body);
+    expect(family.accent).toBe(family.display);
+    expect(weight.display).toBeGreaterThanOrEqual(600);
+    expect(weight.accent).toBeLessThan(weight.display);
+    expect(weight.label).toBeGreaterThanOrEqual(600);
     expect(daylightType.trackingEm.display).toBeLessThan(0);
     expect(daylightType.trackingEm.label).toBeGreaterThan(0);
     expect(DESIGN_DAYLIGHT_MD).toMatch(
-      new RegExp(
-        `^display\\s+${daylightType.family.display} ${daylightType.weight.display}\\b`,
-        'm',
-      ),
+      new RegExp(`^display\\s+${family.display} ${weight.display}\\b`, 'm'),
     );
+    expect(DESIGN_DAYLIGHT_MD).toMatch(new RegExp(`^body\\s+${family.body}\\b`, 'm'));
   });
 
   it('documents every fluid step as "min → max"', () => {

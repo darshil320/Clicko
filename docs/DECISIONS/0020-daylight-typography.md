@@ -1,6 +1,6 @@
 # ADR-0020 — Daylight typography: one premium sans, a serif accent
 
-**Status:** Accepted 25 Oct 2026, at the owner's direction ("more niche-specific and premium, like
+**Status:** Superseded by ADR-0021 (25 Oct 2026). Accepted 25 Oct 2026, at the owner's direction ("more niche-specific and premium, like
 Urban Company and other Indian unicorns").
 **Amends:** ADR-0018 §Type. **Applies to:** `apps/web` only; the apps keep `typography` (Inter).
 
