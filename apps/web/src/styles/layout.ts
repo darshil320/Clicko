@@ -2,7 +2,6 @@ import {
   bp,
   fluid,
   fluidType,
-  fontBody,
   fontDisplay,
   fx,
   hairline,
@@ -35,7 +34,7 @@ export function layoutCss(): string {
 }
 
 /** The brand lockup: lens mark + name in the body sans at weight 700 (ADR-0018 §Logo). */
-const lockup = `display:inline-flex;align-items:center;gap:${px(S[2])};font-family:${fontBody};${type(T.h2)};
+const lockup = `display:inline-flex;align-items:center;gap:${px(S[2])};font-family:${fontDisplay};${type(T.h2)};
   font-weight:${T.h1.weight};letter-spacing:${tracking.lockup}em;text-decoration:none`;
 
 function headerCss(): string {
