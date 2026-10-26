@@ -2,6 +2,28 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-26 · Video + Gen Z / creator positioning (ADR-0023, branch main)
+**Shipped**
+- OD-11 resolved by the owner: video is in scope. The site sells photographers and videographers;
+  video is "priced in the app" (no rate in doc 05 yet) and delivered unedited, camera-original
+  (Terms §4.3), with reel edits as a paid add-on.
+- Hero: "Pro photos and reels. No DMs, no haggling." Picker gains Capture (Photos / Video /
+  Photos + video); video never shows a rupee figure (`describeQuote`, tested). The visual becomes
+  a vertical sample reel when video is chosen.
+- "Made for moments like this": new city, proposal, creator day, birthday, café launch,
+  convocation, each mapped to a rate-card shoot with an exact "photos from" price; "Book this"
+  (`#shoot-<id>`) pre-fills the picker.
+- Reels wall (7 vertical loops) + "For creators" block (Terms §9.2 usage rights).
+- Mobile "your shoot" bar after the picker scrolls away (hidden from the waitlist on).
+- 8 Pexels-licence sample reels in `public/reels` (720×1280, ~1 MB, no audio, posters), credited in
+  `content/reels.ts`; play only on screen, never under reduced motion.
+- Copy that said "photography only" updated (FAQs, plan exclusions, footer, site meta).
+- Fixed a stray `}` in base.ts (from the ADR-0021 font change) that dropped the `p{margin}` rule.
+
+**Not done:** video rates in the pricing engine (doc 05 v2), `plan_deliverables.video_included`,
+videographer vetting rubric, video storage planning. Proposal, birthday, convocation, café and
+creator sample reels are not Indian footage; replace first with Clickco's own.
+
 ## 2026-10-25 · Home hero: shoot picker + sample photography (ADR-0019, branch main)
 **Shipped**
 - apps/web home hero rebuilt after Urban Company's service picker: headline across the page, then
