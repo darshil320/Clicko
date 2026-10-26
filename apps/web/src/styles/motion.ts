@@ -42,7 +42,7 @@ ${heroStagger()}
 @supports (animation-timeline:view()){
   .reveal{animation:rise linear both;animation-timeline:view();
     animation-range:entry ${revealRange.from}% entry ${revealRange.to}%}
-  .grid>li,.bento>li,.steps>li,.bands-list>li,.tiers>li,.faq>details{animation:fade-up linear both;
+  .grid>li,.bento>li,.steps>li,.bands-list>li,.tiers>li,.faq>details,.moment{animation:fade-up linear both;
     animation-timeline:view();animation-range:entry ${revealRange.from}% entry ${revealRange.to}%}
 }
 .lift,.btn,.tab,.input,.nav-list a,.card-arrow,.cat-tile,.seg-opt>span,.stepper button{transition:transform ${quick},box-shadow ${quick},
@@ -53,5 +53,6 @@ ${heroStagger()}
 .photo::before{transition:scale ${ms(motionMs.heroMs)} ${ease}}
 .lift:hover>.photo::before{scale:${photoZoom}}
 .faq summary::after{transition:transform ${ms(motionMs.revealMs)} ${ease}}
+.shoot-bar{transition:translate ${ms(motionMs.revealMs)} ${ease},opacity ${ms(motionMs.revealMs)} ${ease}}
 }`;
 }

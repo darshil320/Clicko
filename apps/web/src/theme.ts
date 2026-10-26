@@ -3,6 +3,7 @@ import { componentsCss } from './styles/components';
 import { formsCss } from './styles/forms';
 import { heroCss } from './styles/hero';
 import { layoutCss } from './styles/layout';
+import { momentsCss } from './styles/moments';
 import { motionCss } from './styles/motion';
 import { photoCss } from './styles/photo';
 import { sectionsCss } from './styles/sections';
@@ -15,6 +16,7 @@ export function siteCss(): string {
     componentsCss(),
     photoCss(),
     heroCss(),
+    momentsCss(),
     sectionsCss(),
     formsCss(),
     motionCss(),

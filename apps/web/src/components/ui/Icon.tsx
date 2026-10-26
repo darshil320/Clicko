@@ -15,6 +15,13 @@ const GLYPHS = {
   ),
   check: <path d="M20 6 9 17l-5-5" />,
   minus: <path d="M5 12h14" />,
+  pause: (
+    <>
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </>
+  ),
+  play: <path d="m7 4 13 8-13 8z" />,
   plus: (
     <>
       <path d="M5 12h14" />

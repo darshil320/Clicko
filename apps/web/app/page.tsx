@@ -6,7 +6,9 @@ import { Emergency } from '../src/components/home/Emergency';
 import { Hero } from '../src/components/home/Hero';
 import { HomeFaq } from '../src/components/home/HomeFaq';
 import { HowItWorks } from '../src/components/home/HowItWorks';
+import { Moments } from '../src/components/home/Moments';
 import { Pricing } from '../src/components/home/Pricing';
+import { ReelsWall } from '../src/components/home/ReelsWall';
 import { Trust } from '../src/components/home/Trust';
 import { JsonLd } from '../src/components/ui/JsonLd';
 import { WaitlistSection } from '../src/components/waitlist/WaitlistSection';
@@ -29,7 +31,9 @@ export default function Home() {
     <div className="page">
       <JsonLd data={[organizationLd(LAUNCH_CITIES), faqPageLd(HOME_FAQS)]} />
       <Hero />
+      <Moments />
       <HowItWorks />
+      <ReelsWall />
       <Trust />
       <Pricing />
       <Categories />

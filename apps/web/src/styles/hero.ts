@@ -27,7 +27,7 @@ import {
  * photo of the chosen category. Flat paper, no glow: the picker and the photo carry the page.
  */
 export function heroCss(): string {
-  return [heroFrameCss(), pickerCss(), visualCss()].join('\n');
+  return [heroFrameCss(), pickerCss(), visualCss(), shootBarCss()].join('\n');
 }
 
 /** The hero frame, headline and fact list (the 404 page shares them). */
@@ -84,6 +84,9 @@ function pickerCss(): string {
 .picker-total{display:grid;gap:${px(S[4])};margin-top:${px(S[5])}}
 .picker-total p{margin:0}
 .picker-price{font-family:${fontDisplay};${fluidType(webType.figure)};color:${v('text-primary')}}
+.picker-price-text{${type(T.h1)}}
+.picker-price.num{font-variant-numeric:proportional-nums}
+.picker-controls>.picker-row:first-child{padding-top:0;margin-bottom:${px(S[4])}}
 .picker-break{${type(T.caption)};color:${v('text-secondary')};margin-top:${px(S[1])}}
 .picker-cta{display:grid;gap:${px(S[1])}}
 .picker-cta .text-link{justify-self:center;${type(T.caption)};font-weight:${T.bodyStrong.weight}}
@@ -104,12 +107,36 @@ ${mq(bp.lg)}{.picker{padding:${px(S[6])}}}
 `;
 }
 
+/** Phones: the chosen shoot and its price in a bar at the bottom once the picker is gone (ADR-0023). */
+function shootBarCss(): string {
+  return `
+.shoot-bar{position:fixed;z-index:20;left:${px(S[2])};right:${px(S[2])};
+  bottom:calc(${px(S[2])} + env(safe-area-inset-bottom));display:flex;align-items:center;gap:${px(S[3])};
+  padding:${px(S[2])} ${px(S[2])} ${px(S[2])} ${px(S[4])};background:${v('surface-overlay')};border:${hairline()};
+  border-radius:${px(R.lg)};box-shadow:${shadow('lg')};opacity:0;translate:0 calc(100% + ${px(S[4])});
+  pointer-events:none}
+.shoot-bar[data-visible="true"]{opacity:1;translate:none;pointer-events:auto}
+.shoot-bar-summary{flex:1;min-width:0;display:grid;color:${v('text-primary')};text-decoration:none}
+.shoot-bar-what{${type(T.caption)};color:${v('text-secondary')};white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.shoot-bar-price{display:flex;align-items:baseline;gap:${px(S[2])};${type(T.bodyStrong)}}
+.shoot-bar-extra{${type(T.caption)};color:${v('text-secondary')};font-weight:${T.body.weight}}
+.shoot-bar-edit{${type(T.caption)};color:${v('accent-text')};text-decoration:underline}
+html{scroll-padding-bottom:${px(S[14] + S[8])}}
+${mq(bp.lg)}{.shoot-bar{display:none}html{scroll-padding-bottom:0}}
+`;
+}
+
 function visualCss(): string {
   return `
 .hero-visual{display:flex;flex-direction:column;gap:${px(S[5])};min-width:0}
 .hero-photo{width:100%;aspect-ratio:4/3}
 .hero-photo img{object-position:50% 35%}
+.hero-visual .reel.hero-photo{aspect-ratio:4/5}
 .facts.hero-facts{display:grid;gap:${px(S[2])};margin:0;padding:0;border:0}
-${mq(bp.lg)}{.hero-photo{flex:1 1 auto;aspect-ratio:auto;min-height:${px(picker.photoMin)}}}
+${mq(bp.lg)}{
+  .hero-photo{flex:1 1 auto;aspect-ratio:auto;min-height:${px(picker.photoMin)}}
+  .hero-visual .reel.hero-photo{aspect-ratio:9/16;width:auto;max-width:100%;align-self:center}
+}
 `;
 }
