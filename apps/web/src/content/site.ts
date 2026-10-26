@@ -6,12 +6,12 @@ export const SITE = {
   /** Canonical origin. Every canonical, sitemap and JSON-LD URL is built from this. */
   url: LEGAL.siteUrl,
   locale: 'en_IN',
-  tagline: 'Professional photographers, booked in minutes',
+  tagline: 'Photographers and videographers, booked in minutes',
   description:
-    'Book a verified professional photographer in Surat, Mumbai or Vadodara. Clear prices from ' +
-    '₹3,500 + GST for 2 hours, with RAW + JPEG photos delivered within 48 hours.',
+    'Book a photographer or videographer in Surat, Mumbai or Vadodara for proposals, trips, ' +
+    'content days and more. Photo shoots from ₹3,500 + GST for 2 hours; photos within 48 hours.',
   /** Bump when page copy changes materially; feeds sitemap <lastmod>. */
-  contentUpdated: '2026-10-23',
+  contentUpdated: '2026-10-26',
 } as const;
 
 /**

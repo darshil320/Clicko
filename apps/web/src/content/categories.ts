@@ -191,7 +191,9 @@ export const CATEGORIES: readonly Category[] = [
       },
       {
         question: 'Do you shoot video?',
-        answer: 'Not at launch. Clickco is photography only for now.',
+        answer:
+          'Yes. Video is priced in the app at launch, which shows the plans that include it. It arrives ' +
+          'as unedited camera-original clips by secure link; a reel edit is a separate paid service.',
       },
     ],
   },

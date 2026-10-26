@@ -68,12 +68,12 @@ export function SiteFooter() {
             {LEGAL.entityName}. Courts at {LEGAL.jurisdiction} have exclusive jurisdiction.
           </p>
           <p>
-            Prices are exclusive of 18% GST (SAC 998383), shown with GST before you pay. Photography
-            only; editing is a separate service.
+            Prices are exclusive of 18% GST (SAC 998383), shown with GST before you pay. Photo and
+            video; editing is a separate service.
           </p>
           <p>
-            Photos on this site are licensed samples from Unsplash and Pexels, not Clickco shoots,
-            until our photographers' own work replaces them.
+            Photos and reels on this site are licensed samples from Unsplash and Pexels, not Clickco
+            shoots, until our photographers' own work replaces them.
           </p>
         </div>
       </div>
