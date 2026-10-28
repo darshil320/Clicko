@@ -105,6 +105,12 @@ describe.runIf(TEST_DATABASE_URL)(
       expect(far.json.error.code).toBe('OUTSIDE_GEOFENCE');
     });
 
+    it('refuses a mocked GPS fix even at the venue (ADR-0015 M3, ADR-0024 D4)', async () => {
+      const mocked = await proCall('check-in', { ...fixAt(0.05, 0), mocked: true });
+      expect(mocked.status).toBe(422);
+      expect(mocked.json.error.code).toBe('LOCATION_MOCKED');
+    });
+
     it('checks in within 150 m of the fallback venue point; billing starts at the scheduled start', async () => {
       const deviceTs = e2e.now().toISOString();
       const res = await proCall('check-in', fixAt(0.05, 0, SURAT_CENTRE, { deviceTs }));

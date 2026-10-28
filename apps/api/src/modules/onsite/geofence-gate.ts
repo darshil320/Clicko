@@ -34,8 +34,12 @@ export class GeofenceGate {
     @Inject(AssignmentEventsRepository) private readonly events: AssignmentEventsRepository,
   ) {}
 
-  /** 422 LOCATION_TOO_INACCURATE / OUTSIDE_GEOFENCE, or the measured result. */
+  /** 422 LOCATION_MOCKED / LOCATION_TOO_INACCURATE / OUTSIDE_GEOFENCE, or the measured result. */
   async check(tx: Tx, ctx: OnsiteContext, fix: GeoFix): Promise<GeofenceResult> {
+    if (fix.mocked) {
+      // ADR-0015 M3: a mock-location provider proves nothing about where the photographer is.
+      throw unprocessable('LOCATION_MOCKED', 'Turn off mock locations on this phone to continue');
+    }
     const { distanceM, basis } = await this.assignments.measure(tx, ctx.booking, fix.lat, fix.lng);
     const decision = decideGeofence({ distanceM, accuracyM: fix.accuracyM, basis });
     if (decision.kind === 'LOCATION_TOO_INACCURATE') {

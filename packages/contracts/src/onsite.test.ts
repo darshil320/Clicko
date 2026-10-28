@@ -14,8 +14,9 @@ import {
 const fix = { lat: 21.1702, lng: 72.8311, accuracyM: 12 };
 
 describe('on-site contracts (ADR-0013)', () => {
-  it('a fix defaults to online and refuses impossible coordinates or accuracy', () => {
-    expect(GeoFixBody.parse(fix)).toEqual({ ...fix, offline: false });
+  it('a fix defaults to online and not mocked, and refuses impossible coordinates or accuracy', () => {
+    expect(GeoFixBody.parse(fix)).toEqual({ ...fix, offline: false, mocked: false });
+    expect(GeoFixBody.parse({ ...fix, mocked: true }).mocked).toBe(true);
     expect(GeoFixBody.safeParse({ ...fix, lat: 91 }).success).toBe(false);
     expect(GeoFixBody.safeParse({ ...fix, accuracyM: 0 }).success).toBe(false);
     expect(GeoFixBody.safeParse({ ...fix, deviceTs: 'yesterday' }).success).toBe(false);

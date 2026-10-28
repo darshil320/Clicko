@@ -28,6 +28,8 @@ export const GeoFixBody = z.object({
   /** The device's own clock when the event happened. */
   deviceTs: IsoDateTime.optional(),
   offline: z.boolean().default(false),
+  /** The OS reports a mock-location provider (expo-location `mocked`); refused (ADR-0024 D4). */
+  mocked: z.boolean().default(false),
 });
 export type GeoFixBody = z.input<typeof GeoFixBody>;
 export type GeoFix = z.output<typeof GeoFixBody>;
