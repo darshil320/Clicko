@@ -257,6 +257,8 @@ export class CheckInService {
     now: Date,
   ): Promise<void> {
     const a = ctx.assignment;
+    // A mock-location fix proves nothing: never let it prompt ops to reverse a penalty (ADR-0024 D4).
+    if (fix.mocked) return;
     const deviceTs = fix.deviceTs ? new Date(fix.deviceTs) : null;
     if (!deviceTs || !a.releasedAt || deviceTs > a.releasedAt) return;
     const time = authoritativeTime({
