@@ -2,6 +2,46 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-28 · Sprint 6 frontend — the Clickco Pro app (ADR-0024, branch main)
+**Shipped**
+- `apps/pro`: second Expo SDK 56 app on the client's pinned toolchain plus `expo-location` 56.0.26
+  (approved by Darshil 28 Oct). White theme, `@clickco/ui` primitives.
+- Screens:
+  - **Sign-in:** PRO_LOGIN.
+  - **Jobs tab:** your jobs, new offers with live countdowns and polling every 10 s, uploads due.
+  - **Offer detail:** accept or decline.
+  - **Job screen:** on my way → geofenced check-in → start → timer, 1-hour extensions, waiting time,
+    access-denied / unsafe / client-absent reports → check-out with frame count → upload deadline.
+    Cancel until check-in.
+  - **Earnings and Profile:** Profile includes the sync queue.
+- **Offline write-ahead queue (G-19):** on-site taps without signal are saved with their time and
+  sent in order on reconnect. Pure core with tests; MMKV-persisted.
+- `@clickco/api-client`: `createProApiClient` plus a configurable refresh path (`/pro/auth/refresh`).
+- **API:** `GeoFixBody.mocked`; mocked fixes are refused (422 `LOCATION_MOCKED`) at check-in,
+  check-out and client-absent (ADR-0015 M3).
+- **Seen working in the browser against the live API:** accept → on my way → check-in with a GPS
+  fix → offline Start queued, then synced on reconnect → extension request pending with the
+  client.
+- **Tests:** Pro 197 · api-client 30 · contracts 58 · API 887 (+1 mocked-fix e2e) · typecheck 16/16.
+- **Security review:** no critical or high. Medium and low fixes were applied before commit (see
+  ADR-0024 §Security review).
+
+**Open / launch blockers**
+- **Encrypted token storage (M1).** Refresh token to Keychain/Keystore via `expo-secure-store`
+  (new dependency, needs approval) or encrypted MMKV; exclude MMKV from backups. Applies to
+  `apps/client` too.
+- **S9 API follow-ups:** start/en-route `deviceTs`; optional `lat`/`lng` on safety reports;
+  logging of mock attempts.
+- **Not tried on a phone yet:** needs a dev build (`pnpm --filter @clickco/pro android`).
+- **Doc 01 elements left out** (no API data yet): availability toggle, city ranking, 30-day chart,
+  masked calls, map thumbnail.
+
+**Note:** on this machine the full API suite times out at the default parallelism; it passes with
+`npx vitest run --maxWorkers=2` (~2 min).
+
+**Next:** S9–10 admin panel (staff QA desk, dispatch/SLA boards, refunds, payouts) · M1 storage
+hardening.
+
 ## 2026-10-26 · Video + Gen Z / creator positioning (ADR-0023, branch main)
 **Shipped**
 - OD-11 resolved by the owner: video is in scope. The site sells photographers and videographers;

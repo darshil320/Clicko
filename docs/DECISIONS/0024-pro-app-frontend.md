@@ -94,6 +94,45 @@ On-site actions go through one MMKV-persisted FIFO queue per device:
 - Venue addresses come from `GET /pro/assignments/:id` and are never persisted. The query cache is
   memory-only and is cleared on sign-out.
 
+## Security review, 28 Oct 2026
+No critical or high findings. The fixes below were made before the commit.
+- **Retries after a timeout:**
+  - A copy queued after a timeout gets a fresh Idempotency-Key whenever marking it offline
+    changes its body. Before, the server could answer `IDEMPOTENCY_KEY_REUSED` for a check-in it
+    had already recorded.
+  - The `deviceTs` replay rule still dedupes the event.
+- **Session expiry:**
+  - Saved actions survive an expired session; the sign-in screen says they are waiting.
+  - Explicit sign-out clears them, after a warning.
+  - A different photographer signing in keeps only their own.
+  - The session is captured before each send, so an action never queues under another person.
+- **Safety reports** (access denied, unsafe site):
+  - They fall back to the phone's last known position when no fresh fix comes.
+  - They may go ahead of a job's queued actions once its check-in has been sent.
+- **Stale data:**
+  - Fixes older than 30 s are treated as cached and refused for geofenced actions.
+  - Saved actions older than 6 h are not sent; they are shown as not sent.
+  - Refused actions keep only their outcome, never the location or the note.
+- **Server:** a mocked fix can no longer raise `offline_check_in_after_no_show`.
+- **Config:**
+  - iOS "Always" and motion permission strings are omitted.
+  - A production EAS build fails unless the API and portal URLs are https.
+
+**Open, with owners:**
+- **M1 — tokens and the queue sit in unencrypted MMKV; backups are only partly excluded.** Fix
+  before launch:
+  - keep the refresh token in Keychain/Keystore (`expo-secure-store`, a new dependency that
+    needs approval), or encrypt MMKV with a key held there;
+  - exclude MMKV from Android data extraction and from iOS backup.
+  - The same item is already open for `apps/client`.
+- **L2 — start and en-route carry no `deviceTs`.** A queued start is recorded at sync time.
+  Add `{deviceTs, offline}` to both endpoints (API change, S9).
+- **L1 (rest) — mock attempts are not visible to ops.** Log refused mocked fixes outside the
+  transaction and alert ops past a threshold (S9). Add `mocked`/`accuracyM` to waiting and
+  incident bodies, for audit only.
+- **M4 (rest) — no fix at all still blocks a safety report.** `IncidentBody` requires
+  `lat`/`lng`; making them optional is a contract change for domain review (S9).
+
 ## Not in this sprint
 Proof-of-attendance photos (doc 02), push notifications for new offers (S11), masked calls (S11),
 availability and schedules (S9), EAS builds (S12).
