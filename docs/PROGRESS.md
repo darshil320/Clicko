@@ -2,6 +2,90 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-28 · Sprint 9 — staff admin panel foundation + ops desks (ADR-0025, branch main)
+**Shipped**
+- **API (`modules/admin`):**
+  - Staff sign-in with email, password (scrypt) and a mandatory TOTP code. The TOTP secret is
+    encrypted with AES-GCM under `STAFF_TOTP_KEY`; first sign-in enrols it.
+  - Lockouts and rate limits on sign-in.
+  - Staff sessions: 12 h fixed, plus a 60-minute idle limit enforced by the server.
+  - `StaffGuard`, `@Roles` and city scoping: the ADR D3 matrix, checked cell by cell.
+  - An append-only audit log written in the same transaction as each change. A test fails if any
+    `/admin` mutation lacks `@Audited`.
+  - Desks:
+    - booking board (filters, IST dates, search, keyset paging) and booking page with audit trail;
+    - QA pass/fail with the real staff actor;
+    - incident confirm;
+    - dispatch list and detail;
+    - breach board: attribute to CLIENT or FORCE_MAJEURE only, and waive; no money moves;
+    - alerts feed;
+    - staff management;
+    - cities.
+  - `staff:create` (first SUPER_ADMIN) and `staff:totp` (dev) scripts; dev seed has one account
+    per role.
+- **`packages/ui-web`:** shadcn on Tailwind 4 + Radix, themed from `colorLight` tokens. A test
+  checks every variable against a token, text contrast and that amber is never used for text.
+- **`createAdminApiClient`:** every route typed, request bodies validated, every response pinned.
+- **`apps/admin` is now the staff panel:**
+  - Sign-in and enrolment.
+  - Navigation by role.
+  - Every desk.
+  - Nonce CSP, COOP/CORP, sessionStorage tokens, 30-minute idle sign-out.
+  - Open-redirect-safe `?next=`.
+  - The old simulators moved to `/dev`, which is a 404 outside development.
+- **Mobile M1 closed:** both Expo apps keep MMKV encrypted. The key is in the Keychain/Keystore
+  via `expo-secure-store` 56.0.4, using `WHEN_UNLOCKED_THIS_DEVICE_ONLY`. Existing installs are
+  migrated once.
+- **Seen working in the browser against the live API:**
+  - super admin sign-in with TOTP;
+  - board with live bookings, booking page, dispatch desk;
+  - create a staff member (temporary password shown once);
+  - that person's first sign-in and authenticator enrolment;
+  - the ops-agent role sees only its desks, and the API returns 403 for the others.
+- **Tests:**
+  - API 999 (with `--maxWorkers=2`), including 29 admin e2e;
+  - admin 96 · ui-web 67 · api-client 55 · contracts 58;
+  - client 102 · Pro 219;
+  - typecheck 17/17.
+- **Reviews:**
+  - Domain: no violations. Breaches put down to the client now owe nothing (they leave the OPEN
+    queue).
+  - Security: no critical or high on either side; the medium findings are fixed (ADR-0025
+    §Built).
+
+**Decisions:** ADR-0025 (and its review section). Breach re-attribution is limited to CLIENT or
+FORCE_MAJEURE, per ADR-0016 D9.
+
+**Open (ADR-0025 §Open):**
+- Password expiry and reset are not built yet.
+- Idempotency keys must be scoped to (action, entity) before the money desks.
+- Duplicated browser tabs.
+- The https deploy check is opt-in.
+- The ops alert feed reads `domain_events` directly.
+
+**Local sign-in:**
+- Run `pnpm --filter @clickco/api db:seed:dev`. Accounts are `super-admin@clickco.test` etc.,
+  password `clickco-dev-staff-only`.
+- For the code, run `pnpm --filter @clickco/api staff:totp <email>`.
+- The panel is at http://localhost:3001. The API needs `CORS_ORIGINS` to include it.
+
+**Waiting on Darshil / CA:**
+- TDS section and rates for photographer payouts (S10).
+- The breach remedy amounts (SA-21).
+- GST credit notes on refunds of invoiced money (S10).
+
+**Next:** S10:
+- refunds and credits, plus settling review items;
+- breach remedies;
+- payouts + TDS;
+- pricing editor (FINANCE + 2FA);
+- onboarding kanban and KYC queue;
+- QM queue;
+- grievance tickets (SA-02);
+- equipment claims (SA-01);
+- penalty waivers;
+- password reset.
+
 ## 2026-10-28 · Sprint 6 frontend — the Clickco Pro app (ADR-0024, branch main)
 **Shipped**
 - `apps/pro`: second Expo SDK 56 app on the client's pinned toolchain plus `expo-location` 56.0.26
