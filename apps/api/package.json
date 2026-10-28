@@ -12,6 +12,8 @@
     "db:sync-spec": "tsx src/infra/db/sync-spec.ts",
     "db:seed": "node --env-file-if-exists=.env --import tsx src/infra/db/seed.ts",
     "db:seed:dev": "node --env-file-if-exists=.env --import tsx src/infra/db/seed-dev.ts",
+    "staff:create": "node --env-file-if-exists=.env --import tsx src/cli/staff-create.ts",
+    "staff:totp": "node --env-file-if-exists=.env --import tsx src/cli/staff-totp.ts",
     "start:local": "nest build && node --env-file=.env dist/main.js"
   },
   "dependencies": {

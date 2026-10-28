@@ -13,7 +13,18 @@ export const JWT_SECRET = Symbol('JWT_SECRET');
 
 export const TOKEN_POLICY = {
   accessTtlMs: 15 * 60 * 1000,
+  /** Clients and photographers: 30 days, sliding (each rotation starts a new 30 days). */
   refreshTtlMs: 30 * 24 * 60 * 60 * 1000,
+  /**
+   * Staff (ADR-0025 D2): 12 h, fixed from sign-in — rotation keeps the original expiry, so a
+   * staff session never outlives a working day without a fresh password + TOTP.
+   */
+  staffRefreshTtlMs: 12 * 60 * 60 * 1000,
+  /**
+   * Staff: a refresh token unused for 60 min is refused (security review M2). The panel refreshes
+   * every ≤15 min while open, so only a closed or abandoned tab — or a lifted token — hits this.
+   */
+  staffIdleMs: 60 * 60 * 1000,
   /** A refresh token replayed this soon after rotation is a client retry, not theft. */
   rotationGraceMs: 30 * 1000,
   tokenType: 'at+jwt',
@@ -31,6 +42,9 @@ const SESSION_INVALID = { code: 'SESSION_INVALID', message: 'Please sign in agai
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
+const refreshTtlMs = (kind: SubjectKind): number =>
+  kind === 'STAFF' ? TOKEN_POLICY.staffRefreshTtlMs : TOKEN_POLICY.refreshTtlMs;
+
 @Injectable()
 export class TokenService {
   private readonly key: Uint8Array;
@@ -45,7 +59,7 @@ export class TokenService {
 
   async issue(subject: Subject, deviceId: string | null): Promise<TokenPair> {
     const now = this.clock();
-    const refresh = this.newRefresh(now, deviceId);
+    const refresh = this.newRefresh(now, deviceId, subject.kind);
     await this.repo.insert({ ...refresh.row, subjectKind: subject.kind, subjectId: subject.id });
     return this.pair(subject, now, refresh.token, refresh.row.expiresAt);
   }
@@ -56,17 +70,19 @@ export class TokenService {
     expectedKind: SubjectKind,
   ): Promise<TokenPair & { subject: Subject }> {
     const now = this.clock();
-    const next = this.newRefresh(now, null);
+    const next = this.newRefresh(now, null, expectedKind);
     const result = await this.repo.rotate(
       sha256(refreshToken),
       now,
       next.row,
       TOKEN_POLICY.rotationGraceMs,
       expectedKind,
+      expectedKind === 'STAFF',
+      expectedKind === 'STAFF' ? TOKEN_POLICY.staffIdleMs : null,
     );
     if (result.outcome !== 'ROTATED') throw new UnauthorizedException(SESSION_INVALID);
     const subject: Subject = { kind: result.subjectKind, id: result.subjectId };
-    return { ...(await this.pair(subject, now, next.token, next.row.expiresAt)), subject };
+    return { ...(await this.pair(subject, now, next.token, result.expiresAt)), subject };
   }
 
   /** Ends every session for a subject (blocked account, suspected theft). */
@@ -74,8 +90,9 @@ export class TokenService {
     await this.repo.revokeAllForSubject(subject.kind, subject.id, this.clock());
   }
 
-  async revoke(refreshToken: string): Promise<void> {
-    await this.repo.revoke(sha256(refreshToken), this.clock());
+  /** Sign-out. Returns whose live token it was (null when unknown or already revoked). */
+  async revoke(refreshToken: string): Promise<Subject | null> {
+    return this.repo.revoke(sha256(refreshToken), this.clock());
   }
 
   async verifyAccess(token: string): Promise<Subject> {
@@ -96,7 +113,7 @@ export class TokenService {
     }
   }
 
-  private newRefresh(now: Date, deviceId: string | null) {
+  private newRefresh(now: Date, deviceId: string | null, kind: SubjectKind) {
     const token = randomBytes(32).toString('base64url');
     return {
       token,
@@ -105,7 +122,7 @@ export class TokenService {
         tokenHash: sha256(token),
         deviceId,
         revokedAt: null,
-        expiresAt: new Date(now.getTime() + TOKEN_POLICY.refreshTtlMs),
+        expiresAt: new Date(now.getTime() + refreshTtlMs(kind)),
         createdAt: now,
       },
     };

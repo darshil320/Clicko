@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { DEV_STAFF_TOTP_KEY } from '../modules/admin/auth/secret-box';
 import { loadEnv } from './env';
+
+/** A deployed-looking STAFF_TOTP_KEY (32 bytes, base64); not a real secret. */
+const TOTP_KEY = Buffer.alloc(32, 7).toString('base64');
 
 const valid = {
   NODE_ENV: 'development',
@@ -26,6 +30,7 @@ describe('loadEnv', () => {
       STORAGE_LOCAL_LIMIT_BYTES: 50 * 1024 ** 3,
       JPEG_EXPORT_ADAPTER: 'passthrough',
       DARKTABLE_CLI_PATH: 'darktable-cli',
+      STAFF_TOTP_KEY: DEV_STAFF_TOTP_KEY,
     });
   });
 
@@ -53,6 +58,7 @@ describe('loadEnv', () => {
       STORAGE_ADAPTER: 'drive',
       JPEG_EXPORT_ADAPTER: 'darktable',
       TRUST_PROXY_HOPS: '1',
+      STAFF_TOTP_KEY: TOTP_KEY,
     };
     expect(() => loadEnv({ ...deployed, QUEUE_PREFIX: 'clickco-prod' })).toThrow(/REDIS_URL/);
     expect(() => loadEnv({ ...deployed, REDIS_URL: 'rediss://cache:6380' })).toThrow(
@@ -100,6 +106,48 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...valid, TRUST_PROXY_HOPS: 'true' })).toThrow(/TRUST_PROXY_HOPS/);
   });
 
+  describe('STAFF_TOTP_KEY (ADR-0025 D2)', () => {
+    const deployed = {
+      ...valid,
+      NODE_ENV: 'production',
+      SMS_ADAPTER: 'dlt',
+      REDIS_URL: 'rediss://cache:6380',
+      QUEUE_PREFIX: 'clickco-prod',
+      PAYMENT_GATEWAY: 'razorpay',
+      RAZORPAY_KEY_ID: 'rzp_live_x',
+      RAZORPAY_KEY_SECRET: 'secret',
+      RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
+      STORAGE_ADAPTER: 'drive',
+      JPEG_EXPORT_ADAPTER: 'darktable',
+      TRUST_PROXY_HOPS: '1',
+    };
+
+    it('defaults to the public development key in development and test', () => {
+      expect(loadEnv(valid).STAFF_TOTP_KEY).toBe(DEV_STAFF_TOTP_KEY);
+      expect(loadEnv({ ...valid, NODE_ENV: 'test', STAFF_TOTP_KEY: '' }).STAFF_TOTP_KEY).toBe(
+        DEV_STAFF_TOTP_KEY,
+      );
+    });
+
+    it('is required in staging and production, and never the development key', () => {
+      expect(() => loadEnv(deployed)).toThrow(/STAFF_TOTP_KEY/);
+      expect(() => loadEnv({ ...deployed, STAFF_TOTP_KEY: DEV_STAFF_TOTP_KEY })).toThrow(
+        /STAFF_TOTP_KEY/,
+      );
+      const unpadded = DEV_STAFF_TOTP_KEY.replace(/=+$/, '');
+      expect(() => loadEnv({ ...deployed, STAFF_TOTP_KEY: unpadded })).toThrow(/STAFF_TOTP_KEY/);
+      expect(loadEnv({ ...deployed, STAFF_TOTP_KEY: TOTP_KEY }).STAFF_TOTP_KEY).toBe(TOTP_KEY);
+    });
+
+    it('must decode to exactly 32 bytes', () => {
+      const short = Buffer.alloc(16, 1).toString('base64');
+      expect(() => loadEnv({ ...valid, STAFF_TOTP_KEY: short })).toThrow(/STAFF_TOTP_KEY/);
+      expect(() => loadEnv({ ...valid, STAFF_TOTP_KEY: 'not base64 at all!' })).toThrow(
+        /STAFF_TOTP_KEY/,
+      );
+    });
+  });
+
   describe('when deployed (security review L6)', () => {
     const deployed = {
       ...valid,
@@ -113,6 +161,7 @@ describe('loadEnv', () => {
       RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
       STORAGE_ADAPTER: 'drive',
       JPEG_EXPORT_ADAPTER: 'darktable',
+      STAFF_TOTP_KEY: TOTP_KEY,
     };
 
     it('the proxy hop count must be explicit (0 behind a load balancer pools every client)', () => {
@@ -167,6 +216,7 @@ describe('loadEnv', () => {
         STORAGE_ADAPTER: 'drive',
         JPEG_EXPORT_ADAPTER: 'darktable',
         TRUST_PROXY_HOPS: '1',
+        STAFF_TOTP_KEY: TOTP_KEY,
         ...razorpay,
       });
       expect(env.PAYMENT_GATEWAY).toBe('razorpay');
@@ -211,6 +261,7 @@ describe('loadEnv', () => {
       RAZORPAY_KEY_SECRET: 'rzp-key-secret',
       RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
       TRUST_PROXY_HOPS: '1',
+      STAFF_TOTP_KEY: TOTP_KEY,
     };
 
     it('defaults to local disk and the passthrough exporter in development', () => {

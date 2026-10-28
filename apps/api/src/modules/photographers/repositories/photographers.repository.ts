@@ -141,6 +141,16 @@ export class PhotographersRepository {
               ${p.note}, ${p.at})`;
   }
 
+  async contacts(
+    db: Db,
+    ids: readonly string[],
+  ): Promise<Map<string, { readonly name: string; readonly phone: string }>> {
+    if (ids.length === 0) return new Map();
+    const rows = await db<{ id: string; full_name: string; phone_e164: string }[]>`
+      SELECT id, full_name, phone_e164 FROM photographers WHERE id IN ${db([...new Set(ids)])}`;
+    return new Map(rows.map((r) => [r.id, { name: r.full_name, phone: r.phone_e164 }]));
+  }
+
   async displayNames(db: Db, ids: readonly string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();
     const rows = await db<{ id: string; full_name: string }[]>`

@@ -8,7 +8,9 @@ import { fromPaiseBigint } from '@clickco/utils';
 import { Inject, Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
+import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
+import type { IdSubquery } from '../../infra/db/id-subquery';
 import { BookingsService } from '../bookings/bookings.service';
 import type { Actor } from '../bookings/bookings.types';
 import { AssignmentsService, toEwktPoint } from '../dispatch/assignments.service';
@@ -18,7 +20,10 @@ import { ON_SITE_STATUSES } from './onsite.config';
 import type { Tx } from './onsite.types';
 import { type OnsiteContext, OnsiteContextLoader } from './onsite-context';
 import { emit, needsReview } from './onsite-outbox';
-import { AssignmentEventsRepository } from './repositories/assignment-events.repository';
+import {
+  AssignmentEventsRepository,
+  type IncidentReportRecord,
+} from './repositories/assignment-events.repository';
 import { deliveryDueAt } from './rules/timing';
 
 const REPORT = {
@@ -28,8 +33,6 @@ const REPORT = {
 
 /** The note may hold anything; ops sees the first 500 characters in the alert. */
 const NOTE_IN_ALERT = 500;
-/** Staff confirmation is S9; the dev console stands in (no staff identity yet). */
-const STAFF_ACTOR: Actor = { kind: 'STAFF', id: null };
 const isOnSite = (s: string): boolean => (ON_SITE_STATUSES as readonly string[]).includes(s);
 
 /**
@@ -102,12 +105,19 @@ export class IncidentsService {
   }
 
   /**
-   * Dev-only stand-in for the S9 staff confirmation: needs a matching report; ACCESS_DENIED from
-   * CHECKED_IN / IN_PROGRESS, UNSAFE_SITE from IN_PROGRESS (a CHECKED_IN booking walks there
-   * first). The assignment completes without a check-out. An unsafe site's T0 is the
-   * confirmation (ADR-0016 D11); an access denial has none.
+   * Staff confirmation (ADR-0013 D10; the admin incident desk, ADR-0025 — the dev console passes
+   * a stand-in STAFF actor): needs a matching report; ACCESS_DENIED from CHECKED_IN /
+   * IN_PROGRESS, UNSAFE_SITE from IN_PROGRESS (a CHECKED_IN booking walks there first). The
+   * assignment completes without a check-out. An unsafe site's T0 is the confirmation
+   * (ADR-0016 D11); an access denial has none. A repeat confirmation is a no-op (not audited).
+   * `opts.audit` runs inside the confirmation's transaction.
    */
-  async confirm(assignmentId: string, incident: IncidentKind): Promise<ConfirmIncidentResponse> {
+  async confirm(
+    assignmentId: string,
+    incident: IncidentKind,
+    actor: Actor,
+    opts: { readonly note?: string; readonly audit?: TxHook } = {},
+  ): Promise<ConfirmIncidentResponse> {
     const now = this.clock();
     return this.sql.begin(async (tx) => {
       const ctx = await this.contexts.forAssignment(tx, assignmentId);
@@ -119,24 +129,54 @@ export class IncidentsService {
       }
       if (ctx.assignment.status !== 'ACTIVE') throw assignmentNotActive();
       if (!isOnSite(ctx.booking.status)) throw wrongStage(ctx.booking.status);
-      await this.end(tx, ctx, incident, now);
+      await this.end(tx, ctx, incident, actor, now, opts.note ?? null);
+      await opts.audit?.(tx, {
+        before: { status: ctx.booking.status, assignment_status: ctx.assignment.status },
+        after: {
+          status: incident,
+          assignment_status: 'COMPLETED',
+          assignment_id: assignmentId,
+          note: opts.note ?? null,
+        },
+      });
       return response;
     });
   }
 
-  private async end(tx: Tx, ctx: OnsiteContext, incident: IncidentKind, now: Date): Promise<void> {
+  /**
+   * Reports not yet resolved (ADR-0025 D5): access denied / unsafe site while the booking is
+   * still on site (`onSite`), client absent while the booking waits at CHECKED_OUT for its money
+   * decision (`absent`). Both subqueries come from BookingsService, already city-scoped.
+   */
+  openReports(onSite: IdSubquery, absent: IdSubquery): Promise<IncidentReportRecord[]> {
+    return this.events.openReports(this.sql, onSite, absent);
+  }
+
+  /** Report kinds per booking, for the board's INCIDENT_REPORTED flag. */
+  reportKinds(bookingIds: readonly string[]): Promise<Map<string, ReadonlySet<string>>> {
+    return this.events.reportKinds(this.sql, bookingIds);
+  }
+
+  private async end(
+    tx: Tx,
+    ctx: OnsiteContext,
+    incident: IncidentKind,
+    actor: Actor,
+    now: Date,
+    note: string | null,
+  ): Promise<void> {
     const bookingId = ctx.booking.bookingId;
     if (incident === 'UNSAFE_SITE' && ctx.booking.status === 'CHECKED_IN') {
       await this.bookings.transition(tx, {
         bookingId,
         to: 'IN_PROGRESS',
-        actor: STAFF_ACTOR,
+        actor,
         occurredAt: now,
         reason: 'Shoot treated as started for an unsafe-site abort',
         payload: { assignment_id: ctx.assignment.id },
       });
     }
-    await this.extensions.closeUnresolved(tx, ctx, STAFF_ACTOR, now);
+    await this.extensions.closeUnresolved(tx, ctx, actor, now);
     await this.assignments.completeWithoutCheckOut(tx, ctx.assignment.id);
     if (incident === 'UNSAFE_SITE') {
       // ADR-0016 D11: what was shot is delivered; T0 is this confirmation (no check-out exists).
@@ -150,8 +190,9 @@ export class IncidentsService {
     await this.bookings.transition(tx, {
       bookingId,
       to: incident,
-      actor: STAFF_ACTOR,
+      actor,
       occurredAt: now,
+      ...(note ? { metadata: { staff_note: note } } : {}),
       reason:
         incident === 'ACCESS_DENIED'
           ? 'Venue access denied (T&C §7.2), confirmed'

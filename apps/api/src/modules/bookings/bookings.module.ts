@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
+import { BookingAdminRepository } from './repositories/booking-admin.repository';
 import { BookingDeliveryRepository } from './repositories/booking-delivery.repository';
 import { BookingDispatchRepository } from './repositories/booking-dispatch.repository';
 import { BookingOnsiteRepository } from './repositories/booking-onsite.repository';
@@ -17,6 +18,7 @@ import { BookingsRepository } from './repositories/bookings.repository';
     BookingDispatchRepository,
     BookingOnsiteRepository,
     BookingDeliveryRepository,
+    BookingAdminRepository,
     BookingsService,
   ],
   exports: [BookingsService],

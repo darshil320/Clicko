@@ -2,6 +2,7 @@ import type { CreateBookingRequest } from '@clickco/contracts';
 import type postgres from 'postgres';
 import { BookingsService } from '../modules/bookings/bookings.service';
 import type { BookingView } from '../modules/bookings/bookings.types';
+import { BookingAdminRepository } from '../modules/bookings/repositories/booking-admin.repository';
 import { BookingDeliveryRepository } from '../modules/bookings/repositories/booking-delivery.repository';
 import { BookingDispatchRepository } from '../modules/bookings/repositories/booking-dispatch.repository';
 import { BookingOnsiteRepository } from '../modules/bookings/repositories/booking-onsite.repository';
@@ -88,6 +89,7 @@ export function bookingsService(sql: postgres.Sql): BookingsService {
     new BookingDispatchRepository(),
     new BookingOnsiteRepository(),
     new BookingDeliveryRepository(),
+    new BookingAdminRepository(),
   );
 }
 

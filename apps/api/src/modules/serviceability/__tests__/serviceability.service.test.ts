@@ -60,6 +60,9 @@ class FakeRepo implements ServiceabilityRepository {
     const all = [...this.areas.values()].map((a) => a.city);
     return new Map(all.filter((c) => cityIds.includes(c.id)).map((c) => [c.id, c.name]));
   }
+  async cities() {
+    return [];
+  }
   async venuePoints(pincode: string) {
     const area = this.areas.get(pincode);
     if (!area) return null;

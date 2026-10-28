@@ -1,5 +1,6 @@
 import type { AssignmentEventKind } from '@clickco/contracts';
 import { Injectable } from '@nestjs/common';
+import type { IdSubquery } from '../../../infra/db/id-subquery';
 import type { ActorKind } from '../../bookings/state-machine';
 import type { AssignmentEventRecord, Db, NewAssignmentEvent, Tx } from '../onsite.types';
 
@@ -30,6 +31,26 @@ const toRecord = (r: Row): AssignmentEventRecord => ({
   deviceTs: r.device_ts,
   occurredAt: r.occurred_at,
 });
+
+export type IncidentReportKind =
+  | 'ACCESS_DENIED_REPORTED'
+  | 'UNSAFE_REPORTED'
+  | 'CLIENT_ABSENT_REPORTED';
+
+const REPORT_KINDS: readonly IncidentReportKind[] = [
+  'ACCESS_DENIED_REPORTED',
+  'UNSAFE_REPORTED',
+  'CLIENT_ABSENT_REPORTED',
+];
+
+export interface IncidentReportRecord {
+  readonly eventId: string;
+  readonly kind: IncidentReportKind;
+  readonly assignmentId: string;
+  readonly bookingId: string;
+  readonly note: string | null;
+  readonly reportedAt: Date;
+}
 
 const COLUMNS = `id::text AS id, assignment_id, booking_id, kind, minutes, amount_paise, note,
   actor_kind, actor_id, device_ts, occurred_at`;
@@ -79,6 +100,57 @@ export class AssignmentEventsRepository {
       WHERE assignment_id = ${assignmentId} AND kind = ${kind} AND device_ts = ${deviceTs}
       ORDER BY id LIMIT 1`;
     return row ? toRecord(row) : null;
+  }
+
+  /**
+   * The first report of each kind per assignment, for bookings still awaiting the decision:
+   * access denied / unsafe in `onSite`, client absent in `absent`. Oldest first.
+   */
+  async openReports(
+    db: Db,
+    onSite: IdSubquery,
+    absent: IdSubquery,
+  ): Promise<IncidentReportRecord[]> {
+    const rows = await db<
+      {
+        id: string;
+        kind: IncidentReportKind;
+        assignment_id: string;
+        booking_id: string;
+        note: string | null;
+        occurred_at: Date;
+      }[]
+    >`
+      SELECT DISTINCT ON (assignment_id, kind) id::text AS id, kind, assignment_id, booking_id,
+             note, occurred_at
+      FROM assignment_events
+      WHERE (kind IN ('ACCESS_DENIED_REPORTED', 'UNSAFE_REPORTED') AND booking_id IN (${onSite}))
+         OR (kind = 'CLIENT_ABSENT_REPORTED' AND booking_id IN (${absent}))
+      ORDER BY assignment_id, kind, id`;
+    return rows
+      .map((r) => ({
+        eventId: r.id,
+        kind: r.kind,
+        assignmentId: r.assignment_id,
+        bookingId: r.booking_id,
+        note: r.note,
+        reportedAt: r.occurred_at,
+      }))
+      .sort((a, b) => a.reportedAt.getTime() - b.reportedAt.getTime());
+  }
+
+  async reportKinds(
+    db: Db,
+    bookingIds: readonly string[],
+  ): Promise<Map<string, ReadonlySet<string>>> {
+    if (bookingIds.length === 0) return new Map();
+    const rows = await db<{ booking_id: string; kind: string }[]>`
+      SELECT DISTINCT booking_id, kind FROM assignment_events
+      WHERE booking_id IN ${db([...new Set(bookingIds)])} AND kind IN ${db([...REPORT_KINDS])}`;
+    const out = new Map<string, Set<string>>();
+    for (const r of rows)
+      out.set(r.booking_id, new Set([...(out.get(r.booking_id) ?? []), r.kind]));
+    return out;
   }
 
   async firstOfKind(

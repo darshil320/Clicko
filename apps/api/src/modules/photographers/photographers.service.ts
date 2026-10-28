@@ -63,6 +63,13 @@ export class PhotographersService {
     return this.repo.findActiveById(this.sql, id);
   }
 
+  /** Name and phone for the staff booking page (ADR-0025; clients never see these). */
+  contacts(
+    ids: readonly string[],
+  ): Promise<Map<string, { readonly name: string; readonly phone: string }>> {
+    return this.repo.contacts(this.sql, ids);
+  }
+
   /** Names for the ops dispatch desk (staff-facing; clients never see these). */
   displayNames(ids: readonly string[]): Promise<Map<string, string>> {
     return this.repo.displayNames(this.sql, ids);

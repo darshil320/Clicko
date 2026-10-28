@@ -10,6 +10,7 @@ import { DbModule } from './infra/db/db.module';
 import { OutboxModule } from './infra/outbox/outbox.module';
 import { QueuesModule } from './infra/queues/queues.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
@@ -53,6 +54,7 @@ class CoreModule {}
     DeliveryModule,
     MediaModule,
     OpsModule,
+    AdminModule,
     JobsModule,
     ...devOnlyModules(process.env.NODE_ENV),
   ],

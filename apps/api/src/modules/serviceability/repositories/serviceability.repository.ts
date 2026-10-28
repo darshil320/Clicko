@@ -38,10 +38,19 @@ export interface ServiceabilityRepository {
   insertWaitlist(entry: WaitlistInsert): Promise<void>;
   /** Display names for city ids (other modules never read the cities table themselves). */
   cityNames(cityIds: readonly string[]): Promise<Map<string, string>>;
+  /** Cities by name; `ids` null = every city (the staff panel's pickers, ADR-0025). */
+  cities(ids: readonly string[] | null): Promise<CitySummary[]>;
   /** The pincode centroid and its city's centre as raw geography text (hex EWKB); null if unknown. */
   venuePoints(pincode: string): Promise<VenuePoints | null>;
   /** Area + city names for pincodes (photographer offers show the area, never the address). */
   areaLabels(pincodes: readonly string[]): Promise<Map<string, AreaLabel>>;
+}
+
+export interface CitySummary {
+  readonly id: string;
+  readonly name: string;
+  readonly state: string;
+  readonly status: AreaStatus;
 }
 
 export const SERVICEABILITY_REPOSITORY = Symbol('SERVICEABILITY_REPOSITORY');
@@ -121,5 +130,13 @@ export class PgServiceabilityRepository implements ServiceabilityRepository {
     const rows = await this.sql<{ id: string; name: string }[]>`
       SELECT id, name FROM cities WHERE id IN ${this.sql([...new Set(cityIds)])}`;
     return new Map(rows.map((r) => [r.id, r.name]));
+  }
+
+  async cities(ids: readonly string[] | null): Promise<CitySummary[]> {
+    if (ids !== null && ids.length === 0) return [];
+    return this.sql<CitySummary[]>`
+      SELECT id, name, state, status FROM cities
+      WHERE ${ids === null ? this.sql`TRUE` : this.sql`id IN ${this.sql([...new Set(ids)])}`}
+      ORDER BY name, id`;
   }
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEV_STAFF_TOTP_KEY } from '../modules/admin/auth/secret-box';
 
 /**
  * Every variable the API reads, validated once at boot. Services receive the
@@ -8,6 +9,16 @@ import { z } from 'zod';
 const Secret = z.string().min(32, 'must be at least 32 characters');
 
 const DEPLOYED: readonly string[] = ['staging', 'production'];
+
+/** Standard base64 that decodes to exactly 32 bytes (an AES-256 key). */
+const Base64Key32 = z
+  .string()
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/, 'must be base64')
+  .refine((v) => Buffer.from(v, 'base64').length === 32, 'must decode to 32 bytes');
+
+/** Compared as bytes: the dev key without its `=` padding is still the dev key. */
+const isDevStaffTotpKey = (key: string | undefined): boolean =>
+  key !== undefined && Buffer.from(key, 'base64').equals(Buffer.from(DEV_STAFF_TOTP_KEY, 'base64'));
 
 /** A key copied from .env.example as `KEY=` arrives as ''. Treat that as unset. */
 const unsetIfEmpty = <S extends z.ZodType>(schema: S) =>
@@ -76,6 +87,9 @@ export const EnvSchema = z
     // RAW → JPEG export (v0.2 §3.2). `passthrough` registers placeholders — development and test only.
     JPEG_EXPORT_ADAPTER: unsetIfEmpty(z.enum(['darktable', 'passthrough']).default('passthrough')),
     DARKTABLE_CLI_PATH: unsetIfEmpty(z.string().min(1).default('darktable-cli')),
+    // AES-256-GCM key for staff TOTP secrets at rest (ADR-0025 D2): 32 bytes, base64. Required
+    // when deployed; development and test fall back to a fixed PUBLIC key (secret-box.ts).
+    STAFF_TOTP_KEY: unsetIfEmpty(Base64Key32.optional()),
   })
   .refine(
     (e) => e.SMS_ADAPTER !== 'console' || e.NODE_ENV === 'development' || e.NODE_ENV === 'test',
@@ -132,10 +146,19 @@ export const EnvSchema = z
     message: 'the passthrough JPEG exporter is only allowed in development and test',
     path: ['JPEG_EXPORT_ADAPTER'],
   })
+  .refine((e) => !DEPLOYED.includes(e.NODE_ENV) || e.STAFF_TOTP_KEY !== undefined, {
+    message: 'staging and production must set STAFF_TOTP_KEY',
+    path: ['STAFF_TOTP_KEY'],
+  })
+  .refine((e) => !DEPLOYED.includes(e.NODE_ENV) || !isDevStaffTotpKey(e.STAFF_TOTP_KEY), {
+    message: 'the public development key is only allowed in development and test',
+    path: ['STAFF_TOTP_KEY'],
+  })
   .transform((e) => ({
     ...e,
     QUEUE_PREFIX: e.QUEUE_PREFIX ?? 'clickco',
     TRUST_PROXY_HOPS: e.TRUST_PROXY_HOPS ?? 0,
+    STAFF_TOTP_KEY: e.STAFF_TOTP_KEY ?? DEV_STAFF_TOTP_KEY,
   }));
 export type Env = z.infer<typeof EnvSchema>;
 

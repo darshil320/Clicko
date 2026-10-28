@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../common/clock';
 import {
+  type CitySummary,
   SERVICEABILITY_REPOSITORY,
   type ServiceabilityRepository,
 } from './repositories/serviceability.repository';
@@ -144,6 +145,11 @@ export class ServiceabilityService {
 
   cityNames(cityIds: readonly string[]): Promise<Map<string, string>> {
     return this.repo.cityNames(cityIds);
+  }
+
+  /** `ids` null = every city. */
+  cities(ids: readonly string[] | null): Promise<CitySummary[]> {
+    return this.repo.cities(ids);
   }
 
   /**

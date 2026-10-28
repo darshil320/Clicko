@@ -1,3 +1,4 @@
+import type { AssignmentStatus } from '@clickco/contracts';
 import { Inject, Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import { SQL } from '../../infra/db/db.module';
@@ -25,6 +26,29 @@ const toEngagement = (r: Row): ShootEngagement => ({
   declaredFrameCount: r.declared_frame_count,
 });
 
+/** A booking's latest assignment as the staff panel shows it (ADR-0025). */
+export interface AssignmentSummary {
+  readonly assignmentId: string;
+  readonly bookingId: string;
+  readonly photographerId: string;
+  readonly status: AssignmentStatus;
+  readonly acceptedAt: Date;
+  readonly checkInAt: Date | null;
+  readonly checkOutAt: Date | null;
+  readonly declaredFrameCount: number | null;
+}
+
+interface SummaryRow {
+  id: string;
+  booking_id: string;
+  photographer_id: string;
+  status: AssignmentStatus;
+  accepted_at: Date;
+  check_in_at: Date | null;
+  check_out_at: Date | null;
+  declared_frame_count: number | null;
+}
+
 /** How far back the upload portal looks for a photographer's shoots (bookings past QA drop out anyway). */
 const LOOKBACK_DAYS = 30;
 
@@ -44,6 +68,38 @@ export class AssignmentReads {
         AND status IN ('ACTIVE', 'COMPLETED')
       ORDER BY accepted_at DESC LIMIT 1`;
     return row ? toEngagement(row) : null;
+  }
+
+  /** The most recently accepted assignment of each booking (replacements supersede). */
+  async latestForBookings(bookingIds: readonly string[]): Promise<Map<string, AssignmentSummary>> {
+    if (bookingIds.length === 0) return new Map();
+    const rows = await this.sql<SummaryRow[]>`
+      SELECT DISTINCT ON (booking_id) id, booking_id, photographer_id, status, accepted_at,
+             check_in_at, check_out_at, declared_frame_count
+      FROM assignments WHERE booking_id IN ${this.sql([...new Set(bookingIds)])}
+      ORDER BY booking_id, accepted_at DESC, id DESC`;
+    return new Map(
+      rows.map((r) => [
+        r.booking_id,
+        {
+          assignmentId: r.id,
+          bookingId: r.booking_id,
+          photographerId: r.photographer_id,
+          status: r.status,
+          acceptedAt: r.accepted_at,
+          checkInAt: r.check_in_at,
+          checkOutAt: r.check_out_at,
+          declaredFrameCount: r.declared_frame_count,
+        },
+      ]),
+    );
+  }
+
+  /** null when the assignment does not exist. */
+  async bookingIdOf(assignmentId: string): Promise<string | null> {
+    const [row] = await this.sql<{ booking_id: string }[]>`
+      SELECT booking_id FROM assignments WHERE id = ${assignmentId}`;
+    return row?.booking_id ?? null;
   }
 
   async recentEngagements(photographerId: string, now: Date): Promise<ShootEngagement[]> {

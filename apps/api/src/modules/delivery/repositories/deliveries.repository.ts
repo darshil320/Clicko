@@ -44,6 +44,8 @@ export interface QaRecord {
   readonly status: 'PASSED' | 'FAILED';
   readonly note: string | null;
   readonly at: Date;
+  /** The staff member who decided (deliveries.qa_by); null for a SYSTEM decision. */
+  readonly by: string | null;
 }
 
 /** deliveries (schema §9): one per booking, written at QA and at release. */
@@ -59,14 +61,15 @@ export class DeliveriesRepository {
   async recordQa(tx: Tx, q: QaRecord): Promise<DeliveryRecord> {
     const [row] = await tx<Row[]>`
       INSERT INTO deliveries (booking_id, raw_file_count, raw_bytes, jpeg_file_count, jpeg_bytes,
-                              video_file_count, video_bytes, qa_status, qa_at, qa_note)
+                              video_file_count, video_bytes, qa_status, qa_at, qa_note, qa_by)
       VALUES (${q.bookingId}, ${q.raw.files}, ${q.raw.bytes}, ${q.jpeg.files}, ${q.jpeg.bytes},
-              ${q.video.files}, ${q.video.bytes}, ${q.status}, ${q.at}, ${q.note})
+              ${q.video.files}, ${q.video.bytes}, ${q.status}, ${q.at}, ${q.note}, ${q.by})
       ON CONFLICT (booking_id) DO UPDATE
         SET raw_file_count = EXCLUDED.raw_file_count, raw_bytes = EXCLUDED.raw_bytes,
             jpeg_file_count = EXCLUDED.jpeg_file_count, jpeg_bytes = EXCLUDED.jpeg_bytes,
             video_file_count = EXCLUDED.video_file_count, video_bytes = EXCLUDED.video_bytes,
-            qa_status = EXCLUDED.qa_status, qa_at = EXCLUDED.qa_at, qa_note = EXCLUDED.qa_note
+            qa_status = EXCLUDED.qa_status, qa_at = EXCLUDED.qa_at, qa_note = EXCLUDED.qa_note,
+            qa_by = EXCLUDED.qa_by
       RETURNING ${tx.unsafe(COLUMNS)}`;
     if (!row) throw new Error('deliveries.recordQa: no row returned');
     return toRecord(row);

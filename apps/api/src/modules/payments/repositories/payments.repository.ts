@@ -68,6 +68,13 @@ export class PaymentsRepository {
     return toRecord(row);
   }
 
+  /** Every payment of a booking, any status, oldest first (the staff booking page). */
+  async forBooking(db: Db, bookingId: string): Promise<PaymentRecord[]> {
+    const rows = await db<PaymentRow[]>`
+      SELECT * FROM payments WHERE booking_id = ${bookingId} ORDER BY created_at, id`;
+    return rows.map(toRecord);
+  }
+
   async findById(db: Db, id: string): Promise<PaymentRecord | null> {
     const [row] = await db<PaymentRow[]>`SELECT * FROM payments WHERE id = ${id}`;
     return row ? toRecord(row) : null;

@@ -19,7 +19,13 @@ export interface RefreshTokenRow {
 export type UnboundRefreshToken = Omit<RefreshTokenRow, 'subjectKind' | 'subjectId'>;
 
 export type RotateResult =
-  | { readonly outcome: 'ROTATED'; readonly subjectKind: SubjectKind; readonly subjectId: string }
+  | {
+      readonly outcome: 'ROTATED';
+      readonly subjectKind: SubjectKind;
+      readonly subjectId: string;
+      /** The replacement's expiry (the old one's when `keepExpiry` capped it). */
+      readonly expiresAt: Date;
+    }
   /** GRACE: rotated moments ago — a duplicate client retry, refused without the mass revoke. */
   | { readonly outcome: 'NOT_FOUND' | 'EXPIRED' | 'REUSED' | 'GRACE' };
 
@@ -32,6 +38,8 @@ export interface RefreshTokenRepository {
    * within `graceMs`, which is a client retry (GRACE). The replacement inherits the
    * old token's subject and device. A token of another subject kind than `expectedKind` is
    * NOT_FOUND and left untouched (a pro token sent to the client route is not consumed).
+   * `keepExpiry`: the replacement never outlives the old token (a fixed-length staff session).
+   * `maxIdleMs`: a token unused for longer is EXPIRED (staff idle limit).
    */
   rotate(
     tokenHash: string,
@@ -39,9 +47,15 @@ export interface RefreshTokenRepository {
     replacement: UnboundRefreshToken,
     graceMs: number,
     expectedKind: SubjectKind,
+    keepExpiry?: boolean,
+    maxIdleMs?: number | null,
   ): Promise<RotateResult>;
   revokeAllForSubject(kind: SubjectKind, id: string, now: Date): Promise<void>;
-  revoke(tokenHash: string, now: Date): Promise<void>;
+  /** Revokes a live token; returns its subject, or null when unknown or already revoked. */
+  revoke(
+    tokenHash: string,
+    now: Date,
+  ): Promise<{ readonly kind: SubjectKind; readonly id: string } | null>;
 }
 
 export const REFRESH_TOKEN_REPOSITORY = Symbol('REFRESH_TOKEN_REPOSITORY');
@@ -63,6 +77,9 @@ export class PgRefreshTokenRepository implements RefreshTokenRepository {
     replacement: UnboundRefreshToken,
     graceMs: number,
     expectedKind: SubjectKind,
+    keepExpiry = false,
+    /** Staff only: refuse a token unused for this long (a closed or idle tab), ADR-0025 D2. */
+    maxIdleMs: number | null = null,
   ): Promise<RotateResult> {
     return this.sql.begin(async (tx) => {
       const [row] = await tx<
@@ -72,9 +89,11 @@ export class PgRefreshTokenRepository implements RefreshTokenRepository {
           device_id: string | null;
           revoked_at: Date | null;
           expires_at: Date;
+          created_at: Date;
         }[]
       >`
-        SELECT subject_kind, subject_id, device_id, revoked_at, expires_at FROM refresh_tokens
+        SELECT subject_kind, subject_id, device_id, revoked_at, expires_at, created_at
+        FROM refresh_tokens
         WHERE token_hash = ${tokenHash} FOR UPDATE`;
       if (!row || row.subject_kind !== expectedKind) return { outcome: 'NOT_FOUND' } as const;
       if (row.revoked_at) {
@@ -87,15 +106,25 @@ export class PgRefreshTokenRepository implements RefreshTokenRepository {
         return { outcome: 'REUSED' } as const;
       }
       if (row.expires_at <= now) return { outcome: 'EXPIRED' } as const;
+      if (maxIdleMs !== null && now.getTime() - row.created_at.getTime() > maxIdleMs) {
+        // Idle too long: the token is spent, but this is expiry, not theft — no mass revoke.
+        await tx`UPDATE refresh_tokens SET revoked_at = ${now} WHERE token_hash = ${tokenHash}`;
+        return { outcome: 'EXPIRED' } as const;
+      }
+      const expiresAt =
+        keepExpiry && row.expires_at < replacement.expiresAt
+          ? row.expires_at
+          : replacement.expiresAt;
       await tx`UPDATE refresh_tokens SET revoked_at = ${now} WHERE token_hash = ${tokenHash}`;
       await tx`
         INSERT INTO refresh_tokens (id, subject_kind, subject_id, token_hash, device_id, expires_at, created_at)
         VALUES (${replacement.id}, ${row.subject_kind}, ${row.subject_id}, ${replacement.tokenHash},
-                ${replacement.deviceId ?? row.device_id}, ${replacement.expiresAt}, ${replacement.createdAt})`;
+                ${replacement.deviceId ?? row.device_id}, ${expiresAt}, ${replacement.createdAt})`;
       return {
         outcome: 'ROTATED',
         subjectKind: row.subject_kind,
         subjectId: row.subject_id,
+        expiresAt,
       } as const;
     });
   }
@@ -106,8 +135,14 @@ export class PgRefreshTokenRepository implements RefreshTokenRepository {
       WHERE subject_kind = ${kind} AND subject_id = ${id} AND revoked_at IS NULL`;
   }
 
-  async revoke(tokenHash: string, now: Date): Promise<void> {
-    await this.sql`
-      UPDATE refresh_tokens SET revoked_at = ${now} WHERE token_hash = ${tokenHash} AND revoked_at IS NULL`;
+  async revoke(
+    tokenHash: string,
+    now: Date,
+  ): Promise<{ readonly kind: SubjectKind; readonly id: string } | null> {
+    const [row] = await this.sql<{ subject_kind: SubjectKind; subject_id: string }[]>`
+      UPDATE refresh_tokens SET revoked_at = ${now}
+      WHERE token_hash = ${tokenHash} AND revoked_at IS NULL
+      RETURNING subject_kind, subject_id`;
+    return row ? { kind: row.subject_kind, id: row.subject_id } : null;
   }
 }

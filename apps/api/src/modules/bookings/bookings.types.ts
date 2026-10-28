@@ -224,3 +224,48 @@ export interface DeliveryBookingFacts {
   readonly galleryRecipient: 'BOOKER' | 'SUBJECT';
   readonly hasRushDelivery: boolean;
 }
+
+// ── Staff panel reads (ADR-0025) ────────────────────────────────────────────
+
+/** Cities a staff caller may see: every city, or a list (from the admin module's role grants). */
+export type CitySet = 'ALL' | readonly string[];
+
+/** A booking as the staff panel lists and opens it. Money is bigint paise. */
+export interface AdminBookingFacts {
+  readonly id: string;
+  readonly reference: string;
+  readonly status: BookingStatus;
+  readonly cityId: string;
+  readonly categoryCode: string;
+  readonly tier: PlanTier;
+  readonly emergencyBand: EmergencyBand;
+  readonly scheduledStart: Date;
+  readonly scheduledHours: number;
+  /** The booker (bookings.booker_name / booker_phone). */
+  readonly clientName: string;
+  readonly clientPhone: string;
+  readonly totalPaise: bigint;
+  readonly advancePaise: bigint;
+  readonly balancePaise: bigint;
+  readonly amountPaidPaise: bigint;
+  readonly venueAddress: string;
+  readonly venueLandmark: string | null;
+  readonly venuePincode: string;
+}
+
+export interface AdminBookingFilter {
+  readonly scope: CitySet;
+  readonly cityId?: string;
+  readonly statuses?: readonly BookingStatus[];
+  /** Scheduled start window (UTC instants; the caller converts IST calendar days). */
+  readonly startsFrom?: Date;
+  readonly startsBefore?: Date;
+  readonly search?: { readonly text: string; readonly phoneScope: CitySet | null };
+  /** Only bookings in this owner-built subquery (e.g. those with an open alert). */
+  readonly within?: postgres.PendingQuery<postgres.Row[]>;
+  /** By scheduled start: DESC (default, the board) or ASC (the dispatch queue: soonest first). */
+  readonly order?: 'ASC' | 'DESC';
+  /** Keyset: rows strictly after this one in (scheduled_start, id) `order`. */
+  readonly after?: { readonly scheduledStart: Date; readonly id: string };
+  readonly limit: number;
+}

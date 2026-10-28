@@ -1,0 +1,129 @@
+import {
+  AdminCityList,
+  AdminCreateStaffBody,
+  AdminCreateStaffResponse,
+  AdminGrantBody,
+  AdminListQuery,
+  AdminStaffChangeResponse,
+  AdminStaffPage,
+  StaffProfile,
+  Uuid,
+} from '@clickco/contracts';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { z } from 'zod';
+import { Idempotent } from '../../../common/idempotency/idempotent.decorator';
+import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { AuditCtx, Audited, CurrentStaff, Roles } from '../access/decorators';
+import { respond } from '../access/respond';
+import { DESK_ROLES } from '../access/roles';
+import { StaffGuard } from '../access/staff.guard';
+import type { AuditContext, StaffCaller } from '../access/staff-context';
+import { AuditLogInterceptor } from '../audit/audit-log.interceptor';
+import { AdminQueryPipe, decodeCursor, type ListQuery, pageOf } from '../desks/paging';
+import { StaffService } from './staff.service';
+
+const StaffCursor = z.object({ e: z.string().max(254), i: Uuid });
+const uuid = new ZodValidationPipe(Uuid);
+
+/**
+ * GET /admin/me for every staff member; staff management for SUPER_ADMIN only (ADR-0025 D5).
+ * Creating an account is deliberately not @Idempotent: its answer holds the temporary password,
+ * which must never be stored (a replay store would keep it for 24 h). The unique email stops a
+ * double create.
+ */
+@Controller('admin')
+@UseGuards(StaffGuard)
+@UseInterceptors(AuditLogInterceptor)
+export class AdminStaffController {
+  constructor(@Inject(StaffService) private readonly staff: StaffService) {}
+
+  @Get('me')
+  @Roles(...DESK_ROLES.bookings)
+  async me(@CurrentStaff() caller: StaffCaller) {
+    return respond(StaffProfile, await this.staff.profile(caller.id));
+  }
+
+  /** Every role: the caller's grant cities (all cities with an all-cities grant). */
+  @Get('cities')
+  @Roles(...DESK_ROLES.bookings)
+  async cities(@CurrentStaff() caller: StaffCaller) {
+    return respond(AdminCityList, await this.staff.cities(caller.scope));
+  }
+
+  @Get('staff')
+  @Roles(...DESK_ROLES.staff)
+  async list(@Query(new AdminQueryPipe(AdminListQuery)) q: ListQuery) {
+    const cursor = decodeCursor(StaffCursor, q.cursor);
+    const after = cursor ? { email: cursor.e, id: cursor.i } : undefined;
+    const rows = await this.staff.page(after, q.limit + 1);
+    return respond(
+      AdminStaffPage,
+      pageOf(rows, q.limit, (s) => ({ e: s.email, i: s.id })),
+    );
+  }
+
+  @Post('staff')
+  @Roles(...DESK_ROLES.staff)
+  @Audited('staff.create')
+  async create(
+    @Body(new ZodValidationPipe(AdminCreateStaffBody)) body: AdminCreateStaffBody,
+    @AuditCtx() ctx: AuditContext,
+  ) {
+    return respond(AdminCreateStaffResponse, await this.staff.create(ctx, body));
+  }
+
+  @Post('staff/:staffId/grants')
+  @HttpCode(200)
+  @Roles(...DESK_ROLES.staff)
+  @Audited('staff.grant')
+  @Idempotent()
+  async grant(
+    @Param('staffId', uuid) staffId: string,
+    @Body(new ZodValidationPipe(AdminGrantBody)) body: AdminGrantBody,
+    @AuditCtx() ctx: AuditContext,
+  ) {
+    return respond(AdminStaffChangeResponse, await this.staff.grant(ctx, staffId, body));
+  }
+
+  @Post('staff/:staffId/grants/:grantId/revoke')
+  @HttpCode(200)
+  @Roles(...DESK_ROLES.staff)
+  @Audited('staff.revoke_grant')
+  @Idempotent()
+  async revoke(
+    @Param('staffId', uuid) staffId: string,
+    @Param('grantId', uuid) grantId: string,
+    @AuditCtx() ctx: AuditContext,
+  ) {
+    return respond(AdminStaffChangeResponse, await this.staff.revokeGrant(ctx, staffId, grantId));
+  }
+
+  @Post('staff/:staffId/deactivate')
+  @HttpCode(200)
+  @Roles(...DESK_ROLES.staff)
+  @Audited('staff.deactivate')
+  @Idempotent()
+  async deactivate(@Param('staffId', uuid) staffId: string, @AuditCtx() ctx: AuditContext) {
+    return respond(AdminStaffChangeResponse, await this.staff.deactivate(ctx, staffId));
+  }
+
+  @Post('staff/:staffId/reset-totp')
+  @HttpCode(200)
+  @Roles(...DESK_ROLES.staff)
+  @Audited('staff.reset_totp')
+  @Idempotent()
+  async resetTotp(@Param('staffId', uuid) staffId: string, @AuditCtx() ctx: AuditContext) {
+    return respond(AdminStaffChangeResponse, await this.staff.resetTotp(ctx, staffId));
+  }
+}

@@ -22,6 +22,7 @@ class FakeRefreshRepo implements RefreshTokenRepository {
     replacement: UnboundRefreshToken,
     _graceMs: number,
     expectedKind: SubjectKind,
+    keepExpiry = false,
   ) {
     const row = this.rows.find((r) => r.tokenHash === tokenHash);
     if (!row) return { outcome: 'NOT_FOUND' as const };
@@ -36,16 +37,24 @@ class FakeRefreshRepo implements RefreshTokenRepository {
       return { outcome: 'REUSED' as const };
     }
     if (row.expiresAt <= now) return { outcome: 'EXPIRED' as const };
+    const expiresAt =
+      keepExpiry && row.expiresAt < replacement.expiresAt ? row.expiresAt : replacement.expiresAt;
     this.rows = [
       ...this.rows.map((r) => (r === row ? { ...r, revokedAt: now } : r)),
       {
         ...replacement,
+        expiresAt,
         subjectId: row.subjectId,
         subjectKind: row.subjectKind,
         deviceId: row.deviceId,
       },
     ];
-    return { outcome: 'ROTATED' as const, subjectId: row.subjectId, subjectKind: row.subjectKind };
+    return {
+      outcome: 'ROTATED' as const,
+      subjectId: row.subjectId,
+      subjectKind: row.subjectKind,
+      expiresAt,
+    };
   }
   async revokeAllForSubject(kind: string, id: string, now: Date) {
     this.rows = this.rows.map((r) =>
@@ -53,9 +62,9 @@ class FakeRefreshRepo implements RefreshTokenRepository {
     );
   }
   async revoke(tokenHash: string, now: Date) {
-    this.rows = this.rows.map((r) =>
-      r.tokenHash === tokenHash && !r.revokedAt ? { ...r, revokedAt: now } : r,
-    );
+    const live = this.rows.find((r) => r.tokenHash === tokenHash && !r.revokedAt);
+    this.rows = this.rows.map((r) => (r === live ? { ...r, revokedAt: now } : r));
+    return live ? { kind: live.subjectKind, id: live.subjectId } : null;
   }
 }
 
@@ -142,10 +151,43 @@ describe('TokenService', () => {
     expect(await statusOf(tokens.refresh(pair.refreshToken, 'USER'))).toBe(401);
   });
 
-  it('logout revokes the refresh token', async () => {
+  it('logout revokes the refresh token and says whose it was', async () => {
     const pair = await tokens.issue({ kind: 'USER', id: USER }, null);
-    await tokens.revoke(pair.refreshToken);
+    expect(await tokens.revoke(pair.refreshToken)).toEqual({ kind: 'USER', id: USER });
     expect(await statusOf(tokens.refresh(pair.refreshToken, 'USER'))).toBe(401);
+    expect(await tokens.revoke(pair.refreshToken)).toBeNull();
+  });
+
+  it('staff refresh tokens last 12 h (ADR-0025 D2); clients and photographers keep 30 days', async () => {
+    const staff = await tokens.issue({ kind: 'STAFF', id: USER }, null);
+    const user = await tokens.issue({ kind: 'USER', id: USER }, null);
+    expect(staff.refreshTokenExpiresAt).toBe(
+      new Date(now.getTime() + 12 * 3_600_000).toISOString(),
+    );
+    expect(user.refreshTokenExpiresAt).toBe(
+      new Date(now.getTime() + TOKEN_POLICY.refreshTtlMs).toISOString(),
+    );
+  });
+
+  it('a staff session ends 12 h after sign-in: rotation never extends it', async () => {
+    const signedIn = now;
+    const first = await tokens.issue({ kind: 'STAFF', id: USER }, null);
+    now = new Date(signedIn.getTime() + 11 * 3_600_000);
+    const second = await tokens.refresh(first.refreshToken, 'STAFF');
+    expect(second.refreshTokenExpiresAt).toBe(
+      new Date(signedIn.getTime() + 12 * 3_600_000).toISOString(),
+    );
+    now = new Date(signedIn.getTime() + 12 * 3_600_000 + 1);
+    expect(await statusOf(tokens.refresh(second.refreshToken, 'STAFF'))).toBe(401);
+  });
+
+  it('a client session slides: each rotation runs 30 days from the refresh', async () => {
+    const first = await tokens.issue({ kind: 'USER', id: USER }, null);
+    now = new Date(now.getTime() + 86_400_000);
+    const second = await tokens.refresh(first.refreshToken, 'USER');
+    expect(second.refreshTokenExpiresAt).toBe(
+      new Date(now.getTime() + TOKEN_POLICY.refreshTtlMs).toISOString(),
+    );
   });
 
   it('refuses a duplicate refresh inside the grace window without logging the user out everywhere', async () => {

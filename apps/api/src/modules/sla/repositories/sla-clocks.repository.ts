@@ -53,6 +53,14 @@ export class SlaClocksRepository {
     return rows.map(toRecord);
   }
 
+  /** Every clock of these bookings (the staff panel's flags and due times). */
+  async forBookings(db: Db, bookingIds: readonly string[]): Promise<SlaClockRecord[]> {
+    if (bookingIds.length === 0) return [];
+    const rows = await db<Row[]>`
+      SELECT ${db.unsafe(COLUMNS)} FROM sla_clocks WHERE booking_id IN ${db([...new Set(bookingIds)])}`;
+    return rows.map(toRecord);
+  }
+
   async find(db: Db, clockId: string): Promise<SlaClockRecord | null> {
     const [row] = await db<
       Row[]

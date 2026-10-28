@@ -2,10 +2,12 @@ import postgres from 'postgres';
 import { loadEnv } from '../../config/env';
 import { assertLocalTestDatabase } from './migrate';
 import { seedDevPhotographers } from './seeds/dev-photographers';
+import { seedDevStaff } from './seeds/dev-staff';
 import { alignLaunchEmergencyRules } from './seeds/launch-ruleset.seed';
 
 /**
- * `pnpm db:seed:dev` — demo photographers for the dispatch desk, and the ADR-0012 launch-ruleset
+ * `pnpm db:seed:dev` — demo photographers for the dispatch desk, one staff account per role for
+ * the admin panel (ADR-0025; credentials in apps/api/CLAUDE.md), and the ADR-0012 launch-ruleset
  * realignment. Development databases on this machine only.
  */
 async function main(): Promise<void> {
@@ -23,6 +25,10 @@ async function main(): Promise<void> {
       process.stdout.write(`Realigned ${aligned} launch emergency rules (ADR-0012).\n`);
     const r = await seedDevPhotographers(sql);
     process.stdout.write(`Seeded ${r.inserted} new demo photographers.\n`);
+    const staff = await seedDevStaff(sql, env.STAFF_TOTP_KEY, new Date());
+    process.stdout.write(
+      `Seeded ${staff.inserted} new dev staff accounts (see apps/api/CLAUDE.md).\n`,
+    );
   } finally {
     await sql.end();
   }

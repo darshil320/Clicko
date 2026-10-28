@@ -4,6 +4,7 @@ import { SlaBreachesRepository } from './repositories/sla-breaches.repository';
 import { SlaClocksRepository } from './repositories/sla-clocks.repository';
 import { SlaService } from './sla.service';
 import { SlaSubscribers } from './sla.subscribers';
+import { SlaDeskService } from './sla-desk.service';
 import { SlaTimerScheduler } from './sla-timers';
 
 /**
@@ -17,8 +18,9 @@ import { SlaTimerScheduler } from './sla-timers';
     SlaBreachesRepository,
     SlaTimerScheduler,
     SlaService,
+    SlaDeskService,
     SlaSubscribers,
   ],
-  exports: [SlaService, SlaBreachesRepository],
+  exports: [SlaService, SlaDeskService, SlaBreachesRepository],
 })
 export class SlaModule {}

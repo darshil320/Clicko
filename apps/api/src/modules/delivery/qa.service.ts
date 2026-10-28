@@ -3,6 +3,7 @@ import { fromPaiseBigint } from '@clickco/utils';
 import { Inject, Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
+import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
 import { BookingsService } from '../bookings/bookings.service';
@@ -15,7 +16,8 @@ import { DeliveryLinksRepository } from './repositories/delivery-links.repositor
 
 /**
  * The QA gate (ADR-0016 D1): pass → deliveries row + QA → BALANCE_PENDING; fail → recorded and
- * alerted, the booking stays in QA. STAFF in S9; SYSTEM through the dev console until then.
+ * alerted, the booking stays in QA. STAFF from the admin QA desk (ADR-0025, with the staff id in
+ * deliveries.qa_by); SYSTEM from the dev console. `audit` runs inside the decision's transaction.
  */
 @Injectable()
 export class QaService {
@@ -33,6 +35,7 @@ export class QaService {
     result: QaResult,
     note: string | null,
     actor: Actor,
+    audit?: TxHook,
   ): Promise<DeliveryView> {
     const inventory = await this.media.inventory(bookingId);
     const now = this.clock();
@@ -48,12 +51,23 @@ export class QaService {
       if (result === 'PASS' && total === 0) {
         throw conflict('NOTHING_TO_DELIVER', 'This booking has no verified files to deliver');
       }
+      const previous = await this.deliveries.find(tx, bookingId);
       const delivery = await this.deliveries.recordQa(tx, {
         bookingId,
         ...inventory,
         status: result === 'PASS' ? 'PASSED' : 'FAILED',
         note,
         at: now,
+        by: actor.kind === 'STAFF' ? actor.id : null,
+      });
+      await audit?.(tx, {
+        before: { status: booking.status, qa_status: previous?.qaStatus ?? null },
+        after: {
+          status: result === 'PASS' ? 'BALANCE_PENDING' : 'QA',
+          qa_status: delivery.qaStatus,
+          note,
+          files: total,
+        },
       });
       if (result === 'FAIL') {
         await appendDomainEvent(tx, {

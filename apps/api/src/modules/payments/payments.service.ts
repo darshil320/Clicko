@@ -99,6 +99,11 @@ export class PaymentsService {
     return this.payments.latestOpenForBooking(db, bookingId);
   }
 
+  /** Read-only: the staff booking page's payments list (ADR-0025 D5). */
+  listForBooking(bookingId: string): Promise<PaymentRecord[]> {
+    return this.payments.forBooking(this.sql, bookingId);
+  }
+
   findById(paymentId: string): Promise<PaymentRecord | null> {
     return this.payments.findById(this.sql, paymentId);
   }

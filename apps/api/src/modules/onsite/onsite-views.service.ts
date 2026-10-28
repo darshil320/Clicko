@@ -1,4 +1,5 @@
 import {
+  type AssignmentEventView,
   type BookingCharge,
   type BookingPendingExtension,
   type DevAssignmentView,
@@ -21,6 +22,7 @@ import { PricingService } from '../pricing/pricing.service';
 import { ServiceabilityService } from '../serviceability/serviceability.service';
 import { ExtensionRecords } from './extension-records';
 import { assignmentNotFound } from './http-errors';
+import { AssignmentEventsRepository } from './repositories/assignment-events.repository';
 import { billingStartsAt, earliestCheckOutAt } from './rules/timing';
 import {
   checkInView,
@@ -47,7 +49,13 @@ export class OnsiteViewsService {
     @Inject(PricingService) private readonly pricing: PricingService,
     @Inject(ServiceabilityService) private readonly serviceability: ServiceabilityService,
     @Inject(ExtensionRecords) private readonly records: ExtensionRecords,
+    @Inject(AssignmentEventsRepository) private readonly events: AssignmentEventsRepository,
   ) {}
+
+  /** Every on-site event of an assignment, oldest first (the staff booking page, ADR-0025). */
+  async eventViews(assignmentId: string): Promise<AssignmentEventView[]> {
+    return (await this.events.forAssignment(this.sql, assignmentId)).map(toEventView);
+  }
 
   /** GET /pro/assignments/:id — own work only; RELEASED / ABANDONED look like someone else's. */
   async proDetail(photographerId: string, assignmentId: string): Promise<ProAssignmentDetail> {

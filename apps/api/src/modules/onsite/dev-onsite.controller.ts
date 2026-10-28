@@ -12,10 +12,13 @@ import {
 import { ok } from '../../common/envelope';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { ENV, type Env } from '../../config/env';
+import type { Actor } from '../bookings/bookings.types';
 import { IncidentsService } from './incidents.service';
 import { OnsiteViewsService } from './onsite-views.service';
 
 const NOT_FOUND = { code: 'NOT_FOUND', message: 'Not found' };
+/** The dev console has no staff identity: a stand-in STAFF actor (the admin desk passes the real one). */
+const DEV_STAFF_ACTOR: Actor = { kind: 'STAFF', id: null };
 
 /**
  * Development only (DevToolsModule): the ops console's assignment view and the incident
@@ -42,7 +45,7 @@ export class DevOnsiteController {
     @Body(new ZodValidationPipe(ConfirmIncidentBody)) body: ConfirmIncidentBody,
   ) {
     this.devOnly();
-    return ok(await this.incidents.confirm(id, body.kind));
+    return ok(await this.incidents.confirm(id, body.kind, DEV_STAFF_ACTOR));
   }
 
   private devOnly(): void {

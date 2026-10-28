@@ -9,14 +9,18 @@ import {
 } from '@nestjs/common';
 import type postgres from 'postgres';
 import { SQL } from '../../infra/db/db.module';
+import type { IdSubquery } from '../../infra/db/id-subquery';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
 import type { OnsiteCharge } from '../pricing/engine';
 import {
+  type AdminBookingFacts,
+  type AdminBookingFilter,
   type AssignmentBookingDetail,
   type BookingChargeRecord,
   type BookingRow,
   type BookingView,
   type ChargeBasis,
+  type CitySet,
   type CreateQuotedInput,
   type Db,
   type DeliveryBookingFacts,
@@ -30,6 +34,7 @@ import {
   type TransitionInput,
   type Tx,
 } from './bookings.types';
+import { BookingAdminRepository } from './repositories/booking-admin.repository';
 import { BookingDeliveryRepository } from './repositories/booking-delivery.repository';
 import { BookingDispatchRepository } from './repositories/booking-dispatch.repository';
 import { BookingOnsiteRepository } from './repositories/booking-onsite.repository';
@@ -87,6 +92,7 @@ export class BookingsService {
     @Inject(BookingDispatchRepository) private readonly dispatchReads: BookingDispatchRepository,
     @Inject(BookingOnsiteRepository) private readonly onsite: BookingOnsiteRepository,
     @Inject(BookingDeliveryRepository) private readonly delivery: BookingDeliveryRepository,
+    @Inject(BookingAdminRepository) private readonly admin: BookingAdminRepository,
   ) {}
 
   /** — → DRAFT → QUOTED with snapshot sequence 1 and its add-ons, in the caller's transaction. */
@@ -171,6 +177,27 @@ export class BookingsService {
 
   timeline(bookingId: string): Promise<TimelineEntry[]> {
     return this.reads.timeline(this.sql, bookingId);
+  }
+
+  // ── Staff panel reads (ADR-0025 D5) ────────────────────────────────────────
+
+  /** The booking board: filters, city scope and keyset cursor, all in SQL. */
+  adminPage(filter: AdminBookingFilter): Promise<AdminBookingFacts[]> {
+    return this.admin.page(this.sql, filter);
+  }
+
+  adminFacts(bookingIds: readonly string[]): Promise<AdminBookingFacts[]> {
+    return this.admin.byIds(this.sql, bookingIds);
+  }
+
+  /** null when the booking does not exist. A booking's city never changes. */
+  cityOf(bookingId: string): Promise<string | null> {
+    return this.admin.cityOf(this.sql, bookingId);
+  }
+
+  /** Booking ids in these cities (and statuses), for another module's SQL filter. */
+  idsInScope(scope: CitySet, statuses?: readonly BookingStatus[]): IdSubquery {
+    return this.admin.idsWhere(this.sql, scope, statuses);
   }
 
   promoUsage(userId: string, promoCode: string, now: Date): Promise<PromoUsage> {

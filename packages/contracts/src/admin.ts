@@ -1,11 +1,18 @@
 import { z } from 'zod';
 import { TokenPair } from './auth.js';
 import { IsoDateTime, Uuid } from './common.js';
-import { QaResult, QaStatus, SlaBreachView, SlaClockView } from './delivery.js';
+import { DeliveryView, QaResult, QaStatus, SlaBreachView, SlaClockView } from './delivery.js';
 import { DispatchDeskView } from './dispatch.js';
-import { AssignmentStatus, BookingStatus, EmergencyBand, PlanTier, StaffRole } from './enums.js';
+import {
+  AreaStatus,
+  AssignmentStatus,
+  BookingStatus,
+  EmergencyBand,
+  PlanTier,
+  StaffRole,
+} from './enums.js';
 import { MoneyPaise } from './money.js';
-import { AssignmentEventView } from './onsite.js';
+import { AssignmentEventView, ConfirmIncidentResponse } from './onsite.js';
 
 /**
  * ADR-0025 — the staff admin panel, Sprint 9: staff sign-in with mandatory TOTP, role + city
@@ -46,6 +53,8 @@ export const StaffTotpBody = z.object({
 export type StaffTotpBody = z.infer<typeof StaffTotpBody>;
 
 export const StaffGrant = z.object({
+  /** staff_role_grants.id — what POST /admin/staff/:id/grants/:grantId/revoke takes. */
+  id: Uuid,
   role: StaffRole,
   /** null = every city. CITY_MANAGER is always scoped. */
   cityId: Uuid.nullable(),
@@ -268,9 +277,18 @@ export const AdminBreachItem = SlaBreachView.extend({
 });
 export type AdminBreachItem = z.infer<typeof AdminBreachItem>;
 
+/**
+ * Staff may re-attribute a breach only to the client or force majeure (ADR-0016 D9). The breach then
+ * owes nothing — it leaves the OPEN queue, though its priced amounts stay for the record. Moving one
+ * onto the photographer or Clickco is never a desk action: it would set up a payout cut on someone's
+ * word.
+ */
+export const BreachReattribution = z.enum(['CLIENT', 'FORCE_MAJEURE']);
+export type BreachReattribution = z.infer<typeof BreachReattribution>;
+
 /** POST /admin/breaches/:breachId/attribute — who caused the delay (ADR-0016). */
 export const AdminAttributeBreachBody = z.object({
-  attributedTo: BreachAttribution,
+  attributedTo: BreachReattribution,
   note: z.string().trim().min(3).max(1_000),
 });
 export type AdminAttributeBreachBody = z.infer<typeof AdminAttributeBreachBody>;
@@ -310,3 +328,103 @@ export const AdminCreateStaffResponse = z.object({
   temporaryPassword: z.string().min(16),
 });
 export type AdminCreateStaffResponse = z.infer<typeof AdminCreateStaffResponse>;
+
+// ── S9 API additions (list envelopes, queries, grants, audit view) ──────────
+
+/** GET query for the queue-style admin lists (QA, incidents, dispatch, alerts, staff). */
+export const AdminListQuery = z.object({
+  cursor: AdminCursor.optional(),
+  limit: z.int().min(1).max(100).default(50),
+});
+export type AdminListQuery = z.input<typeof AdminListQuery>;
+
+/** GET /admin/breaches — OPEN = neither waived nor applied (the default). */
+export const AdminBreachStatusFilter = z.enum(['OPEN', 'WAIVED', 'ALL']);
+export type AdminBreachStatusFilter = z.infer<typeof AdminBreachStatusFilter>;
+
+export const AdminBreachQuery = AdminListQuery.extend({
+  status: AdminBreachStatusFilter.default('OPEN'),
+});
+export type AdminBreachQuery = z.input<typeof AdminBreachQuery>;
+
+export const AdminQaPage = AdminPage(AdminQaItem);
+export type AdminQaPage = z.infer<typeof AdminQaPage>;
+export const AdminIncidentPage = AdminPage(AdminIncidentItem);
+export type AdminIncidentPage = z.infer<typeof AdminIncidentPage>;
+export const AdminDispatchPage = AdminPage(AdminDispatchItem);
+export type AdminDispatchPage = z.infer<typeof AdminDispatchPage>;
+export const AdminBreachPage = AdminPage(AdminBreachItem);
+export type AdminBreachPage = z.infer<typeof AdminBreachPage>;
+export const AdminAlertPage = AdminPage(AdminAlert);
+export type AdminAlertPage = z.infer<typeof AdminAlertPage>;
+export const AdminStaffPage = AdminPage(AdminStaffRow);
+export type AdminStaffPage = z.infer<typeof AdminStaffPage>;
+
+/** POST /admin/staff/:staffId/grants */
+export const AdminGrantBody = z
+  .object({ role: StaffRole, cityId: Uuid.nullable() })
+  .refine((g) => g.role !== 'CITY_MANAGER' || g.cityId !== null, {
+    message: 'A city manager needs a city',
+    path: ['cityId'],
+  })
+  .refine((g) => g.role !== 'SUPER_ADMIN' || g.cityId === null, {
+    message: 'A super admin covers every city',
+    path: ['cityId'],
+  });
+export type AdminGrantBody = z.infer<typeof AdminGrantBody>;
+
+/** One audit_logs row as the booking page shows it (read-only; the table is append-only). */
+export const AdminAuditEntry = z.object({
+  id: z.string(),
+  action: z.string(),
+  actorKind: z.string(),
+  actorEmail: z.string().nullable(),
+  entityKind: z.string(),
+  entityId: Uuid.nullable(),
+  before: z.unknown().nullable(),
+  after: z.unknown().nullable(),
+  occurredAt: IsoDateTime,
+});
+export type AdminAuditEntry = z.infer<typeof AdminAuditEntry>;
+
+/**
+ * GET /admin/bookings/:bookingId with the ADR-0025 D4 audit view. Optional in the schema so
+ * existing AdminBookingDetail fixtures stay valid; the API always sends it.
+ */
+export const AdminBookingDetailWithAudit = AdminBookingDetail.extend({
+  audit: z.array(AdminAuditEntry).optional(),
+});
+export type AdminBookingDetailWithAudit = z.infer<typeof AdminBookingDetailWithAudit>;
+
+// ── Cities and the answers of the admin POSTs ───────────────────────────────
+
+/** GET /admin/cities — the caller's grant cities (every city with an all-cities grant). */
+export const AdminCity = z.object({
+  id: Uuid,
+  name: z.string(),
+  state: z.string(),
+  status: AreaStatus,
+});
+export type AdminCity = z.infer<typeof AdminCity>;
+export const AdminCityList = z.array(AdminCity);
+export type AdminCityList = z.infer<typeof AdminCityList>;
+
+/** POST /admin/qa/:bookingId — the booking's delivery after the decision. */
+export const AdminQaDecisionResponse = DeliveryView;
+export type AdminQaDecisionResponse = DeliveryView;
+
+/** POST /admin/assignments/:assignmentId/confirm-incident */
+export const AdminConfirmIncidentResponse = ConfirmIncidentResponse;
+export type AdminConfirmIncidentResponse = ConfirmIncidentResponse;
+
+/** POST /admin/breaches/:breachId/attribute and …/waive — the breach as the board shows it. */
+export const AdminBreachDecisionResponse = AdminBreachItem;
+export type AdminBreachDecisionResponse = AdminBreachItem;
+
+/** POST /admin/staff/:staffId/grants, …/grants/:grantId/revoke, …/deactivate, …/reset-totp */
+export const AdminStaffChangeResponse = AdminStaffRow;
+export type AdminStaffChangeResponse = AdminStaffRow;
+
+/** POST /admin/auth/logout */
+export const AdminLogoutResponse = z.object({ loggedOut: z.literal(true) });
+export type AdminLogoutResponse = z.infer<typeof AdminLogoutResponse>;
