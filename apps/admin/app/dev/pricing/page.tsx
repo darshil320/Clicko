@@ -3,7 +3,7 @@
 import type { QuoteResponse } from '@clickco/contracts';
 import { formatINR } from '@clickco/utils';
 import { useState } from 'react';
-import { api } from '../../src/api';
+import { api } from '../../../src/dev/api';
 
 const TIERS = ['BASIC', 'SEMI_PRO', 'PROFESSIONAL', 'EXPERT', 'SIGNATURE'] as const;
 const CATEGORIES = [

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { API_URL, api } from '../src/api';
+import { API_URL, api } from '../../src/dev/api';
 
 interface Check {
   readonly name: string;

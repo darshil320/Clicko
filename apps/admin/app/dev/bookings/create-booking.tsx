@@ -2,8 +2,8 @@
 
 import type { CreateBookingResponse } from '@clickco/contracts';
 import { useState } from 'react';
-import { api } from '../../src/api';
-import { authHeaders, type Session } from '../../src/session';
+import { api } from '../../../src/dev/api';
+import { authHeaders, type Session } from '../../../src/dev/session';
 
 function defaultStart(): string {
   const d = new Date(Date.now() + 5 * 86_400_000);

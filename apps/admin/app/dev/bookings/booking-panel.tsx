@@ -3,8 +3,8 @@
 import type { BookingDetail, PayBookingResponse } from '@clickco/contracts';
 import { formatINR } from '@clickco/utils';
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../src/api';
-import { authHeaders, type Session } from '../../src/session';
+import { api } from '../../../src/dev/api';
+import { authHeaders, type Session } from '../../../src/dev/session';
 
 const rupees = (p: number) => formatINR(p, { showPaise: p % 100 !== 0 });
 const STATUS_PILL: Record<string, string> = {
@@ -118,7 +118,7 @@ export function BookingPanel({
       {error ? <p className="err">{error}</p> : null}
       {['CONFIRMED', 'DISPATCHING', 'ASSIGNED'].includes(b.status) ? (
         <p>
-          <a href={`/dispatch?booking=${b.id}`}>Open in the dispatch desk →</a>
+          <a href={`/dev/dispatch?booking=${b.id}`}>Open in the dispatch desk →</a>
         </p>
       ) : null}
 

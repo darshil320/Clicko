@@ -1,4 +1,4 @@
-import { ROADMAP, type SprintState, WAITING_ON_OWNER } from '../src/roadmap';
+import { ROADMAP, type SprintState, WAITING_ON_OWNER } from '../../src/dev/roadmap';
 import { StatusChecks } from './status-checks';
 
 const PILL: Record<SprintState, string> = {

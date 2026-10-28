@@ -1,0 +1,6 @@
+/* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind 4 directives, compiled by @tailwindcss/postcss */
+/* The staff panel's stylesheet: the ui-web kit (token-themed shadcn) plus the panel's own pages. */
+@import "@clickco/ui-web/styles.css";
+
+@source "../app";
+@source "../src";

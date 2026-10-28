@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { loadSession, type Session, saveSession } from '../../src/session';
+import { loadSession, type Session, saveSession } from '../../../src/dev/session';
 import { BookingPanel } from './booking-panel';
 import { CreateBooking } from './create-booking';
 import { Login } from './login';

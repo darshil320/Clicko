@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { api } from '../../src/api';
-import { type Session, saveSession } from '../../src/session';
+import { api } from '../../../src/dev/api';
+import { type Session, saveSession } from '../../../src/dev/session';
 
 export function Login({ onLogin }: { readonly onLogin: (s: Session) => void }) {
   const [phone, setPhone] = useState('+919876543210');

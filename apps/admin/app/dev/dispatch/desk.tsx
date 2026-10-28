@@ -3,7 +3,7 @@
 import type { DispatchDeskView } from '@clickco/contracts';
 import { formatINR } from '@clickco/utils';
 import { useEffect, useState } from 'react';
-import { api } from '../../src/api';
+import { api } from '../../../src/dev/api';
 
 const OUTCOME_PILL: Record<string, string> = {
   ACCEPTED: 'ok',

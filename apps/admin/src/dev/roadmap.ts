@@ -127,7 +127,19 @@ export const ROADMAP: readonly Sprint[] = [
     ],
     note: 'Proven by a 13-scenario end-to-end test; the staff QA desk comes with the admin panel',
   },
-  { id: 'S9–10', title: 'Admin panel', dates: '28 Dec – 8 Jan', state: 'planned', shipped: [] },
+  {
+    id: 'S9–10',
+    title: 'Admin panel',
+    dates: '28 Dec – 8 Jan',
+    state: 'in-progress',
+    shipped: [
+      'Staff sign-in with password + authenticator code; roles and cities checked by the server',
+      'Every staff action written to an audit log that cannot be edited',
+      'Bookings board and booking page; QA, incidents, dispatch, late deliveries and alerts desks',
+      'Staff management: add people, give roles per city, deactivate, reset authenticators',
+    ],
+    note: 'S10 next: refunds and credits, payouts + TDS, pricing editor, onboarding, grievances',
+  },
   {
     id: 'S11',
     title: 'Notifications + polish',

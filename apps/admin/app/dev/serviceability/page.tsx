@@ -2,7 +2,7 @@
 
 import type { ServiceabilityResult } from '@clickco/contracts';
 import { useState } from 'react';
-import { api } from '../../src/api';
+import { api } from '../../../src/dev/api';
 
 export default function PincodeChecker() {
   const [pincode, setPincode] = useState('395007');

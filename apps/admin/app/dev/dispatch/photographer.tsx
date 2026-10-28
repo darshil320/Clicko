@@ -3,8 +3,8 @@
 import type { ProOffer, ProVerifyOtpResponse } from '@clickco/contracts';
 import { formatINR } from '@clickco/utils';
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../src/api';
-import { readDevOtp } from '../../src/dev-otp';
+import { api } from '../../../src/dev/api';
+import { readDevOtp } from '../../../src/dev/dev-otp';
 
 /** Act as a photographer: PRO_LOGIN OTP, see live offers (no address), accept or decline. */
 export function PhotographerSim() {
