@@ -63,6 +63,10 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/ui-web/src/styles.css", "apps/admin/app/globals.css"],
+      "css": { "parser": { "tailwindDirectives": true } }
     }
   ]
 }

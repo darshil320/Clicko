@@ -1,1 +1,4 @@
-{ "extends": "@clickco/config/tsconfig/test.json" }
+{
+  "extends": "@clickco/config/tsconfig/test.json",
+  "compilerOptions": { "lib": ["ES2023", "DOM", "DOM.Iterable"], "jsx": "react-jsx" }
+}

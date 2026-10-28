@@ -1,0 +1,118 @@
+/* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind 4 directives (@theme, @source, @custom-variant), compiled by @tailwindcss/postcss */
+/*
+ * @clickco/ui-web — the shadcn/ui stylesheet (ADR-0025 D6).
+ * No values live here: every variable below is supplied by `themeStylesheet()` (src/theme/theme.ts),
+ * derived from @clickco/design-tokens. theme.test.ts fails if this file names a variable the
+ * theme does not provide, or contains a raw colour.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "sonner/dist/styles.css";
+
+/* The kit's own components; the app adds its own @source for its pages. */
+@source "./";
+
+@theme inline {
+  /* Only token colours exist: Tailwind's default palette is cleared. */
+  --color-*: initial;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-emergency: var(--emergency);
+  --color-emergency-foreground: var(--emergency-foreground);
+  --color-emergency-subtle: var(--emergency-subtle);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* 4pt base: p-4 is space[4]. */
+  --spacing: var(--cc-space);
+
+  --radius-*: initial;
+  --radius-sm: var(--cc-radius-sm);
+  --radius-md: var(--cc-radius-md);
+  --radius-lg: var(--cc-radius-lg);
+  --radius-xl: var(--cc-radius-lg);
+
+  --shadow-*: initial;
+  --shadow-xs: var(--cc-shadow-sm);
+  --shadow-sm: var(--cc-shadow-sm);
+  --shadow-md: var(--cc-shadow-md);
+  --shadow-lg: var(--cc-shadow-lg);
+
+  /* Only the token type scale exists (TEXT_STEPS in theme.ts). */
+  --text-*: initial;
+  --text-xs: var(--cc-text-xs);
+  --text-xs--line-height: var(--cc-text-xs-lh);
+  --text-sm: var(--cc-text-sm);
+  --text-sm--line-height: var(--cc-text-sm-lh);
+  --text-base: var(--cc-text-base);
+  --text-base--line-height: var(--cc-text-base-lh);
+  --text-lg: var(--cc-text-lg);
+  --text-lg--line-height: var(--cc-text-lg-lh);
+  --text-xl: var(--cc-text-xl);
+  --text-xl--line-height: var(--cc-text-xl-lh);
+  --text-2xl: var(--cc-text-2xl);
+  --text-2xl--line-height: var(--cc-text-2xl-lh);
+  --text-3xl: var(--cc-text-3xl);
+  --text-3xl--line-height: var(--cc-text-3xl-lh);
+
+  --font-sans: var(--cc-font-body);
+  --font-display: var(--cc-font-display);
+  --tracking-micro: var(--cc-tracking-micro);
+
+  --default-transition-duration: var(--cc-motion-fast);
+  --default-transition-timing-function: var(--cc-ease-out);
+  --ease-out: var(--cc-ease-out);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans text-base antialiased;
+  }
+  /* Numbers line up in tables and money (DESIGN.md: tabular-nums for prices and timers). */
+  td,
+  th {
+    font-variant-numeric: tabular-nums;
+  }
+  /* DESIGN-LIGHT §Motion: reduced motion means no movement, whatever a component asks for. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      /* biome-ignore lint/complexity/noImportantStyles: must beat every component's animation */
+      animation-duration: 0s !important;
+      /* biome-ignore lint/complexity/noImportantStyles: must beat every component's transition */
+      transition-duration: 0s !important;
+    }
+  }
+}
