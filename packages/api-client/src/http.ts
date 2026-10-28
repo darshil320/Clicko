@@ -34,6 +34,8 @@ export interface HttpOptions {
   /** Called once when the refresh token is rejected — the app routes to sign-in. */
   readonly onSessionExpired?: () => void;
   readonly timeoutMs?: number;
+  /** Where a 401 refreshes the session. Default `/auth/refresh`; the Pro app uses `/pro/auth/refresh`. */
+  readonly refreshPath?: string;
 }
 
 export interface RequestSpec<T> {
@@ -48,6 +50,7 @@ export interface RequestSpec<T> {
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_REFRESH_PATH = '/auth/refresh';
 /** Refresh answers that mean the refresh token itself is no good. */
 const SESSION_REJECTED: ReadonlySet<number> = new Set([400, 401, 403]);
 
@@ -60,6 +63,7 @@ export function createHttp(options: HttpOptions): Http {
   const fetchImpl: FetchLike =
     options.fetch ?? ((url, init) => globalThis.fetch(url, init) as Promise<FetchResponseLike>);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const refreshPath = options.refreshPath ?? DEFAULT_REFRESH_PATH;
   let refreshing: Promise<boolean> | null = null;
 
   async function send<T>(spec: RequestSpec<T>, accessToken: string | null): Promise<T> {
@@ -111,7 +115,7 @@ export function createHttp(options: HttpOptions): Http {
     const refreshToken = tokens.getRefreshToken();
     if (!refreshToken) return Promise.resolve(false);
     refreshing = send(
-      { method: 'POST', path: '/auth/refresh', body: { refreshToken }, schema: TokenPair },
+      { method: 'POST', path: refreshPath, body: { refreshToken }, schema: TokenPair },
       null,
     )
       .then((pair) => {

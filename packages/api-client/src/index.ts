@@ -12,3 +12,9 @@ export { unwrapEnvelope } from './envelope.js';
 export { ApiError, type ApiErrorKind, isApiError } from './errors.js';
 export type { FetchLike, FetchResponseLike, TokenStore } from './http.js';
 export { IDEMPOTENCY_KEY_FORMAT, isValidIdempotencyKey, newIdempotencyKey } from './idempotency.js';
+export {
+  createProApiClient,
+  PRO_REFRESH_PATH,
+  type ProApiClient,
+  type ProApiClientOptions,
+} from './pro-client.js';
