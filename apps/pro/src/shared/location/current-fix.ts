@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { type DeviceFix, toDeviceFix } from './fix';
+import { type DeviceFix, isFresh, toDeviceFix } from './fix';
 
 /** A fresh fix can take a while indoors; past this, tell the photographer instead of spinning. */
 const FIX_TIMEOUT_MS = 20_000;
@@ -40,10 +40,28 @@ export async function currentFix(): Promise<FixResult> {
     ]);
     if (raw === null) return failure('TIMEOUT');
     const fix = toDeviceFix(raw);
-    return fix ? { ok: true, fix } : failure('UNAVAILABLE');
+    if (!fix) return failure('UNAVAILABLE');
+    // The fused provider can hand back a cached position; it must be from this tap (ADR-0024 D4).
+    return isFresh(fix, new Date()) ? { ok: true, fix } : failure('TIMEOUT');
   } catch {
     return failure('UNAVAILABLE');
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * For safety reports only (access denied, unsafe site): never let a missing fresh fix stop the
+ * report. Falls back to the phone's last known position, which the server records as-is.
+ */
+export async function fixForReport(): Promise<FixResult> {
+  const fresh = await currentFix();
+  if (fresh.ok || fresh.reason === 'PERMISSION_DENIED') return fresh;
+  try {
+    const last = await Location.getLastKnownPositionAsync();
+    const fix = last ? toDeviceFix(last) : null;
+    return fix ? { ok: true, fix } : fresh;
+  } catch {
+    return fresh;
   }
 }

@@ -2,17 +2,24 @@ import { ApiError } from '@clickco/api-client';
 import { describe, expect, it } from 'vitest';
 import {
   applyOutcome,
+  canSendAhead,
   classifyFailure,
   dismissFailed,
   dueHeads,
   EMPTY_QUEUE,
   enqueue,
+  expireStale,
   isOffline,
+  keepOnly,
+  keyForQueuedCopy,
+  MAX_QUEUED_AGE_MS,
+  markOffline,
   type NewQueuedAction,
   pendingFor,
   type QueueState,
   retryDelayMs,
   retryNow,
+  TOO_OLD_CODE,
 } from './queue';
 
 const ME = 'p-1';
@@ -175,5 +182,64 @@ describe('helpers', () => {
     state = applyOutcome(state, '1', { type: 'RETRY', message: 'offline' }, T0);
     expect(pendingFor(state, JOB_A).map((p) => p.id)).toEqual(['1']);
     expect(dueHeads(retryNow(state, T0), ME, T0).map((h) => h.id)).toEqual(['1', '2']);
+  });
+});
+
+describe('security review fixes (ADR-0024 D5)', () => {
+  const checkIn = { kind: 'CHECK_IN' as const, body: { ...fix, offline: false } };
+
+  it('gives a body rewritten offline a fresh key, so a processed first attempt is not refused as a reused key', () => {
+    expect(keyForQueuedCopy(checkIn, 'sent', 'fresh')).toBe('fresh');
+    expect(keyForQueuedCopy({ kind: 'START' }, 'sent', 'fresh')).toBe('sent');
+    const already = markOffline(checkIn);
+    expect(markOffline(already)).toBe(already);
+    expect(keyForQueuedCopy(already, 'sent', 'fresh')).toBe('sent');
+  });
+
+  it('keeps only the outcome of a refused action, never its location or note', () => {
+    const state = applyOutcome(
+      queueOf(
+        item('1', JOB_A, {
+          kind: 'UNSAFE',
+          body: { note: 'Crowd outside', lat: 21.17, lng: 72.83 },
+        }),
+      ),
+      '1',
+      { type: 'REJECTED', code: 'ASSIGNMENT_NOT_ACTIVE', message: 'No longer yours' },
+      T0,
+    );
+    expect(state.failed[0]).toEqual({
+      id: '1',
+      photographerId: ME,
+      assignmentId: JOB_A,
+      kind: 'UNSAFE',
+      code: 'ASSIGNMENT_NOT_ACTIVE',
+      message: 'No longer yours',
+      failedAt: T0.toISOString(),
+    });
+  });
+
+  it('stops sending actions saved more than 6 hours ago', () => {
+    const state = queueOf(item('1', JOB_A, { kind: 'START' }));
+    expect(expireStale(state, later(MAX_QUEUED_AGE_MS))).toBe(state);
+    const expired = expireStale(state, later(MAX_QUEUED_AGE_MS + 1));
+    expect(expired.pending).toEqual([]);
+    expect(expired.failed[0]?.code).toBe(TOO_OLD_CODE);
+  });
+
+  it("drops another photographer's saved actions when someone new signs in", () => {
+    const mine = item('1', JOB_A, { kind: 'START' });
+    const theirs = { ...item('2', JOB_B, { kind: 'START' }), photographerId: 'p-2' };
+    const state = enqueue(enqueue(EMPTY_QUEUE, mine, T0), theirs, T0);
+    expect(keepOnly(state, ME).pending.map((p) => p.id)).toEqual(['1']);
+  });
+
+  it('lets a safety report skip the line unless the check-in itself is still waiting', () => {
+    const report = { kind: 'UNSAFE' as const, body: { note: 'Unsafe', lat: 21.17, lng: 72.83 } };
+    const startQueued = pendingFor(queueOf(item('1', JOB_A, { kind: 'START' })), JOB_A);
+    const checkInQueued = pendingFor(queueOf(item('1', JOB_A, checkIn)), JOB_A);
+    expect(canSendAhead(report, startQueued)).toBe(true);
+    expect(canSendAhead(report, checkInQueued)).toBe(false);
+    expect(canSendAhead({ kind: 'START' }, [])).toBe(false);
   });
 });

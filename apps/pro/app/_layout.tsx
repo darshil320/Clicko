@@ -96,7 +96,7 @@ export default function RootLayout() {
           <StatusBar style="dark" />
           <Stack screenOptions={screenOptions}>
             <Stack.Protected guard={signedIn}>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Jobs' }} />
               <Stack.Screen name="offers/[attemptId]" options={{ title: 'New job' }} />
               <Stack.Screen name="jobs/[assignmentId]" options={{ title: 'Job' }} />
             </Stack.Protected>

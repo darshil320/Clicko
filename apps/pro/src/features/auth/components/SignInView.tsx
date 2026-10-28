@@ -8,9 +8,22 @@ import { IS_DEV } from '@/shared/config';
 import { userMessage } from '@/shared/errors';
 import { formatPhone } from '@/shared/format/phone';
 import { useNow } from '@/shared/hooks/useNow';
+import { usePendingCount } from '@/shared/offline/store';
 import { useDevOtp, useRequestOtp, useVerifyOtp } from '../hooks';
 import { formatCountdown, OtpForm, PhoneForm, secondsUntil, toE164 } from '../lib/phone';
 import { useSignInFlow } from '../store';
+
+/** Actions saved offline outlive an expired session: say so, so nobody assumes they are lost. */
+function SavedActionsNotice() {
+  const count = usePendingCount();
+  if (count === 0) return null;
+  return (
+    <Text tone="warning" accessibilityLiveRegion="polite">
+      {count === 1 ? '1 on-site action is' : `${count} on-site actions are`} saved on this phone.
+      Sign in again with the same number to send {count === 1 ? 'it' : 'them'}.
+    </Text>
+  );
+}
 
 function PhoneStep() {
   const requestOtp = useRequestOtp();
@@ -74,6 +87,7 @@ function PhoneStep() {
           {userMessage(requestOtp.error)}
         </Text>
       ) : null}
+      <SavedActionsNotice />
       <Text variant="caption" tone="tertiary">
         By continuing you agree to receive a one-time code by SMS.
       </Text>

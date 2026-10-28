@@ -2,9 +2,11 @@ import { newIdempotencyKey } from '@clickco/api-client';
 import { api } from '../api';
 import { useSession } from '../session/store';
 import {
+  canSendAhead,
   classifyFailure,
   dueHeads,
   isOffline,
+  keyForQueuedCopy,
   type OnsiteAction,
   pendingFor,
   type QueuedAction,
@@ -68,10 +70,15 @@ function currentPhotographerId(): string {
   return id;
 }
 
-function queue(assignmentId: string, action: OnsiteAction, idempotencyKey: string): void {
+function queue(
+  photographerId: string,
+  assignmentId: string,
+  action: OnsiteAction,
+  idempotencyKey: string,
+): void {
   useOnsiteQueue.getState().add({
     id: newIdempotencyKey(),
-    photographerId: currentPhotographerId(),
+    photographerId,
     assignmentId,
     action,
     idempotencyKey,
@@ -80,17 +87,21 @@ function queue(assignmentId: string, action: OnsiteAction, idempotencyKey: strin
 
 /**
  * Do an on-site action now, or queue it (ADR-0024 D5).
- * - Earlier actions for this job still queued → queue behind them (never overtake).
- * - No answer at all → queue with the same Idempotency-Key and `offline: true`.
+ * - Earlier actions for this job still queued → queue behind them (never overtake), except a
+ *   safety report once the check-in has gone (canSendAhead).
+ * - No answer at all → queue with `offline: true` (and a fresh key if that changed the body).
  * - The server answered with an error → throw it; the screen shows the message.
+ * - The session changed while the request was out → drop it, never queue it for someone else.
  */
 export async function performOnsite<T>(
   assignmentId: string,
   action: OnsiteAction,
 ): Promise<PerformResult<T>> {
+  const photographerId = currentPhotographerId();
   const idempotencyKey = newIdempotencyKey();
-  if (pendingFor(useOnsiteQueue.getState(), assignmentId).length > 0) {
-    queue(assignmentId, action, idempotencyKey);
+  const queuedForJob = pendingFor(useOnsiteQueue.getState(), assignmentId);
+  if (queuedForJob.length > 0 && !canSendAhead(action, queuedForJob)) {
+    queue(photographerId, assignmentId, action, idempotencyKey);
     void flushQueue();
     return { status: 'QUEUED' };
   }
@@ -100,7 +111,9 @@ export async function performOnsite<T>(
     return { status: 'SENT', result };
   } catch (error) {
     if (!isOffline(error)) throw error;
-    queue(assignmentId, action, idempotencyKey);
+    if (useSession.getState().photographer?.id !== photographerId) throw error;
+    const key = keyForQueuedCopy(action, idempotencyKey, newIdempotencyKey());
+    queue(photographerId, assignmentId, action, key);
     return { status: 'QUEUED' };
   }
 }
@@ -128,6 +141,7 @@ export function flushQueue(): Promise<void> {
   flushing = (async () => {
     const photographerId = useSession.getState().photographer?.id;
     if (!photographerId) return;
+    useOnsiteQueue.getState().expireStale();
     for (let sends = 0; sends < MAX_SENDS_PER_FLUSH; ) {
       const heads = dueHeads(useOnsiteQueue.getState(), photographerId, new Date());
       if (heads.length === 0) return;

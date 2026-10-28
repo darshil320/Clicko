@@ -43,6 +43,13 @@ export function toDeviceFix(raw: RawLocation): DeviceFix | null {
   };
 }
 
+/** A fix older than this is the OS's cached position, not where the photographer is now. */
+export const MAX_FIX_AGE_MS = 30_000;
+
+export function isFresh(fix: DeviceFix, now: Date, maxAgeMs = MAX_FIX_AGE_MS): boolean {
+  return now.getTime() - Date.parse(fix.takenAt) <= maxAgeMs;
+}
+
 export type AccuracyLevel = 'GOOD' | 'FAIR' | 'POOR';
 
 export function accuracyLevel(accuracyM: number): AccuracyLevel {

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useOnsiteQueue } from '@/shared/offline/store';
 import { useSession } from '@/shared/session/store';
 import { fetchDevOtp, logout, requestOtp, verifyOtp } from './api';
 import { deviceId } from './device-id';
@@ -26,6 +27,8 @@ export function useVerifyOtp() {
       verifyOtp({ ...input, deviceId: deviceId() }),
     onSuccess: (session, { phone }) => {
       queryClient.clear();
+      // Saved on-site actions survive an expired session, but only for the same photographer.
+      useOnsiteQueue.getState().keepOnly(session.photographer.id);
       signIn(session, phone);
       reset();
     },
@@ -46,6 +49,8 @@ export function useSignOut() {
     },
     onSettled: () => {
       useSession.getState().signOut();
+      // Explicit sign-out (the photographer was warned about anything unsent): nothing stays.
+      useOnsiteQueue.getState().clear();
       queryClient.clear();
     },
   });

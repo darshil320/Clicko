@@ -13,9 +13,11 @@ import { useSession } from '@/shared/session/store';
 import { useSignOut } from '../hooks';
 
 /** What is still waiting to reach Clickco, and what the server refused (ADR-0024 D5). */
-function SyncSection() {
-  const pending = useOnsiteQueue((s) => s.pending);
-  const failed = useOnsiteQueue((s) => s.failed);
+function SyncSection({ photographerId }: { photographerId: string }) {
+  const allPending = useOnsiteQueue((s) => s.pending);
+  const allFailed = useOnsiteQueue((s) => s.failed);
+  const pending = allPending.filter((p) => p.photographerId === photographerId);
+  const failed = allFailed.filter((f) => f.photographerId === photographerId);
   const dismiss = useOnsiteQueue((s) => s.dismiss);
   const retryAll = useOnsiteQueue((s) => s.retryAll);
 
@@ -60,7 +62,7 @@ function SyncSection() {
           <ListRow
             icon={CircleAlert}
             iconTone="danger"
-            title={`${ACTION_LABEL[item.action.kind]} was not accepted`}
+            title={`${ACTION_LABEL[item.kind]} was not accepted`}
             subtitle={item.message}
           />
           <Button label="Dismiss" variant="ghost" size="compact" onPress={() => dismiss(item.id)} />
@@ -96,7 +98,7 @@ export function ProfileView() {
           </Text>
         </View>
       </Card>
-      <SyncSection />
+      {photographer ? <SyncSection photographerId={photographer.id} /> : null}
       {IS_DEV ? (
         <Section title="Developer">
           <Card>

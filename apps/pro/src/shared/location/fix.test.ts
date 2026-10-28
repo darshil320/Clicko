@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accuracyLevel, formatAccuracy, MAX_ACCURACY_M, toDeviceFix } from './fix';
+import { accuracyLevel, formatAccuracy, isFresh, MAX_ACCURACY_M, toDeviceFix } from './fix';
 
 const raw = (accuracy: number | null, mocked?: boolean) => ({
   coords: { latitude: 21.1702, longitude: 72.8311, accuracy },
@@ -35,5 +35,13 @@ describe('device fixes', () => {
       'POOR',
     ]);
     expect(formatAccuracy(12.6)).toBe('±13 m');
+  });
+
+  it('treats a fix older than 30 s as the cached position, not a fresh one', () => {
+    const fix = toDeviceFix(raw(10));
+    if (!fix) throw new Error('expected a fix');
+    const taken = Date.parse(fix.takenAt);
+    expect(isFresh(fix, new Date(taken + 30_000))).toBe(true);
+    expect(isFresh(fix, new Date(taken + 30_001))).toBe(false);
   });
 });

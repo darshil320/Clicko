@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { onSessionEnd } from '../session/reset';
 import { kvStorage } from '../storage/kv';
 import {
   type AttemptOutcome,
@@ -8,6 +7,8 @@ import {
   dismissFailed,
   EMPTY_QUEUE,
   enqueue,
+  expireStale,
+  keepOnly,
   type NewQueuedAction,
   type QueueState,
   retryNow,
@@ -18,6 +19,8 @@ interface QueueStore extends QueueState {
   settle(id: string, outcome: AttemptOutcome): void;
   retryAll(): void;
   dismiss(id: string): void;
+  expireStale(): void;
+  keepOnly(photographerId: string): void;
   clear(): void;
 }
 
@@ -35,6 +38,8 @@ export const useOnsiteQueue = create<QueueStore>()(
       settle: (id, outcome) => set(applyOutcome(stateOf(get()), id, outcome, new Date())),
       retryAll: () => set(retryNow(stateOf(get()), new Date())),
       dismiss: (id) => set(dismissFailed(stateOf(get()), id)),
+      expireStale: () => set(expireStale(stateOf(get()), new Date())),
+      keepOnly: (photographerId) => set(keepOnly(stateOf(get()), photographerId)),
       clear: () => set(EMPTY_QUEUE),
     }),
     {
@@ -46,7 +51,10 @@ export const useOnsiteQueue = create<QueueStore>()(
   ),
 );
 
-/** Signing out hands the phone to someone else: nothing of this photographer's stays queued. */
-onSessionEnd(() => useOnsiteQueue.getState().clear());
+/*
+ * Not cleared on session expiry: a photographer whose session lapsed while offline signs in again
+ * and the saved actions still go (ADR-0024 D5). Explicit sign-out clears it (after a warning);
+ * a different photographer signing in keeps only their own (keepOnly).
+ */
 
 export const usePendingCount = (): number => useOnsiteQueue((s) => s.pending.length);
