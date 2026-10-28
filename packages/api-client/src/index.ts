@@ -1,4 +1,11 @@
 export {
+  ADMIN_REFRESH_PATH,
+  type AdminApiClient,
+  type AdminApiClientOptions,
+  adminBookingSearch,
+  createAdminApiClient,
+} from './admin-client.js';
+export {
   type ApiClient,
   type ApiClientOptions,
   createApiClient,
