@@ -88,8 +88,9 @@ On-site actions go through one MMKV-persisted FIFO queue per device:
 - Signing out with items still queued asks first: those actions would be lost.
 
 ## D6 — What the app stores
-- MMKV id `clickco.pro` holds two things: the session (tokens + `ProSessionPhotographer`) and the
-  queue. Android Auto Backup is off.
+- MMKV holds two things: the session (tokens + `ProSessionPhotographer`) and the queue. Since
+  ADR-0025 D7 it is the encrypted store `clickco.pro.secure`, keyed from the Keychain/Keystore
+  (web, development only, keeps the plain `clickco.pro`). Android Auto Backup is off.
 - Nothing secret goes in `EXPO_PUBLIC_*`.
 - Venue addresses come from `GET /pro/assignments/:id` and are never persisted. The query cache is
   memory-only and is cleared on sign-out.
@@ -119,8 +120,8 @@ No critical or high findings. The fixes below were made before the commit.
   - A production EAS build fails unless the API and portal URLs are https.
 
 **Open, with owners:**
-- **M1 — tokens and the queue sit in unencrypted MMKV; backups are only partly excluded.** Fix
-  before launch:
+- **M1 — closed by ADR-0025 D7 (encrypted MMKV, key in Keychain/Keystore).** Originally:
+  tokens and the queue sat in unencrypted MMKV; the fix chosen was:
   - keep the refresh token in Keychain/Keystore (`expo-secure-store`, a new dependency that
     needs approval), or encrypt MMKV with a key held there;
   - exclude MMKV from Android data extraction and from iOS backup.

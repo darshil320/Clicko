@@ -31,7 +31,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     output: 'single',
     backgroundColor: colorLight.surface.base,
   },
-  plugins: ['expo-router'],
+  plugins: [
+    'expo-router',
+    [
+      'expo-secure-store',
+      {
+        // The MMKV key is read without biometrics: no Face ID usage string (ADR-0025 D7).
+        faceIDPermission: false,
+        // Default, kept explicit: backup and device-transfer rules carry shared preferences only,
+        // never SecureStore's entries or the MMKV files.
+        configureAndroidBackup: true,
+      },
+    ],
+  ],
   experiments: {
     typedRoutes: true,
     tsconfigPaths: true,

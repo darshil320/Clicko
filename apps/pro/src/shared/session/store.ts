@@ -2,7 +2,7 @@ import type { TokenStore } from '@clickco/api-client';
 import type { ProSessionPhotographer, ProVerifyOtpResponse, TokenPair } from '@clickco/contracts';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { kvStorage } from '../storage/kv';
+import { compactKv, kvStorage } from '../storage/kv';
 import { runSessionEndResets } from './reset';
 
 export interface SignedInPhotographer extends ProSessionPhotographer {
@@ -33,6 +33,7 @@ export const useSession = create<SessionState>()(
       signOut: () => {
         set({ tokens: null, photographer: null });
         runSessionEndResets();
+        compactKv();
       },
     }),
     {

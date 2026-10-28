@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOnsiteQueue } from '@/shared/offline/store';
 import { useSession } from '@/shared/session/store';
+import { compactKv } from '@/shared/storage/kv';
 import { fetchDevOtp, logout, requestOtp, verifyOtp } from './api';
 import { deviceId } from './device-id';
 import { useSignInFlow } from './store';
@@ -51,6 +52,8 @@ export function useSignOut() {
       useSession.getState().signOut();
       // Explicit sign-out (the photographer was warned about anything unsent): nothing stays.
       useOnsiteQueue.getState().clear();
+      // Again after the queue is gone: its GPS fixes and notes should not outlive it in the file.
+      compactKv();
       queryClient.clear();
     },
   });

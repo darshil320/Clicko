@@ -2,7 +2,7 @@ import type { TokenStore } from '@clickco/api-client';
 import type { SessionUser, TokenPair, VerifyOtpResponse } from '@clickco/contracts';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { kvStorage } from '../storage/kv';
+import { compactKv, kvStorage } from '../storage/kv';
 import { runSessionEndResets } from './reset';
 
 export type SignedInUser = Omit<SessionUser, 'isNew'>;
@@ -35,6 +35,7 @@ export const useSession = create<SessionState>()(
       signOut: () => {
         set({ tokens: null, user: null });
         runSessionEndResets();
+        compactKv();
       },
     }),
     {

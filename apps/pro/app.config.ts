@@ -53,6 +53,16 @@ const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
   plugins: [
     'expo-router',
     [
+      'expo-secure-store',
+      {
+        // The MMKV key is read without biometrics: no Face ID usage string (ADR-0025 D7).
+        faceIDPermission: false,
+        // Default, kept explicit: backup and device-transfer rules carry shared preferences only,
+        // never SecureStore's entries or the MMKV files (session and offline queue).
+        configureAndroidBackup: true,
+      },
+    ],
+    [
       'expo-location',
       {
         // Foreground only: the fix is taken when the photographer taps check-in or check-out.
