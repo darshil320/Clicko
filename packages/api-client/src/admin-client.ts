@@ -30,61 +30,27 @@ import {
   AdminConfirmIncidentBody as ConfirmIncidentSchema,
   AdminCreateStaffBody as CreateStaffSchema,
   AdminGrantBody as GrantSchema,
-  AdminListQuery as ListQuerySchema,
   AdminQaDecisionBody as QaDecisionSchema,
   StaffLoginBody,
   StaffLoginChallenge,
   StaffProfile,
   StaffSessionResponse,
   StaffTotpBody,
-  Uuid,
   AdminWaiveBreachBody as WaiveBreachSchema,
 } from '@clickco/contracts';
 import type { z } from 'zod';
+import { adminCareRoutes } from './admin-care-client.js';
+import { adminRequests, checked, idSegment, listParams, withQuery } from './admin-http.js';
+import { adminMoneyRoutes } from './admin-money-client.js';
+import { adminOverviewRoutes } from './admin-overview-client.js';
+import { adminPayoutsRoutes } from './admin-payouts-client.js';
+import { adminPricingRoutes } from './admin-pricing-client.js';
+import { adminSupplyRoutes } from './admin-supply-client.js';
 import type { Idempotent } from './client.js';
-import { ApiError } from './errors.js';
 import { createHttp, type HttpOptions } from './http.js';
 
 /** Staff sessions refresh here (ADR-0025 D2), never at the client's or the Pro app's route. */
 export const ADMIN_REFRESH_PATH = '/admin/auth/refresh';
-
-function invalid(code: string, message: string): ApiError {
-  return new ApiError({ kind: 'HTTP', status: 0, code, message });
-}
-
-/** Booking, assignment, breach, staff and grant ids are UUIDs; anything else never reaches a path. */
-function idSegment(value: string): string {
-  if (!Uuid.safeParse(value).success) throw invalid('INVALID_ID', 'That link is not valid');
-  return value;
-}
-
-/** Validates a request body against its contract before it leaves the browser. */
-function checked<T>(schema: z.ZodType<T>, body: unknown): T {
-  const parsed = schema.safeParse(body);
-  if (parsed.success) return parsed.data;
-  const issue = parsed.error.issues[0];
-  throw new ApiError({
-    kind: 'HTTP',
-    status: 0,
-    code: 'INVALID_INPUT',
-    message: issue?.message ?? 'Check the form and try again',
-    details: parsed.error.issues,
-  });
-}
-
-function withQuery(path: string, params: URLSearchParams): string {
-  const query = params.toString();
-  return query === '' ? path : `${path}?${query}`;
-}
-
-/** `?cursor=&limit=` for the queue-style lists, validated against `AdminListQuery`. */
-function listParams(query: AdminListQuery): URLSearchParams {
-  const q = checked(ListQuerySchema, query);
-  const params = new URLSearchParams();
-  if (q.cursor) params.set('cursor', q.cursor);
-  params.set('limit', String(q.limit));
-  return params;
-}
 
 /**
  * `GET /admin/bookings` query string. Statuses repeat (`status=A&status=B`); `needsAttention`
@@ -132,7 +98,17 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
       ...(body === undefined ? {} : { body }),
     });
 
+  const r = adminRequests(http);
+
   return {
+    /** Sprint 10 desk areas (ADR-0026 D9), one file each. */
+    money: adminMoneyRoutes(r),
+    payouts: adminPayoutsRoutes(r),
+    supply: adminSupplyRoutes(r),
+    care: adminCareRoutes(r),
+    pricing: adminPricingRoutes(r),
+    overview: adminOverviewRoutes(r),
+
     auth: {
       /** Step 1: email + password → a TOTP (or enrolment) challenge. */
       login: async (body: StaffLoginBody) =>

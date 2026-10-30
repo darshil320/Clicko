@@ -84,6 +84,87 @@ const MATRIX: Record<Desk, Record<StaffRole, boolean>> = {
     SUPPORT: false,
     FINANCE: false,
     READ_ONLY: false,
+  }, // ADR-0026 (Sprint 10).
+  overview: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: true,
+    QUALITY_MANAGER: true,
+    SUPPORT: true,
+    FINANCE: true,
+    READ_ONLY: true,
+  },
+  reviews: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: true,
+    QUALITY_MANAGER: true,
+    SUPPORT: true,
+    FINANCE: true,
+    READ_ONLY: false,
+  },
+  refunds: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: true,
+    QUALITY_MANAGER: true,
+    SUPPORT: true,
+    FINANCE: true,
+    READ_ONLY: false,
+  },
+  payouts: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: false,
+    OPS_AGENT: false,
+    QUALITY_MANAGER: false,
+    SUPPORT: false,
+    FINANCE: true,
+    READ_ONLY: false,
+  },
+  pricing: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: false,
+    QUALITY_MANAGER: false,
+    SUPPORT: false,
+    FINANCE: true,
+    READ_ONLY: true,
+  },
+  photographers: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: true,
+    QUALITY_MANAGER: true,
+    SUPPORT: true,
+    FINANCE: false,
+    READ_ONLY: true,
+  },
+  quality: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: false,
+    QUALITY_MANAGER: true,
+    SUPPORT: true,
+    FINANCE: false,
+    READ_ONLY: false,
+  },
+  tickets: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: true,
+    QUALITY_MANAGER: true,
+    SUPPORT: true,
+    FINANCE: false,
+    READ_ONLY: false,
+  },
+  claims: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: false,
+    QUALITY_MANAGER: true,
+    SUPPORT: false,
+    FINANCE: true,
+    READ_ONLY: false,
   },
 };
 
@@ -108,22 +189,42 @@ describe('the ADR-0025 D3 role matrix', () => {
 
   it('unions several grants', () => {
     const grants = [grant('FINANCE'), grant('QUALITY_MANAGER')];
-    expect(navFor(grants).map((n) => n.label)).toEqual(['Bookings', 'QA', 'Breaches', 'Alerts']);
+    expect(navFor(grants).map((n) => n.label)).toEqual([
+      'Today',
+      'Bookings',
+      'QA',
+      'Alerts',
+      'To settle',
+      'Refunds',
+      'Payouts',
+      'Pricing',
+      'Photographers',
+      'Quality issues',
+      'Support tickets',
+      'Equipment claims',
+      'Late deliveries',
+    ]);
   });
 });
 
 describe('navigation', () => {
   it('shows only the desks the roles allow, in order', () => {
     expect(navFor([grant('SUPPORT')]).map((n) => n.href)).toEqual([
+      '/today',
       '/bookings',
       '/dispatch',
       '/alerts',
+      '/reviews',
+      '/refunds',
+      '/photographers',
+      '/quality',
+      '/tickets',
     ]);
-    expect(navFor([grant('SUPER_ADMIN')])).toHaveLength(7);
+    expect(navFor([grant('SUPER_ADMIN')])).toHaveLength(16);
   });
 
   it('lands on the first allowed desk', () => {
-    expect(homeFor([grant('READ_ONLY')])).toBe('/bookings');
+    expect(homeFor([grant('READ_ONLY')])).toBe('/today');
     expect(homeFor([])).toBeNull();
   });
 
@@ -132,6 +233,7 @@ describe('navigation', () => {
     expect(deskOf('/staff')).toBe('staff');
     expect(deskOf('/dev/pricing')).toBeNull();
     expect(deskOf('/')).toBeNull();
+    expect(deskOf('/today')).toBe('overview');
   });
 });
 

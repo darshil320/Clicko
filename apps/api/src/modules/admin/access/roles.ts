@@ -1,30 +1,19 @@
-import type { StaffRole } from '@clickco/contracts';
+import { ADMIN_DESK_ROLES, ADMIN_DESKS, type AdminDesk, type StaffRole } from '@clickco/contracts';
 
 /**
- * ADR-0025 D3 — the S9 role matrix and city scoping, as pure functions. The API decides access;
- * the panel only hides what this would refuse. SUPER_ADMIN passes every check in every city.
+ * ADR-0025 D3 + ADR-0026 — the role matrix and city scoping, as pure functions. The desk list and
+ * its roles come from `@clickco/contracts` (one source for the API and the panel); the API adds
+ * SUPER_ADMIN, which opens every desk in every city.
  */
-export type Desk = 'bookings' | 'qa' | 'incidents' | 'dispatch' | 'breaches' | 'alerts' | 'staff';
+export type Desk = AdminDesk;
 
-const EVERYONE: readonly StaffRole[] = [
-  'SUPER_ADMIN',
-  'CITY_MANAGER',
-  'OPS_AGENT',
-  'QUALITY_MANAGER',
-  'SUPPORT',
-  'FINANCE',
-  'READ_ONLY',
-];
+function withSuperAdmin(): Readonly<Record<Desk, readonly StaffRole[]>> {
+  const out = {} as Record<Desk, readonly StaffRole[]>;
+  for (const desk of ADMIN_DESKS) out[desk] = ['SUPER_ADMIN', ...ADMIN_DESK_ROLES[desk]];
+  return out;
+}
 
-export const DESK_ROLES: Readonly<Record<Desk, readonly StaffRole[]>> = {
-  bookings: EVERYONE,
-  qa: ['SUPER_ADMIN', 'CITY_MANAGER', 'OPS_AGENT', 'QUALITY_MANAGER'],
-  incidents: ['SUPER_ADMIN', 'CITY_MANAGER', 'OPS_AGENT'],
-  dispatch: ['SUPER_ADMIN', 'CITY_MANAGER', 'OPS_AGENT', 'SUPPORT', 'READ_ONLY'],
-  breaches: ['SUPER_ADMIN', 'CITY_MANAGER', 'QUALITY_MANAGER'],
-  alerts: EVERYONE,
-  staff: ['SUPER_ADMIN'],
-};
+export const DESK_ROLES = withSuperAdmin();
 
 export interface GrantFacts {
   readonly role: StaffRole;

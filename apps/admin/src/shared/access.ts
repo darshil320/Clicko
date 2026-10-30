@@ -1,37 +1,20 @@
-import type { StaffGrant, StaffRole } from '@clickco/contracts';
+import {
+  ADMIN_DESK_ROLES,
+  ADMIN_DESKS,
+  type AdminDesk,
+  type StaffGrant,
+  type StaffRole,
+} from '@clickco/contracts';
 
 /**
- * ADR-0025 D3 — which desks a staff member may open. The API enforces every rule; the panel
- * only hides what the server would refuse anyway (D6). SUPER_ADMIN passes every check, so it is
- * not listed. CITY_MANAGER is limited to their cities by the server.
+ * ADR-0025 D3 + ADR-0026 — which desks a staff member may open. The desk list and roles come
+ * from `@clickco/contracts`, the same source the API guards use. The API enforces every rule;
+ * the panel only hides what the server would refuse anyway. SUPER_ADMIN passes every check.
  */
-export const DESKS = [
-  'bookings',
-  'qa',
-  'incidents',
-  'dispatch',
-  'breaches',
-  'alerts',
-  'staff',
-] as const;
-export type Desk = (typeof DESKS)[number];
+export const DESKS = ADMIN_DESKS;
+export type Desk = AdminDesk;
 
-export const DESK_ROLES: Readonly<Record<Desk, ReadonlyArray<StaffRole>>> = {
-  /** Booking board + detail (READ_ONLY sees the client phone masked — the server masks it). */
-  bookings: ['CITY_MANAGER', 'OPS_AGENT', 'QUALITY_MANAGER', 'SUPPORT', 'FINANCE', 'READ_ONLY'],
-  /** QA pass / fail. */
-  qa: ['CITY_MANAGER', 'OPS_AGENT', 'QUALITY_MANAGER'],
-  /** Confirm incident. */
-  incidents: ['CITY_MANAGER', 'OPS_AGENT'],
-  /** Dispatch desk (view). */
-  dispatch: ['CITY_MANAGER', 'OPS_AGENT', 'SUPPORT', 'READ_ONLY'],
-  /** Breach attribute / waive. */
-  breaches: ['CITY_MANAGER', 'QUALITY_MANAGER'],
-  /** Alert feed. */
-  alerts: ['CITY_MANAGER', 'OPS_AGENT', 'QUALITY_MANAGER', 'SUPPORT', 'FINANCE', 'READ_ONLY'],
-  /** Staff management. */
-  staff: [],
-};
+export const DESK_ROLES: Readonly<Record<Desk, ReadonlyArray<StaffRole>>> = ADMIN_DESK_ROLES;
 
 type Grants = ReadonlyArray<Pick<StaffGrant, 'role' | 'cityId' | 'cityName'>>;
 
@@ -43,21 +26,33 @@ export function canUse(grants: Grants, desk: Desk): boolean {
   return isSuperAdmin(grants) || grants.some((g) => DESK_ROLES[desk].includes(g.role));
 }
 
+export type NavSection = 'Operations' | 'Money' | 'Supply' | 'Customer care' | 'Admin';
+
 export interface NavEntry {
   readonly desk: Desk;
   readonly href: `/${string}`;
   readonly label: string;
+  readonly section: NavSection;
 }
 
-/** The left navigation, in order (ADR-0025 D6). */
+/** The left navigation, grouped and in order (ADR-0026 D8). */
 export const NAV: ReadonlyArray<NavEntry> = [
-  { desk: 'bookings', href: '/bookings', label: 'Bookings' },
-  { desk: 'qa', href: '/qa', label: 'QA' },
-  { desk: 'incidents', href: '/incidents', label: 'Incidents' },
-  { desk: 'dispatch', href: '/dispatch', label: 'Dispatch' },
-  { desk: 'breaches', href: '/breaches', label: 'Breaches' },
-  { desk: 'alerts', href: '/alerts', label: 'Alerts' },
-  { desk: 'staff', href: '/staff', label: 'Staff' },
+  { desk: 'overview', href: '/today', label: 'Today', section: 'Operations' },
+  { desk: 'bookings', href: '/bookings', label: 'Bookings', section: 'Operations' },
+  { desk: 'dispatch', href: '/dispatch', label: 'Dispatch', section: 'Operations' },
+  { desk: 'qa', href: '/qa', label: 'QA', section: 'Operations' },
+  { desk: 'incidents', href: '/incidents', label: 'Incidents', section: 'Operations' },
+  { desk: 'alerts', href: '/alerts', label: 'Alerts', section: 'Operations' },
+  { desk: 'reviews', href: '/reviews', label: 'To settle', section: 'Money' },
+  { desk: 'refunds', href: '/refunds', label: 'Refunds', section: 'Money' },
+  { desk: 'payouts', href: '/payouts', label: 'Payouts', section: 'Money' },
+  { desk: 'pricing', href: '/pricing', label: 'Pricing', section: 'Money' },
+  { desk: 'photographers', href: '/photographers', label: 'Photographers', section: 'Supply' },
+  { desk: 'quality', href: '/quality', label: 'Quality issues', section: 'Customer care' },
+  { desk: 'tickets', href: '/tickets', label: 'Support tickets', section: 'Customer care' },
+  { desk: 'claims', href: '/claims', label: 'Equipment claims', section: 'Customer care' },
+  { desk: 'breaches', href: '/breaches', label: 'Late deliveries', section: 'Customer care' },
+  { desk: 'staff', href: '/staff', label: 'Staff', section: 'Admin' },
 ];
 
 export function navFor(grants: Grants): ReadonlyArray<NavEntry> {
@@ -69,10 +64,11 @@ export function homeFor(grants: Grants): string | null {
   return navFor(grants)[0]?.href ?? null;
 }
 
-/** The desk a path belongs to (`/bookings/…` → bookings), or null outside the desks. */
+/** The desk a path belongs to (`/bookings/…` → bookings, `/today` → overview), or null. */
 export function deskOf(pathname: string): Desk | null {
   const first = pathname.split('/')[1] ?? '';
-  return (DESKS as ReadonlyArray<string>).includes(first) ? (first as Desk) : null;
+  const entry = NAV.find((n) => n.href === `/${first}`);
+  return entry ? entry.desk : null;
 }
 
 export interface CityRef {

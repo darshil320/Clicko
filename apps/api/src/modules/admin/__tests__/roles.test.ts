@@ -14,7 +14,7 @@ const SURAT = '11111111-1111-4111-8111-111111111111';
 const MUMBAI = '22222222-2222-4222-8222-222222222222';
 const g = (role: StaffRole, cityId: string | null = null): GrantFacts => ({ role, cityId });
 
-/** ADR-0025 D3, row by row (✓ = allowed). */
+/** ADR-0025 D3 + ADR-0026, row by row (✓ = allowed). */
 const MATRIX: Readonly<Record<Desk, readonly StaffRole[]>> = {
   bookings: [
     'SUPER_ADMIN',
@@ -39,6 +39,31 @@ const MATRIX: Readonly<Record<Desk, readonly StaffRole[]>> = {
     'READ_ONLY',
   ],
   staff: ['SUPER_ADMIN'],
+  // ADR-0026 (Sprint 10).
+  overview: [
+    'SUPER_ADMIN',
+    'CITY_MANAGER',
+    'OPS_AGENT',
+    'QUALITY_MANAGER',
+    'SUPPORT',
+    'FINANCE',
+    'READ_ONLY',
+  ],
+  reviews: ['SUPER_ADMIN', 'CITY_MANAGER', 'OPS_AGENT', 'QUALITY_MANAGER', 'SUPPORT', 'FINANCE'],
+  refunds: ['SUPER_ADMIN', 'CITY_MANAGER', 'OPS_AGENT', 'QUALITY_MANAGER', 'SUPPORT', 'FINANCE'],
+  payouts: ['SUPER_ADMIN', 'FINANCE'],
+  pricing: ['SUPER_ADMIN', 'FINANCE', 'CITY_MANAGER', 'READ_ONLY'],
+  photographers: [
+    'SUPER_ADMIN',
+    'CITY_MANAGER',
+    'OPS_AGENT',
+    'QUALITY_MANAGER',
+    'SUPPORT',
+    'READ_ONLY',
+  ],
+  quality: ['SUPER_ADMIN', 'QUALITY_MANAGER', 'CITY_MANAGER', 'SUPPORT'],
+  tickets: ['SUPER_ADMIN', 'SUPPORT', 'CITY_MANAGER', 'QUALITY_MANAGER', 'OPS_AGENT'],
+  claims: ['SUPER_ADMIN', 'FINANCE', 'CITY_MANAGER', 'QUALITY_MANAGER'],
 };
 
 const ALL_ROLES: readonly StaffRole[] = [
