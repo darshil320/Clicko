@@ -10,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  KeyRoundIcon,
   LogOutIcon,
 } from '@clickco/ui-web';
 import { useState } from 'react';
@@ -17,8 +18,17 @@ import { grantLabel } from '../../shared/access';
 import { initials } from '../../shared/format';
 import { signOut } from '../../shared/sign-out';
 
-/** The header's right side: who is signed in, their roles, and sign out (revokes the session). */
-export function StaffMenu({ staff }: { readonly staff: StaffProfile }) {
+/**
+ * The header's right side: who is signed in, their roles, "Change password" (ADR-0026 D7) and
+ * sign out (revokes the session).
+ */
+export function StaffMenu({
+  staff,
+  onChangePassword,
+}: {
+  readonly staff: StaffProfile;
+  readonly onChangePassword: () => void;
+}) {
   const [leaving, setLeaving] = useState(false);
   const roles = staff.grants.map(grantLabel);
   const leave = () => {
@@ -28,7 +38,7 @@ export function StaffMenu({ staff }: { readonly staff: StaffProfile }) {
 
   return (
     <div className="flex items-center gap-3">
-      <div className="hidden items-center gap-1.5 lg:flex">
+      <div className="hidden items-center gap-1.5 xl:flex">
         {roles.slice(0, 2).map((label) => (
           <Badge key={label} variant="outline">
             {label}
@@ -45,7 +55,9 @@ export function StaffMenu({ staff }: { readonly staff: StaffProfile }) {
             >
               {initials(staff.fullName)}
             </span>
-            <span className="hidden text-foreground sm:inline">{staff.fullName}</span>
+            <span className="hidden max-w-40 truncate text-foreground md:inline">
+              {staff.fullName}
+            </span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
@@ -63,6 +75,10 @@ export function StaffMenu({ staff }: { readonly staff: StaffProfile }) {
             ))}
           </div>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={onChangePassword}>
+            <KeyRoundIcon />
+            Change password
+          </DropdownMenuItem>
           <DropdownMenuItem disabled={leaving} onSelect={leave}>
             <LogOutIcon />
             {leaving ? 'Signing out…' : 'Sign out'}

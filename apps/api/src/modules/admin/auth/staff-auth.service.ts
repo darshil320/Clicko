@@ -6,6 +6,7 @@ import type {
   StaffTotpBody,
   TokenPair,
 } from '@clickco/contracts';
+import { staffPasswordProblem } from '@clickco/contracts';
 import {
   HttpException,
   HttpStatus,
@@ -15,6 +16,7 @@ import {
   type OnModuleInit,
   ServiceUnavailableException,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../../common/clock';
@@ -23,10 +25,15 @@ import { SQL } from '../../../infra/db/db.module';
 import { TokenService } from '../../auth/token.service';
 import type { AuditActor, AuditContext } from '../access/staff-context';
 import { AuditService } from '../audit/audit.service';
-import { type StaffRecord, StaffRepository } from '../staff/staff.repository';
+import { type StaffRecord, StaffRepository, type Tx } from '../staff/staff.repository';
 import { StaffService } from '../staff/staff.service';
-import { LoginStore, STAFF_LOGIN_POLICY } from './login-store';
+import { LoginStore, passwordFingerprint, STAFF_LOGIN_POLICY } from './login-store';
 import { hashPassword, verifyPassword } from './password';
+import {
+  assertNewPassword,
+  TEMPORARY_PASSWORD_EXPIRED,
+  temporaryPasswordExpired,
+} from './password-policy';
 import { SecretBox } from './secret-box';
 import { base32Encode, newTotpSecret, otpauthUri, verifyTotp } from './totp';
 
@@ -36,6 +43,10 @@ const BAD_CODE = { code: 'TOTP_INVALID', message: 'That code is not right. Try t
 const CHALLENGE_GONE = {
   code: 'CHALLENGE_INVALID',
   message: 'This sign-in has expired. Enter your password again.',
+};
+const CHANGE_REQUIRED = {
+  code: 'PASSWORD_CHANGE_REQUIRED',
+  message: 'Choose a new password to finish signing in.',
 };
 
 const staffActor = (s: StaffRecord): AuditActor => ({ kind: 'STAFF', id: s.id, email: s.email });
@@ -57,6 +68,10 @@ const locked = () =>
  * the password is checked; 5 wrong codes burn the challenge, and 10 per account per 15 min stop
  * new challenges (so a known password cannot brute-force the code); a code works once.
  * Sign-ins, failures and enrolment go to the audit log.
+ *
+ * ADR-0026 D7: a temporary password works for 72 hours; signing in with one makes the code step
+ * carry a new password, saved in the same transaction that starts the session. A challenge is
+ * bound to the password it was earned with, so a reset in between voids it.
  */
 @Injectable()
 export class StaffAuthService implements OnModuleInit {
@@ -103,6 +118,12 @@ export class StaffAuthService implements OnModuleInit {
       await this.failed(ctx, body.email, staff?.id ?? null, 'BAD_CREDENTIALS');
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
+    if (temporaryPasswordExpired(staff, this.clock())) {
+      // The password was right (no enumeration: only its holder learns it expired). The attempt
+      // stays counted, so an expired password cannot be replayed without limit.
+      await this.failed(ctx, body.email, staff.id, 'TEMP_PASSWORD_EXPIRED');
+      throw new UnauthorizedException(TEMPORARY_PASSWORD_EXPIRED);
+    }
     await this.guarded(() => this.store.release(body.email, ctx.ip));
     const totpFailures = await this.guarded(() => this.store.totpFailures(staff.id));
     if (totpFailures >= STAFF_LOGIN_POLICY.maxTotpFailuresPerStaff) {
@@ -115,15 +136,22 @@ export class StaffAuthService implements OnModuleInit {
   async verify(body: StaffTotpBody, ctx: AuditContext): Promise<StaffSessionResponse> {
     const challenge = await this.guarded(() => this.store.getChallenge(body.challengeId));
     if (!challenge) throw new UnauthorizedException(CHALLENGE_GONE);
-    // Counted before the code is checked: concurrent guesses cannot exceed the five.
-    const attempt = await this.guarded(() => this.store.attemptChallenge(body.challengeId));
-    if (attempt === 0 || attempt > STAFF_LOGIN_POLICY.maxTotpAttempts) {
+    const staff = await this.repo.findById(this.sql, challenge.staffId);
+    const sealed = challenge.step === 'ENROL_TOTP' ? challenge.pendingSecret : staff?.totpSecret;
+    if (
+      !staff?.isActive ||
+      !sealed ||
+      passwordFingerprint(staff.passwordHash) !== challenge.passwordFingerprint
+    ) {
       await this.store.deleteChallenge(body.challengeId);
       throw new UnauthorizedException(CHALLENGE_GONE);
     }
-    const staff = await this.repo.findById(this.sql, challenge.staffId);
-    const sealed = challenge.step === 'ENROL_TOTP' ? challenge.pendingSecret : staff?.totpSecret;
-    if (!staff?.isActive || !sealed) {
+    // ADR-0026 D7, before any attempt is counted: a password that breaks the (cheap, syntactic)
+    // policy is a typo to fix, not a guess at the code.
+    const newPassword = await this.newPasswordFor(staff, body.challengeId, body.newPassword);
+    // Counted before the code is checked: concurrent guesses cannot exceed the five.
+    const attempt = await this.guarded(() => this.store.attemptChallenge(body.challengeId));
+    if (attempt === 0 || attempt > STAFF_LOGIN_POLICY.maxTotpAttempts) {
       await this.store.deleteChallenge(body.challengeId);
       throw new UnauthorizedException(CHALLENGE_GONE);
     }
@@ -137,10 +165,24 @@ export class StaffAuthService implements OnModuleInit {
         step === null ? 'BAD_TOTP' : 'TOTP_REUSED',
       );
     }
+    // Only after a right code (one scrypt per proven second factor): not the temporary password.
+    if (newPassword !== null) await assertNewPassword(newPassword, staff);
     if (!(await this.store.deleteChallenge(body.challengeId))) {
       throw new UnauthorizedException(CHALLENGE_GONE);
     }
-    await this.sql.begin(async (tx) => {
+    // Hashed outside the transaction: scrypt is slow and must not hold a row lock.
+    const newHash = newPassword === null ? null : await hashPassword(newPassword);
+    const pair = await this.sql.begin(async (tx) => {
+      // Security review M1: under the row lock, the account must still be active and hold the
+      // password this challenge was earned with — a reset or deactivation in between wins. The
+      // session is issued under the same lock, so a reset that follows revokes it too.
+      const locked = await this.repo.lock(tx, staff.id);
+      if (
+        !locked?.isActive ||
+        passwordFingerprint(locked.passwordHash) !== challenge.passwordFingerprint
+      ) {
+        throw new UnauthorizedException(CHALLENGE_GONE);
+      }
       if (challenge.step === 'ENROL_TOTP') {
         if (!(await this.repo.setTotpSecret(tx, staff.id, sealed))) {
           throw new UnauthorizedException(CHALLENGE_GONE);
@@ -154,21 +196,76 @@ export class StaffAuthService implements OnModuleInit {
           after: { totp_enrolled: true },
         });
       }
+      if (newHash !== null) await this.replaceTemporaryPassword(tx, locked, newHash, ctx);
       await this.repo.markLogin(tx, staff.id, this.clock());
       await this.audit.record(tx, ctx, {
         action: 'staff.login',
         actor: staffActor(staff),
         entityKind: 'staff_user',
         entityId: staff.id,
-        after: { enrolled_totp: challenge.step === 'ENROL_TOTP' },
+        after: {
+          enrolled_totp: challenge.step === 'ENROL_TOTP',
+          password_changed: newHash !== null,
+        },
       });
+      return this.tokens.issue({ kind: 'STAFF', id: staff.id }, null);
     });
     await Promise.all([
       this.store.clearEmail(staff.email).catch(() => undefined),
       this.store.clearTotpFailures(staff.id).catch(() => undefined),
     ]);
-    const pair = await this.tokens.issue({ kind: 'STAFF', id: staff.id }, null);
     return { ...pair, staff: await this.staff.profile(staff.id) };
+  }
+
+  /**
+   * The password to save with this sign-in: null for a chosen password; for a temporary one, the
+   * new password the person typed — refused (422, the challenge kept) when missing or against
+   * the policy, and the challenge burnt (401) when the temporary password has expired.
+   */
+  private async newPasswordFor(
+    staff: StaffRecord,
+    challengeId: string,
+    newPassword: string | undefined,
+  ): Promise<string | null> {
+    if (!staff.mustChangePassword) return null;
+    if (temporaryPasswordExpired(staff, this.clock())) {
+      await this.store.deleteChallenge(challengeId);
+      throw new UnauthorizedException(TEMPORARY_PASSWORD_EXPIRED);
+    }
+    if (newPassword === undefined) throw new UnprocessableEntityException(CHANGE_REQUIRED);
+    const problem = staffPasswordProblem(newPassword, { email: staff.email });
+    if (problem)
+      throw new UnprocessableEntityException({ code: 'PASSWORD_REJECTED', message: problem });
+    return newPassword;
+  }
+
+  /**
+   * Saves the chosen password in the session's transaction (the caller holds the row lock and has
+   * checked the challenge's password is still the stored one), and ends any other session.
+   */
+  private async replaceTemporaryPassword(
+    tx: Tx,
+    locked: StaffRecord,
+    newHash: string,
+    ctx: AuditContext,
+  ): Promise<void> {
+    const staff = locked;
+    if (!locked.mustChangePassword) throw new UnauthorizedException(CHALLENGE_GONE);
+    const now = this.clock();
+    await this.repo.setPassword(tx, staff.id, newHash, { chosenAt: now });
+    await this.repo.endSessions(tx, staff.id, now);
+    await this.audit.record(tx, ctx, {
+      action: 'staff.password_changed',
+      actor: staffActor(staff),
+      entityKind: 'staff_user',
+      entityId: staff.id,
+      before: {
+        must_change_password: true,
+        temp_password_expires_at: locked.tempPasswordExpiresAt?.toISOString() ?? null,
+      },
+      after: { must_change_password: false, via: 'first_sign_in' },
+    });
+    await this.tokens.revokeAll({ kind: 'STAFF', id: staff.id });
   }
 
   /** Rotates a staff session (12 h from sign-in, never extended); an inactive account loses all. */
@@ -207,17 +304,28 @@ export class StaffAuthService implements OnModuleInit {
   private async challenge(staff: StaffRecord): Promise<StaffLoginChallenge> {
     const id = randomUUID();
     const expiresAt = new Date(this.clock().getTime() + STAFF_LOGIN_POLICY.challengeTtlMs);
+    const bound = {
+      staffId: staff.id,
+      mustChangePassword: staff.mustChangePassword,
+      passwordFingerprint: passwordFingerprint(staff.passwordHash),
+    };
     if (staff.totpSecret) {
       await this.guarded(() =>
-        this.store.saveChallenge(id, { staffId: staff.id, step: 'TOTP', pendingSecret: null }),
+        this.store.saveChallenge(id, { ...bound, step: 'TOTP', pendingSecret: null }),
       );
-      return { challengeId: id, step: 'TOTP', enrolment: null, expiresAt: expiresAt.toISOString() };
+      return {
+        challengeId: id,
+        step: 'TOTP',
+        enrolment: null,
+        mustChangePassword: staff.mustChangePassword,
+        expiresAt: expiresAt.toISOString(),
+      };
     }
     const secret = newTotpSecret();
     const base32 = base32Encode(secret);
     await this.guarded(() =>
       this.store.saveChallenge(id, {
-        staffId: staff.id,
+        ...bound,
         step: 'ENROL_TOTP',
         pendingSecret: this.box.seal(secret, staff.id),
       }),
@@ -226,6 +334,7 @@ export class StaffAuthService implements OnModuleInit {
       challengeId: id,
       step: 'ENROL_TOTP',
       enrolment: { secret: base32, otpauthUri: otpauthUri(base32, staff.email) },
+      mustChangePassword: staff.mustChangePassword,
       expiresAt: expiresAt.toISOString(),
     };
   }

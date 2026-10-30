@@ -30,10 +30,13 @@ async function main(argv: readonly string[]): Promise<void> {
       process.stderr.write(`A staff account for ${email} already exists; nothing changed.\n`);
       process.exit(1);
     }
+    const expiry = result.expiresAt
+      ? ` It expires at ${result.expiresAt.toISOString()} (72 hours).`
+      : '';
     process.stdout.write(
       `Created ${parsedRole.data} ${email} (${result.staffId}).\n` +
         `Temporary password (shown once, hand it over privately): ${result.password}\n` +
-        'They set up their authenticator app at first sign-in.\n',
+        `At first sign-in they choose their own password and set up their authenticator app.${expiry}\n`,
     );
   } finally {
     await sql.end();

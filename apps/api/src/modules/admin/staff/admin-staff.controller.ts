@@ -4,6 +4,7 @@ import {
   AdminCreateStaffResponse,
   AdminGrantBody,
   AdminListQuery,
+  AdminResetPasswordResponse,
   AdminStaffChangeResponse,
   AdminStaffPage,
   StaffProfile,
@@ -125,5 +126,17 @@ export class AdminStaffController {
   @Idempotent()
   async resetTotp(@Param('staffId', uuid) staffId: string, @AuditCtx() ctx: AuditContext) {
     return respond(AdminStaffChangeResponse, await this.staff.resetTotp(ctx, staffId));
+  }
+
+  /**
+   * ADR-0026 D7: a new temporary password (72 h), shown once; their sessions end. Like create,
+   * deliberately not @Idempotent — a replay store would keep the password for 24 h.
+   */
+  @Post('staff/:staffId/reset-password')
+  @HttpCode(200)
+  @Roles(...DESK_ROLES.staff)
+  @Audited('staff.reset_password')
+  async resetPassword(@Param('staffId', uuid) staffId: string, @AuditCtx() ctx: AuditContext) {
+    return respond(AdminResetPasswordResponse, await this.staff.resetPassword(ctx, staffId));
   }
 }

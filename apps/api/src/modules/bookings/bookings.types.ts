@@ -269,3 +269,6 @@ export interface AdminBookingFilter {
   readonly after?: { readonly scheduledStart: Date; readonly id: string };
   readonly limit: number;
 }
+
+/** The board's filters without paging: what `adminCount` counts. */
+export type AdminBookingCountFilter = Omit<AdminBookingFilter, 'order' | 'after' | 'limit'>;

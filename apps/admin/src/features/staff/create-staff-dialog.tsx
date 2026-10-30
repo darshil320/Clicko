@@ -45,8 +45,8 @@ function Created({
       <DialogHeader>
         <DialogTitle>{result.staff.fullName} can sign in</DialogTitle>
         <DialogDescription>
-          Send them this temporary password over a private channel. They set up their authenticator
-          at first sign-in.
+          Send them this temporary password over a private channel. It lasts 72 hours; at first
+          sign-in they choose their own password and set up their authenticator.
         </DialogDescription>
       </DialogHeader>
       <Alert variant="warning">
@@ -118,7 +118,8 @@ export function CreateStaffDialog({
             <DialogHeader>
               <DialogTitle>Add a staff member</DialogTitle>
               <DialogDescription>
-                They get a temporary password and set up their authenticator at first sign-in.
+                They get a temporary password (valid 72 hours), then choose their own and set up
+                their authenticator at first sign-in.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-3 sm:grid-cols-2">

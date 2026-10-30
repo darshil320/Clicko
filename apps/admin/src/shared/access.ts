@@ -59,7 +59,33 @@ export function navFor(grants: Grants): ReadonlyArray<NavEntry> {
   return NAV.filter((entry) => canUse(grants, entry.desk));
 }
 
-/** Where a signed-in person lands: their first desk, or nowhere if they have none. */
+/** The nav entry of a desk (every desk has one). */
+export function navEntryOf(desk: Desk): NavEntry | null {
+  return NAV.find((n) => n.desk === desk) ?? null;
+}
+
+/** Where a desk lives in the panel: `/qa`, `/today`. */
+export function hrefOf(desk: Desk): `/${string}` {
+  return navEntryOf(desk)?.href ?? '/';
+}
+
+/** Entries grouped by section, keeping the NAV order of both sections and entries. */
+export function bySection(
+  entries: ReadonlyArray<NavEntry>,
+): ReadonlyArray<readonly [NavSection, ReadonlyArray<NavEntry>]> {
+  const order: NavSection[] = [];
+  const groups = new Map<NavSection, NavEntry[]>();
+  for (const entry of entries) {
+    if (!groups.has(entry.section)) order.push(entry.section);
+    groups.set(entry.section, [...(groups.get(entry.section) ?? []), entry]);
+  }
+  return order.map((section) => [section, groups.get(section) ?? []] as const);
+}
+
+/**
+ * Where a signed-in person lands: their first desk — "Today" for anyone who can open it
+ * (ADR-0026 D8) — or nowhere if they have none.
+ */
 export function homeFor(grants: Grants): string | null {
   return navFor(grants)[0]?.href ?? null;
 }

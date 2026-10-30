@@ -16,6 +16,7 @@ const row = (id: string, grants: StaffGrant[], isActive = true): AdminStaffRow =
   fullName: 'Vikram Reddy',
   isActive,
   totpEnrolled: true,
+  temporaryPasswordExpiresAt: null,
   lastLoginAt: null,
   grants,
 });

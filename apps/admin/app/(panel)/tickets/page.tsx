@@ -1,6 +1,8 @@
-import { DeskInProgress } from '../../../src/features/shell/desk-in-progress';
+import type { Metadata } from 'next';
+import { TicketsDesk } from '../../../src/features/tickets/tickets-desk';
 
-/** ADR-0026 D9 placeholder — replaced by the stream that owns this desk. */
-export default function Page() {
-  return <DeskInProgress title="Support tickets" />;
+export const metadata: Metadata = { title: 'Support tickets' };
+
+export default function TicketsPage() {
+  return <TicketsDesk />;
 }

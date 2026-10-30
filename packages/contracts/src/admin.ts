@@ -30,6 +30,52 @@ export const StaffLoginBody = z.object({
 });
 export type StaffLoginBody = z.infer<typeof StaffLoginBody>;
 
+// ── Staff passwords (ADR-0026 D7) ───────────────────────────────────────────
+
+/** ADR-0026 D7 numbers in one place. */
+export const STAFF_PASSWORD_POLICY = {
+  minLength: 12,
+  maxLength: 128,
+  /** A temporary password (new account, reset) stops working after 72 hours. */
+  temporaryTtlHours: 72,
+} as const;
+
+/** A password a person chooses: 12–128 characters (NIST 800-63B length, no composition rules). */
+export const StaffNewPassword = z
+  .string()
+  .min(
+    STAFF_PASSWORD_POLICY.minLength,
+    `Use at least ${STAFF_PASSWORD_POLICY.minLength} characters`,
+  )
+  .max(
+    STAFF_PASSWORD_POLICY.maxLength,
+    `Use at most ${STAFF_PASSWORD_POLICY.maxLength} characters`,
+  );
+
+/**
+ * The context checks the schema cannot make on its own (ADR-0026 D7): not the email (or its
+ * name part), and not the password being replaced. `previous` is only known where the plain
+ * old password is at hand (the panel's forms); the API checks it against the stored hash.
+ * Returns the message to show, or null when the password is fine. Shared by panel and API.
+ */
+export function staffPasswordProblem(
+  password: string,
+  context: { readonly email: string; readonly previous?: string },
+): string | null {
+  const length = StaffNewPassword.safeParse(password);
+  if (!length.success) return length.error.issues[0]?.message ?? 'Choose another password';
+  const typed = password.trim().toLowerCase();
+  const email = context.email.trim().toLowerCase();
+  const name = email.split('@')[0] ?? '';
+  if (typed === email || (name.length > 0 && typed === name)) {
+    return 'Don’t use your email as your password';
+  }
+  if (context.previous !== undefined && password === context.previous) {
+    return 'Choose a password different from the current one';
+  }
+  return null;
+}
+
 /** Step 1 passed: prove the second factor (TOTP), enrolling it first if the account has none. */
 export const StaffLoginChallenge = z.object({
   challengeId: Uuid,
@@ -41,16 +87,36 @@ export const StaffLoginChallenge = z.object({
       otpauthUri: z.string().startsWith('otpauth://totp/'),
     })
     .nullable(),
+  /**
+   * ADR-0026 D7: the password was a temporary one. The TOTP step must then carry `newPassword`,
+   * and the session starts only once it is saved.
+   */
+  mustChangePassword: z.boolean(),
   expiresAt: IsoDateTime,
 });
 export type StaffLoginChallenge = z.infer<typeof StaffLoginChallenge>;
 
-/** POST /admin/auth/totp — step 2. */
+/** POST /admin/auth/totp — step 2. `newPassword` is required when the challenge says so. */
 export const StaffTotpBody = z.object({
   challengeId: Uuid,
   code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
+  newPassword: StaffNewPassword.optional(),
 });
 export type StaffTotpBody = z.infer<typeof StaffTotpBody>;
+
+/**
+ * POST /admin/me/password — the signed-in person changes their own password, proving it with
+ * the current one and an authenticator code. Every other session ends; the answer is a new one.
+ */
+export const StaffChangePasswordBody = z.object({
+  currentPassword: z.string().min(1).max(256),
+  newPassword: StaffNewPassword,
+  code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
+});
+export type StaffChangePasswordBody = z.infer<typeof StaffChangePasswordBody>;
+
+export const StaffChangePasswordResponse = TokenPair;
+export type StaffChangePasswordResponse = z.infer<typeof StaffChangePasswordResponse>;
 
 export const StaffGrant = z.object({
   /** staff_role_grants.id — what POST /admin/staff/:id/grants/:grantId/revoke takes. */
@@ -306,6 +372,11 @@ export const AdminStaffRow = z.object({
   isActive: z.boolean(),
   totpEnrolled: z.boolean(),
   lastLoginAt: IsoDateTime.nullable(),
+  /**
+   * ADR-0026 D7: set while the account still has a temporary password (never used, or reset):
+   * when it stops working. null once the person has chosen their own.
+   */
+  temporaryPasswordExpiresAt: IsoDateTime.nullable(),
   grants: z.array(StaffGrant),
 });
 export type AdminStaffRow = z.infer<typeof AdminStaffRow>;
@@ -328,6 +399,17 @@ export const AdminCreateStaffResponse = z.object({
   temporaryPassword: z.string().min(16),
 });
 export type AdminCreateStaffResponse = z.infer<typeof AdminCreateStaffResponse>;
+
+/**
+ * POST /admin/staff/:staffId/reset-password (SUPER_ADMIN, ADR-0026 D7): a new temporary password,
+ * shown once, valid 72 hours; every session of that person has ended.
+ */
+export const AdminResetPasswordResponse = z.object({
+  staff: AdminStaffRow,
+  temporaryPassword: z.string().min(16),
+  expiresAt: IsoDateTime,
+});
+export type AdminResetPasswordResponse = z.infer<typeof AdminResetPasswordResponse>;
 
 // ── S9 API additions (list envelopes, queries, grants, audit view) ──────────
 

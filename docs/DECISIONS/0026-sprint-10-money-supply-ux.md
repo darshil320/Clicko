@@ -155,3 +155,32 @@ The bar is the consumer-grade products ops teams already know (Urban Company, St
 - Shared files (`access.ts`, the API's `roles.ts`, the nav list) are pre-filled before the
   streams start.
 - `admin.module.ts` and `ui-web/src/index.ts` take one-line additions only.
+
+## Stream A (money) — built, reviewed and changed (30 Oct 2026)
+- **Refund states:** the schema's `COMPLETED` is D1's "processed". Approving moves a refund
+  straight to `PROCESSING` and calls the gateway in the same request; `APPROVED` is never held.
+- **QM ceiling** (ADR-0005 OD-12) counts **per booking**: refunds approved or done plus credits
+  issued on it, plus the new amount, must stay within the lower of ₹5,000 or 50 % of the total.
+  That is stricter than "per escalation"; finance approves anything above it.
+- **No refund or credit beyond the booking:** refunds never exceed captured − refunded − in
+  flight per payment; credits and refunds together never exceed the booking total, for any role.
+- **Credits** all post `CREDIT_ISSUED` as Dr `SLA_REMEDY_EXPENSE` / Cr
+  `CLIENT_CREDITS_LIABILITY` for now (goodwill included) until the chart of accounts gets a
+  goodwill account.
+- **Credit notes:** CGST always equals SGST; the odd paisa of intra-state GST goes to taxable. A
+  credit note issued after the s.34(2) window is still recorded (`late_for_gst`) and its GST is
+  posted as contra-income, not as an output-tax reduction (CA to confirm).
+- **Breach remedies:** a CREDIT remedy is applied when settled. A refund remedy is applied
+  (`applied_at`, recording the payout deduction) only when every refund it raised **completes**;
+  a rejected or failed refund leaves the breach owed. No extra credit rides on a table remedy; a
+  refund remedy is capped by what is still refundable. Payouts read
+  `SlaDeskService.appliedDeductions(bookingIds)` (PHOTOGRAPHER-attributed, applied, not waived).
+- **Review items** are the `*.needs_review` events (plain `ops.alert`s stay on the alert feed).
+- **Gateway safety:** a refund's receipt is its id (`<id>.<n>` on a retry), sent with Razorpay's
+  refund idempotency header (verify at gate S3); "check again" on a refund still processing only
+  looks at the gateway and re-sends only after 15 minutes with nothing found. Refund webhooks that
+  do not match (amount, payment, attempt) are never booked: `payment.needs_review`
+  `REFUND_AMOUNT_MISMATCH` / `REFUND_WEBHOOK_UNMATCHED`.
+- **Open:** a BullMQ sweep that reconciles refunds stuck in `PROCESSING` (today: webhook or the
+  desk's "check again"); a second approver for large finance-issued credits; the booking page's
+  Refund / Issue credit buttons.

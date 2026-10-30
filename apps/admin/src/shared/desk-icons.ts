@@ -1,0 +1,40 @@
+import {
+  BellIcon,
+  CalendarDaysIcon,
+  CameraIcon,
+  ClipboardCheckIcon,
+  LayoutDashboardIcon,
+  LifeBuoyIcon,
+  type LucideIcon,
+  RadarIcon,
+  ReceiptTextIcon,
+  ScaleIcon,
+  ShieldCheckIcon,
+  SirenIcon,
+  StarIcon,
+  TagIcon,
+  TimerOffIcon,
+  UsersIcon,
+  WalletIcon,
+} from '@clickco/ui-web';
+import type { Desk } from './access';
+
+/** One icon per desk: the navigation, the ⌘K palette and Today's cards (ADR-0026 D8). */
+export const DESK_ICONS: Readonly<Record<Desk, LucideIcon>> = {
+  overview: LayoutDashboardIcon,
+  bookings: CalendarDaysIcon,
+  dispatch: RadarIcon,
+  qa: ClipboardCheckIcon,
+  incidents: SirenIcon,
+  alerts: BellIcon,
+  reviews: ScaleIcon,
+  refunds: ReceiptTextIcon,
+  payouts: WalletIcon,
+  pricing: TagIcon,
+  photographers: CameraIcon,
+  quality: StarIcon,
+  tickets: LifeBuoyIcon,
+  claims: ShieldCheckIcon,
+  breaches: TimerOffIcon,
+  staff: UsersIcon,
+};

@@ -27,7 +27,18 @@ export interface StoredChallenge {
   readonly step: ChallengeStep;
   /** ENROL_TOTP: the new secret, sealed for this staff id, saved only once a code proves it. */
   readonly pendingSecret: string | null;
+  /** ADR-0026 D7: signed in with a temporary password; the code step must carry a new one. */
+  readonly mustChangePassword: boolean;
+  /**
+   * A fingerprint of the password hash the challenge was earned with: a reset or change in
+   * between makes the challenge worthless (see `passwordFingerprint`).
+   */
+  readonly passwordFingerprint: string;
 }
+
+/** A one-way, non-reversible tag of a stored password hash (never the hash itself). */
+export const passwordFingerprint = (passwordHash: string): string =>
+  createHash('sha256').update(`staff-challenge:${passwordHash}`).digest('base64url');
 
 /** Refuses a step at or before the last one used: a code works once (RFC 6238 §5.2). */
 const CLAIM_STEP = `
@@ -146,6 +157,8 @@ export class LoginStore {
         staffId: c.staffId,
         step: c.step,
         pendingSecret: c.pendingSecret ?? '',
+        mustChangePassword: c.mustChangePassword ? '1' : '0',
+        passwordFingerprint: c.passwordFingerprint,
         attempts: '0',
       })
       .pexpire(key, STAFF_LOGIN_POLICY.challengeTtlMs)
@@ -155,7 +168,14 @@ export class LoginStore {
   async getChallenge(id: string): Promise<StoredChallenge | null> {
     const h = await this.redis.hgetall(this.key(`challenge:${id}`));
     if (!h.staffId || (h.step !== 'TOTP' && h.step !== 'ENROL_TOTP')) return null;
-    return { staffId: h.staffId, step: h.step, pendingSecret: h.pendingSecret || null };
+    if (!h.passwordFingerprint) return null;
+    return {
+      staffId: h.staffId,
+      step: h.step,
+      pendingSecret: h.pendingSecret || null,
+      mustChangePassword: h.mustChangePassword === '1',
+      passwordFingerprint: h.passwordFingerprint,
+    };
   }
 
   /** Counts a code attempt (atomic); returns the count including it, 0 when the challenge is gone. */

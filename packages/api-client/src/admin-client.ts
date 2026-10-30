@@ -21,6 +21,7 @@ import {
   type AdminQaDecisionBody,
   AdminQaDecisionResponse,
   AdminQaPage,
+  AdminResetPasswordResponse,
   AdminStaffChangeResponse,
   AdminStaffPage,
   type AdminWaiveBreachBody,
@@ -31,6 +32,8 @@ import {
   AdminCreateStaffBody as CreateStaffSchema,
   AdminGrantBody as GrantSchema,
   AdminQaDecisionBody as QaDecisionSchema,
+  StaffChangePasswordBody,
+  StaffChangePasswordResponse,
   StaffLoginBody,
   StaffLoginChallenge,
   StaffProfile,
@@ -126,6 +129,22 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
           body: checked(StaffTotpBody, body),
           schema: StaffSessionResponse,
         }),
+      /**
+       * ADR-0026 D7: the signed-in person changes their password (current + new + authenticator
+       * code). Every session ends server-side; the new one in the answer replaces this tab's.
+       * Not idempotent on purpose: the answer holds tokens, which must never be stored.
+       */
+      changePassword: async (body: StaffChangePasswordBody) => {
+        const pair = await http.request({
+          method: 'POST',
+          path: '/admin/me/password',
+          body: checked(StaffChangePasswordBody, body),
+          schema: StaffChangePasswordResponse,
+          auth: true,
+        });
+        options.tokens?.setTokens(pair);
+        return pair;
+      },
       /** Revokes the refresh token server-side. */
       logout: (refreshToken: string) =>
         http.request({
@@ -251,6 +270,17 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         post(`/admin/staff/${idSegment(staffId)}/deactivate`, AdminStaffChangeResponse, idem),
       resetTotp: async (staffId: string, idem: Idempotent) =>
         post(`/admin/staff/${idSegment(staffId)}/reset-totp`, AdminStaffChangeResponse, idem),
+      /**
+       * ADR-0026 D7: a new temporary password (72 h), shown once; their sessions end. Not
+       * idempotent on purpose: the answer holds the password, which must never be stored.
+       */
+      resetPassword: async (staffId: string) =>
+        http.request({
+          method: 'POST',
+          path: `/admin/staff/${idSegment(staffId)}/reset-password`,
+          schema: AdminResetPasswordResponse,
+          auth: true,
+        }),
     },
   };
 }

@@ -15,6 +15,13 @@ export interface StaffRecord {
   readonly totpSecret: string | null;
   readonly isActive: boolean;
   readonly lastLoginAt: Date | null;
+  /** ADR-0026 D7: the password is a temporary one; the next sign-in must replace it. */
+  readonly mustChangePassword: boolean;
+  /** When the temporary password stops working (set exactly when `mustChangePassword`). */
+  readonly tempPasswordExpiresAt: Date | null;
+  readonly passwordChangedAt: Date | null;
+  /** The session epoch: access tokens issued before it are refused (StaffGuard). */
+  readonly sessionsValidAfter: Date | null;
 }
 
 interface Row {
@@ -25,9 +32,14 @@ interface Row {
   totp_secret: string | null;
   is_active: boolean;
   last_login_at: Date | null;
+  must_change_password: boolean;
+  temp_password_expires_at: Date | null;
+  password_changed_at: Date | null;
+  sessions_valid_after: Date | null;
 }
 
-const COLUMNS = 'id, email, full_name, password_hash, totp_secret, is_active, last_login_at';
+const COLUMNS = `id, email, full_name, password_hash, totp_secret, is_active, last_login_at,
+  must_change_password, temp_password_expires_at, password_changed_at, sessions_valid_after`;
 
 const toRecord = (r: Row): StaffRecord => ({
   id: r.id,
@@ -37,7 +49,18 @@ const toRecord = (r: Row): StaffRecord => ({
   totpSecret: r.totp_secret,
   isActive: r.is_active,
   lastLoginAt: r.last_login_at,
+  mustChangePassword: r.must_change_password,
+  tempPasswordExpiresAt: r.temp_password_expires_at,
+  passwordChangedAt: r.password_changed_at,
+  sessionsValidAfter: r.sessions_valid_after,
 });
+
+/** How a password is being set (ADR-0026 D7). */
+export type PasswordKind =
+  /** Issued by the system (new account, reset): must be replaced before this instant. */
+  | { readonly temporaryUntil: Date }
+  /** Chosen by the person (or a development seed's known password). */
+  | { readonly chosenAt: Date | null };
 
 /** Postgres SQLSTATEs mapped to 409 / 422 by the service. */
 export const UNIQUE_VIOLATION = '23505';
@@ -101,12 +124,21 @@ export class StaffRepository {
   /** null when the email is taken (case-insensitive unique index). */
   async insert(
     tx: Tx,
-    s: { readonly email: string; readonly fullName: string; readonly passwordHash: string },
+    s: {
+      readonly email: string;
+      readonly fullName: string;
+      readonly passwordHash: string;
+      readonly password: PasswordKind;
+    },
   ): Promise<StaffRecord | null> {
+    const temporaryUntil = 'temporaryUntil' in s.password ? s.password.temporaryUntil : null;
+    const chosenAt = 'chosenAt' in s.password ? s.password.chosenAt : null;
     try {
       const [row] = await tx<Row[]>`
-        INSERT INTO staff_users (email, full_name, password_hash)
-        VALUES (${s.email}, ${s.fullName}, ${s.passwordHash})
+        INSERT INTO staff_users (email, full_name, password_hash, must_change_password,
+                                 temp_password_expires_at, password_changed_at)
+        VALUES (${s.email}, ${s.fullName}, ${s.passwordHash}, ${temporaryUntil !== null},
+                ${temporaryUntil}, ${chosenAt})
         RETURNING ${tx.unsafe(COLUMNS)}`;
       return row ? toRecord(row) : null;
     } catch (error) {
@@ -161,6 +193,36 @@ export class StaffRepository {
 
   async clearTotp(tx: Tx, id: string): Promise<void> {
     await tx`UPDATE staff_users SET totp_secret = NULL WHERE id = ${id}`;
+  }
+
+  /**
+   * Replaces the password (ADR-0026 D7). A temporary one must be changed before `temporaryUntil`;
+   * a chosen one clears both markers and records when it was chosen.
+   */
+  async setPassword(tx: Tx, id: string, passwordHash: string, kind: PasswordKind): Promise<void> {
+    if ('temporaryUntil' in kind) {
+      await tx`
+        UPDATE staff_users
+        SET password_hash = ${passwordHash}, must_change_password = true,
+            temp_password_expires_at = ${kind.temporaryUntil}
+        WHERE id = ${id}`;
+      return;
+    }
+    await tx`
+      UPDATE staff_users
+      SET password_hash = ${passwordHash}, must_change_password = false,
+          temp_password_expires_at = NULL, password_changed_at = ${kind.chosenAt}
+      WHERE id = ${id}`;
+  }
+
+  /**
+   * Ends every session of this person from `at` (whole seconds, as access tokens' `iat`): the
+   * guard refuses tokens issued before it. Pair it with revoking the refresh tokens.
+   */
+  async endSessions(tx: Tx, id: string, at: Date): Promise<void> {
+    await tx`
+      UPDATE staff_users SET sessions_valid_after = date_trunc('second', ${at}::timestamptz)
+      WHERE id = ${id}`;
   }
 
   async markLogin(tx: Tx, id: string, at: Date): Promise<void> {

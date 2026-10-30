@@ -19,7 +19,10 @@ export class AuthGuard implements CanActivate {
     if (!match?.[1]) {
       throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Sign in required' });
     }
-    req.subject = await this.tokens.verifyAccess(match[1]);
+    const { subject, issuedAt } = await this.tokens.verifyAccessClaims(match[1]);
+    req.subject = subject;
+    // When the access token was issued: staff sessions can be ended before it expires.
+    req.accessIssuedAt = issuedAt;
     return true;
   }
 }

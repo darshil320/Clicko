@@ -92,6 +92,13 @@ export interface DeliveryLink {
   readonly linkId: string;
 }
 
+/** A signed, read-only link to one private object (ADR-0026 D5: staff viewing a KYC document). */
+export interface ReadLink {
+  /** An https URL once a real provider is live; `local://…` (not followable) on local disk. */
+  readonly url: string;
+  readonly expiresAt: Date;
+}
+
 export interface StoragePort {
   readonly adapterId: StorageAdapterId;
 
@@ -132,6 +139,14 @@ export interface StoragePort {
   putObject(input: PutObjectInput, body: ByteSource): Promise<StoredObject>;
   /** Reads an object back (JPEG export, audits). StorageNotFoundError when absent. */
   openObject(objectId: string): Promise<ByteSource>;
+
+  // ── ADR-0026 D5 addition ──────────────────────────────────────────────────
+  /**
+   * A short-lived, signed, read-only link to one object, dead at `expiresAt` (KYC documents:
+   * 5 minutes). Never a lasting share; the caller audits every link it asks for.
+   * StorageNotFoundError when the object is absent.
+   */
+  createReadLink(objectId: string, expiresAt: Date): Promise<ReadLink>;
 }
 
 export const STORAGE_PORT = Symbol('STORAGE_PORT');

@@ -1,5 +1,6 @@
 'use client';
 
+import { isApiError } from '@clickco/api-client';
 import type { StaffLoginChallenge, StaffSessionResponse } from '@clickco/contracts';
 import {
   Alert,
@@ -26,12 +27,18 @@ const CODE = /^\d{6}$/;
  */
 export function CodeStep({
   challenge,
+  newPassword,
   onSession,
   onRestart,
+  onPasswordRejected,
 }: {
   readonly challenge: StaffLoginChallenge;
+  /** ADR-0026 D7: the password chosen in the step before, saved with this code. */
+  readonly newPassword: string | null;
   readonly onSession: (session: StaffSessionResponse) => void;
   readonly onRestart: (message: string | null) => void;
+  /** The server refused the chosen password: back to choosing one, with its reason. */
+  readonly onPasswordRejected: (message: string) => void;
 }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +54,22 @@ export function CodeStep({
     setBusy(true);
     setError(null);
     try {
-      onSession(await adminApi.auth.totp({ challengeId: challenge.challengeId, code }));
+      onSession(
+        await adminApi.auth.totp({
+          challengeId: challenge.challengeId,
+          code,
+          ...(newPassword ? { newPassword } : {}),
+        }),
+      );
     } catch (failure) {
+      if (isApiError(failure) && failure.code === 'PASSWORD_REJECTED') {
+        onPasswordRejected(failure.message);
+        return;
+      }
+      if (isApiError(failure) && failure.code === 'TEMPORARY_PASSWORD_EXPIRED') {
+        onRestart(failure.message);
+        return;
+      }
       const message =
         failure instanceof Error && failure.message
           ? failure.message

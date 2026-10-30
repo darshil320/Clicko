@@ -21,6 +21,10 @@ export const keys = {
   breachesAll: ['breaches'] as const,
   alerts: ['alerts'] as const,
   staff: ['staff'] as const,
+  /** Today's numbers and the nav's live counts (ADR-0026 D8). */
+  overview: ['overview'] as const,
+  /** The ⌘K booking search, per typed text. */
+  bookingSearch: (q: string) => ['booking-search', q] as const,
 };
 
 const STALE_MS = 15_000;

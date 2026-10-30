@@ -45,6 +45,15 @@ export class StaffGuard implements CanActivate {
         message: 'This account is not active. Please sign in again.',
       });
     }
+    // ADR-0026 D7: a reset, a password change, an authenticator reset or a deactivation ends
+    // every session at once — tokens issued before the epoch are refused, not left to expire.
+    const epoch = principal.sessionsValidAfter;
+    if (epoch && (!req.accessIssuedAt || req.accessIssuedAt < epoch)) {
+      throw new UnauthorizedException({
+        code: 'SESSION_REVOKED',
+        message: 'This session has ended. Please sign in again.',
+      });
+    }
     const roles: unknown = Reflect.getMetadata(ROLES_KEY, context.getHandler());
     if (!Array.isArray(roles) || roles.length === 0) throw new ForbiddenException(FORBIDDEN);
     const scope = scopeFor(principal.grants, roles as StaffRole[]);

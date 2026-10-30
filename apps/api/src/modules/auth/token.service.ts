@@ -96,6 +96,11 @@ export class TokenService {
   }
 
   async verifyAccess(token: string): Promise<Subject> {
+    return (await this.verifyAccessClaims(token)).subject;
+  }
+
+  /** The subject and when the token was issued (the staff guard's session epoch check). */
+  async verifyAccessClaims(token: string): Promise<{ subject: Subject; issuedAt: Date }> {
     try {
       const { payload } = await jwtVerify(token, this.key, {
         issuer: TOKEN_POLICY.issuer,
@@ -107,7 +112,7 @@ export class TokenService {
       });
       const kind = payload.kind as SubjectKind;
       if (!payload.sub || !SUBJECT_KINDS.includes(kind)) throw new Error('malformed claims');
-      return { kind, id: payload.sub };
+      return { subject: { kind, id: payload.sub }, issuedAt: new Date((payload.iat ?? 0) * 1000) };
     } catch {
       throw new UnauthorizedException(SESSION_INVALID);
     }

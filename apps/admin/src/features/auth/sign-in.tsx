@@ -17,7 +17,32 @@ import { homeFor } from '../../shared/access';
 import { safeNext } from '../../shared/safe-next';
 import { loadSession, recordActivity, saveSession, useHydrated } from '../../shared/session';
 import { CodeStep } from './code-step';
+import { NewPasswordStep } from './new-password-step';
 import { PasswordStep } from './password-step';
+
+/** Where the sign-in is: the password, then (temporary password only) a new one, then the code. */
+type Step =
+  | { readonly kind: 'password' }
+  | {
+      readonly kind: 'new-password';
+      readonly challenge: StaffLoginChallenge;
+      readonly email: string;
+      readonly temporaryPassword: string;
+      readonly rejected: string | null;
+    }
+  | {
+      readonly kind: 'code';
+      readonly challenge: StaffLoginChallenge;
+      readonly email: string;
+      readonly temporaryPassword: string | null;
+      readonly newPassword: string | null;
+    };
+
+const TITLES = {
+  password: ['Sign in', 'Staff only. Accounts are created by a super admin.'],
+  'new-password': ['Choose your password', 'One more step before your first sign-in.'],
+  code: ['Confirm it’s you', 'Enter the code from your authenticator app.'],
+} as const;
 
 const REASONS: Readonly<Record<string, string>> = {
   idle: 'You were signed out after 30 minutes without activity.',
@@ -26,12 +51,15 @@ const REASONS: Readonly<Record<string, string>> = {
 
 const safeNextHere = (next: string | null): string | null => safeNext(next, window.location.origin);
 
-/** Staff sign-in (ADR-0025 D2): password → TOTP, or TOTP enrolment on the first sign-in. */
+/**
+ * Staff sign-in (ADR-0025 D2): password → TOTP, or TOTP enrolment on the first sign-in.
+ * ADR-0026 D7: a temporary password first asks for a new one, sent with the code.
+ */
 export function SignIn() {
   const router = useRouter();
   const params = useSearchParams();
   const hydrated = useHydrated();
-  const [challenge, setChallenge] = useState<StaffLoginChallenge | null>(null);
+  const [step, setStep] = useState<Step>({ kind: 'password' });
   const [notice, setNotice] = useState<string | null>(REASONS[params.get('reason') ?? ''] ?? null);
   const next = safeNextHere(params.get('next'));
 
@@ -41,6 +69,12 @@ export function SignIn() {
     const session = loadSession();
     if (session) router.replace(next ?? homeFor(session.staff.grants) ?? '/');
   }, [hydrated, next, router]);
+
+  /** Back to the password; the typed passwords are dropped with the step. */
+  const restart = (message: string | null) => {
+    setStep({ kind: 'password' });
+    setNotice(message);
+  };
 
   const onSession = (session: StaffSessionResponse) => {
     saveSession({
@@ -61,12 +95,8 @@ export function SignIn() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>{challenge ? 'Confirm it’s you' : 'Sign in'}</CardTitle>
-            <CardDescription>
-              {challenge
-                ? 'Enter the code from your authenticator app.'
-                : 'Staff only. Accounts are created by a super admin.'}
-            </CardDescription>
+            <CardTitle>{TITLES[step.kind][0]}</CardTitle>
+            <CardDescription>{TITLES[step.kind][1]}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             {notice ? (
@@ -75,20 +105,59 @@ export function SignIn() {
                 <AlertDescription>{notice}</AlertDescription>
               </Alert>
             ) : null}
-            {challenge ? (
+            {step.kind === 'code' ? (
               <CodeStep
-                challenge={challenge}
+                challenge={step.challenge}
+                newPassword={step.newPassword}
                 onSession={onSession}
-                onRestart={(message) => {
-                  setChallenge(null);
-                  setNotice(message);
-                }}
+                onRestart={restart}
+                onPasswordRejected={(message) =>
+                  setStep({
+                    kind: 'new-password',
+                    challenge: step.challenge,
+                    email: step.email,
+                    temporaryPassword: step.temporaryPassword ?? '',
+                    rejected: message,
+                  })
+                }
+              />
+            ) : step.kind === 'new-password' ? (
+              <NewPasswordStep
+                email={step.email}
+                temporaryPassword={step.temporaryPassword}
+                serverError={step.rejected}
+                onChosen={(newPassword) =>
+                  setStep({
+                    kind: 'code',
+                    challenge: step.challenge,
+                    email: step.email,
+                    temporaryPassword: step.temporaryPassword,
+                    newPassword,
+                  })
+                }
+                onRestart={() => restart(null)}
               />
             ) : (
               <PasswordStep
-                onChallenge={(c) => {
+                onChallenge={(challenge, email, password) => {
                   setNotice(null);
-                  setChallenge(c);
+                  setStep(
+                    challenge.mustChangePassword
+                      ? {
+                          kind: 'new-password',
+                          challenge,
+                          email,
+                          temporaryPassword: password,
+                          rejected: null,
+                        }
+                      : {
+                          kind: 'code',
+                          challenge,
+                          email,
+                          temporaryPassword: null,
+                          newPassword: null,
+                        },
+                  );
                 }}
               />
             )}

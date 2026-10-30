@@ -2,6 +2,7 @@ import { AdminCreateStaffBody, type StaffRole } from '@clickco/contracts';
 import type postgres from 'postgres';
 import { AuditRepository } from '../audit/audit.repository';
 import { generateTemporaryPassword, hashPassword } from '../auth/password';
+import { temporaryPasswordExpiry } from '../auth/password-policy';
 import { SecretBox } from '../auth/secret-box';
 import { StaffRepository } from './staff.repository';
 
@@ -11,7 +12,11 @@ export interface BootstrapStaffInput {
   readonly role: StaffRole;
   /** Required for CITY_MANAGER; null = every city. */
   readonly cityId: string | null;
-  /** Development seed only: a known password. Otherwise a temporary one is generated. */
+  /**
+   * A known password (the development seed, test fixtures): kept as a chosen password. Without
+   * it a temporary one is generated, which expires in 72 hours and must be replaced at the first
+   * sign-in (ADR-0026 D7).
+   */
   readonly password?: string;
   /** Development seed only: a pre-enrolled TOTP secret (raw bytes), sealed with `totpKey`. */
   readonly totp?: { readonly secret: Buffer; readonly totpKey: string };
@@ -19,7 +24,13 @@ export interface BootstrapStaffInput {
 }
 
 export type BootstrapResult =
-  | { readonly outcome: 'CREATED'; readonly staffId: string; readonly password: string }
+  | {
+      readonly outcome: 'CREATED';
+      readonly staffId: string;
+      readonly password: string;
+      /** When a generated temporary password stops working; null for a known password. */
+      readonly expiresAt: Date | null;
+    }
   | { readonly outcome: 'EXISTS'; readonly staffId: string };
 
 /**
@@ -44,12 +55,14 @@ export async function createStaffAccount(
   const existing = await staff.findByEmail(sql, body.email);
   if (existing) return { outcome: 'EXISTS', staffId: existing.id };
   const password = input.password ?? generateTemporaryPassword();
+  const expiresAt = input.password === undefined ? temporaryPasswordExpiry(now) : null;
   const passwordHash = await hashPassword(password);
   return sql.begin(async (tx) => {
     const created = await staff.insert(tx, {
       email: body.email,
       fullName: body.fullName,
       passwordHash,
+      password: expiresAt ? { temporaryUntil: expiresAt } : { chosenAt: null },
     });
     if (!created) throw new Error(`A staff account with this email already exists`);
     const grant = await staff.insertGrant(tx, {
@@ -77,12 +90,13 @@ export async function createStaffAccount(
         full_name: created.fullName,
         grants: [{ grant_id: grant.id, role: grant.role, city_id: grant.cityId }],
         via: input.via,
+        temporary_password_expires_at: expiresAt?.toISOString() ?? null,
       },
       ip: null,
       userAgent: null,
       requestId: null,
       occurredAt: now,
     });
-    return { outcome: 'CREATED' as const, staffId: created.id, password };
+    return { outcome: 'CREATED' as const, staffId: created.id, password, expiresAt };
   });
 }

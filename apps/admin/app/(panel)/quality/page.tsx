@@ -1,6 +1,8 @@
-import { DeskInProgress } from '../../../src/features/shell/desk-in-progress';
+import type { Metadata } from 'next';
+import { QualityDesk } from '../../../src/features/quality/quality-desk';
 
-/** ADR-0026 D9 placeholder — replaced by the stream that owns this desk. */
-export default function Page() {
-  return <DeskInProgress title="Quality issues" />;
+export const metadata: Metadata = { title: 'Quality issues' };
+
+export default function QualityPage() {
+  return <QualityDesk />;
 }

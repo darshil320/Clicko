@@ -3,6 +3,7 @@ import type {
   AdminCreateStaffBody,
   AdminCreateStaffResponse,
   AdminGrantBody,
+  AdminResetPasswordResponse,
   AdminStaffRow,
   StaffGrant,
   StaffProfile,
@@ -15,6 +16,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type postgres from 'postgres';
+import { CLOCK, type Clock } from '../../../common/clock';
 import { SQL } from '../../../infra/db/db.module';
 import { TokenService } from '../../auth/token.service';
 import { ServiceabilityService } from '../../serviceability/serviceability.service';
@@ -26,7 +28,9 @@ import type {
   StaffPrincipal,
 } from '../access/staff-context';
 import { AuditService } from '../audit/audit.service';
+import { LoginStore } from '../auth/login-store';
 import { generateTemporaryPassword, hashPassword } from '../auth/password';
+import { temporaryPasswordExpiry } from '../auth/password-policy';
 import { type StaffRecord, StaffRepository, type Tx } from './staff.repository';
 
 const STAFF_NOT_FOUND = { code: 'STAFF_NOT_FOUND', message: 'Staff member not found' };
@@ -46,6 +50,8 @@ export class StaffService implements StaffAccessPort {
     @Inject(ServiceabilityService) private readonly serviceability: ServiceabilityService,
     @Inject(TokenService) private readonly tokens: TokenService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(LoginStore) private readonly logins: LoginStore,
   ) {}
 
   async activePrincipal(staffId: string): Promise<StaffPrincipal | null> {
@@ -57,6 +63,7 @@ export class StaffService implements StaffAccessPort {
       email: staff.email,
       fullName: staff.fullName,
       grants: grants.get(staff.id) ?? [],
+      sessionsValidAfter: staff.sessionsValidAfter,
     };
   }
 
@@ -80,16 +87,21 @@ export class StaffService implements StaffAccessPort {
     return this.rows(await this.repo.page(this.sql, after, limit));
   }
 
-  /** A SUPER_ADMIN creates an account; the temporary password is returned once, never stored. */
+  /**
+   * A SUPER_ADMIN creates an account; the temporary password is returned once, never stored, and
+   * stops working after 72 hours (ADR-0026 D7).
+   */
   async create(ctx: AuditContext, body: AdminCreateStaffBody): Promise<AdminCreateStaffResponse> {
     await this.assertCities(body.grants.map((g) => g.cityId));
     const temporaryPassword = generateTemporaryPassword();
     const passwordHash = await hashPassword(temporaryPassword);
+    const temporaryUntil = temporaryPasswordExpiry(this.clock());
     const staff = await this.sql.begin(async (tx) => {
       const created = await this.repo.insert(tx, {
         email: body.email,
         fullName: body.fullName,
         passwordHash,
+        password: { temporaryUntil },
       });
       if (!created) {
         throw new ConflictException({
@@ -110,6 +122,7 @@ export class StaffService implements StaffAccessPort {
           email: created.email,
           full_name: created.fullName,
           grants: grants.map(grantState),
+          temporary_password_expires_at: temporaryUntil.toISOString(),
         },
       });
       return created;
@@ -175,6 +188,7 @@ export class StaffService implements StaffAccessPort {
       const grants = (await this.repo.grantsFor(tx, [staffId])).get(staffId) ?? [];
       if (grants.some((g) => g.role === 'SUPER_ADMIN')) await this.keepOneSuperAdmin(tx, staffId);
       await this.repo.deactivate(tx, staffId);
+      await this.repo.endSessions(tx, staffId, this.clock());
       await this.audit.record(tx, ctx, {
         action: 'staff.deactivate',
         entityKind: 'staff_user',
@@ -193,6 +207,7 @@ export class StaffService implements StaffAccessPort {
     await this.sql.begin(async (tx) => {
       const staff = await this.lockStaff(tx, staffId);
       await this.repo.clearTotp(tx, staffId);
+      await this.repo.endSessions(tx, staffId, this.clock());
       await this.audit.record(tx, ctx, {
         action: 'staff.reset_totp',
         entityKind: 'staff_user',
@@ -203,6 +218,60 @@ export class StaffService implements StaffAccessPort {
       await this.tokens.revokeAll({ kind: 'STAFF', id: staffId });
     });
     return this.row(staffId);
+  }
+
+  /**
+   * ADR-0026 D7: a new temporary password for someone who lost theirs — shown once, valid 72
+   * hours, replaced at their next sign-in. Every session of theirs ends at once, and the failed
+   * sign-in count on their email is cleared so they can use it straight away. Never the
+   * caller's own (they use "Change password"), never a deactivated account.
+   */
+  async resetPassword(ctx: AuditContext, staffId: string): Promise<AdminResetPasswordResponse> {
+    if (staffId === ctx.actor?.id) {
+      throw new ConflictException({
+        code: 'CANNOT_RESET_OWN_PASSWORD',
+        message: 'Use “Change password” in your account menu to change your own password',
+      });
+    }
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await hashPassword(temporaryPassword);
+    const temporaryUntil = temporaryPasswordExpiry(this.clock());
+    const email = await this.sql.begin(async (tx) => {
+      const staff = await this.lockStaff(tx, staffId);
+      if (!staff.isActive) {
+        throw new ConflictException({
+          code: 'STAFF_INACTIVE',
+          message: 'This account is deactivated, so it cannot sign in with any password',
+        });
+      }
+      await this.repo.setPassword(tx, staffId, passwordHash, { temporaryUntil });
+      await this.repo.endSessions(tx, staffId, this.clock());
+      await this.audit.record(tx, ctx, {
+        action: 'staff.reset_password',
+        entityKind: 'staff_user',
+        entityId: staffId,
+        // Never the password: only that one was issued, and until when it works.
+        before: {
+          must_change_password: staff.mustChangePassword,
+          temp_password_expires_at: staff.tempPasswordExpiresAt?.toISOString() ?? null,
+        },
+        after: {
+          must_change_password: true,
+          temp_password_expires_at: temporaryUntil.toISOString(),
+          sessions_revoked: true,
+        },
+      });
+      // Inside the transaction: if the sessions cannot be revoked, nothing changes.
+      await this.tokens.revokeAll({ kind: 'STAFF', id: staffId });
+      return staff.email;
+    });
+    // Best effort: a lockout left in place only delays the first sign-in by 15 minutes.
+    await this.logins.clearEmail(email).catch(() => undefined);
+    return {
+      staff: await this.row(staffId),
+      temporaryPassword,
+      expiresAt: temporaryUntil.toISOString(),
+    };
   }
 
   private async row(staffId: string): Promise<AdminStaffRow> {
@@ -226,6 +295,9 @@ export class StaffService implements StaffAccessPort {
       isActive: s.isActive,
       totpEnrolled: s.totpSecret !== null,
       lastLoginAt: s.lastLoginAt?.toISOString() ?? null,
+      temporaryPasswordExpiresAt: s.mustChangePassword
+        ? (s.tempPasswordExpiresAt?.toISOString() ?? null)
+        : null,
       grants: (grants.get(s.id) ?? []).map(
         (g): StaffGrant => ({
           id: g.id,

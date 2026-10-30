@@ -8,6 +8,11 @@ import { MediaModule } from '../media/media.module';
 import { OnsiteModule } from '../onsite/onsite.module';
 import { OpsModule } from '../ops/ops.module';
 import { PaymentsModule } from '../payments/payments.module';
+import {
+  PAYOUTS_ADMIN_CONTROLLERS,
+  PAYOUTS_ADMIN_IMPORTS,
+  PAYOUTS_ADMIN_PROVIDERS,
+} from '../payouts/admin/payouts-admin.parts';
 import { PhotographersModule } from '../photographers/photographers.module';
 import { ServiceabilityModule } from '../serviceability/serviceability.module';
 import { SlaModule } from '../sla/sla.module';
@@ -29,9 +34,17 @@ import { BreachDeskService } from './desks/breach-desk.service';
 import { DispatchQueueService } from './desks/dispatch-queue.service';
 import { IncidentDeskService } from './desks/incident-desk.service';
 import { QaDeskService } from './desks/qa-desk.service';
+import { MONEY_CONTROLLERS, MONEY_IMPORTS, MONEY_PROVIDERS } from './money/money.providers';
+import { PLATFORM_CONTROLLERS, PLATFORM_PROVIDERS } from './platform.providers';
+import { PRICING_CONTROLLERS, PRICING_IMPORTS, PRICING_PROVIDERS } from './pricing.providers';
 import { AdminStaffController } from './staff/admin-staff.controller';
 import { StaffRepository } from './staff/staff.repository';
 import { StaffService } from './staff/staff.service';
+import {
+  SUPPLY_CARE_CONTROLLERS,
+  SUPPLY_CARE_IMPORTS,
+  SUPPLY_CARE_PROVIDERS,
+} from './supply-care.providers';
 
 /**
  * The staff admin API (ADR-0025, doc 02 `modules/admin`). Owns staff_users, staff_role_grants and
@@ -53,14 +66,24 @@ import { StaffService } from './staff/staff.service';
     PhotographersModule,
     ServiceabilityModule,
     MediaModule,
+    ...PRICING_IMPORTS,
+    ...MONEY_IMPORTS,
+    ...SUPPLY_CARE_IMPORTS,
+    ...PAYOUTS_ADMIN_IMPORTS,
   ],
   controllers: [
     AdminAuthController,
     AdminStaffController,
     AdminBookingsController,
     AdminOpsController,
+    ...PLATFORM_CONTROLLERS,
+    ...PRICING_CONTROLLERS,
+    ...MONEY_CONTROLLERS,
+    ...SUPPLY_CARE_CONTROLLERS,
+    ...PAYOUTS_ADMIN_CONTROLLERS,
   ],
   providers: [
+    ...PAYOUTS_ADMIN_PROVIDERS,
     StaffRepository,
     StaffService,
     { provide: STAFF_ACCESS, useExisting: StaffService },
@@ -78,6 +101,10 @@ import { StaffService } from './staff/staff.service';
     DispatchQueueService,
     BreachDeskService,
     AlertFeedService,
+    ...PLATFORM_PROVIDERS,
+    ...PRICING_PROVIDERS,
+    ...MONEY_PROVIDERS,
+    ...SUPPLY_CARE_PROVIDERS,
   ],
 })
 export class AdminModule {}

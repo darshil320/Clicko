@@ -2,7 +2,13 @@ import type { BookingStatus, EmergencyBand, PlanTier } from '@clickco/contracts'
 import { Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import type { IdSubquery } from '../../../infra/db/id-subquery';
-import type { AdminBookingFacts, AdminBookingFilter, CitySet, Db } from '../bookings.types';
+import type {
+  AdminBookingCountFilter,
+  AdminBookingFacts,
+  AdminBookingFilter,
+  CitySet,
+  Db,
+} from '../bookings.types';
 import { hoursFromNumeric } from '../hours';
 
 interface Row {
@@ -65,14 +71,7 @@ export class BookingAdminRepository {
   async page(db: Db, f: AdminBookingFilter): Promise<AdminBookingFacts[]> {
     const asc = f.order === 'ASC';
     const where = [
-      db`b.status <> 'DRAFT'`,
-      cityClause(db, f.scope),
-      ...(f.cityId ? [db`b.city_id = ${f.cityId}`] : []),
-      ...(f.statuses && f.statuses.length > 0 ? [db`b.status IN ${db([...f.statuses])}`] : []),
-      ...(f.startsFrom ? [db`b.scheduled_start >= ${f.startsFrom}`] : []),
-      ...(f.startsBefore ? [db`b.scheduled_start < ${f.startsBefore}`] : []),
-      ...(f.search ? [searchClause(db, f.search)] : []),
-      ...(f.within ? [db`b.id IN (${f.within})`] : []),
+      ...filterClauses(db, f),
       ...(f.after
         ? [
             asc
@@ -90,6 +89,13 @@ export class BookingAdminRepository {
     return rows.map(toFacts);
   }
 
+  /** How many bookings match the board's filters (the staff panel's Today numbers). */
+  async count(db: Db, f: AdminBookingCountFilter): Promise<number> {
+    const [row] = await db<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM bookings b WHERE ${and(db, filterClauses(db, f))}`;
+    return row?.n ?? 0;
+  }
+
   async byIds(db: Db, ids: readonly string[]): Promise<AdminBookingFacts[]> {
     if (ids.length === 0) return [];
     const rows = await db<Row[]>`
@@ -104,6 +110,13 @@ export class BookingAdminRepository {
     return row?.city_id ?? null;
   }
 
+  /** A booking by its exact reference ("CLK-1004"), never a draft (ADR-0026 care desks). */
+  async idByReference(db: Db, reference: string): Promise<string | null> {
+    const [row] = await db<{ id: string }[]>`
+      SELECT id FROM bookings WHERE reference = ${reference} AND status <> 'DRAFT'`;
+    return row?.id ?? null;
+  }
+
   /** `SELECT id FROM bookings WHERE …` for other modules to embed (see IdSubquery). */
   idsWhere(db: Db, scope: CitySet, statuses?: readonly BookingStatus[]): IdSubquery {
     const where = [
@@ -112,6 +125,20 @@ export class BookingAdminRepository {
     ];
     return db`SELECT id FROM bookings b WHERE ${and(db, where)}`;
   }
+}
+
+/** The board's filters, shared by the page and the count. Never a draft. */
+function filterClauses(db: Db, f: AdminBookingCountFilter) {
+  return [
+    db`b.status <> 'DRAFT'`,
+    cityClause(db, f.scope),
+    ...(f.cityId ? [db`b.city_id = ${f.cityId}`] : []),
+    ...(f.statuses && f.statuses.length > 0 ? [db`b.status IN ${db([...f.statuses])}`] : []),
+    ...(f.startsFrom ? [db`b.scheduled_start >= ${f.startsFrom}`] : []),
+    ...(f.startsBefore ? [db`b.scheduled_start < ${f.startsBefore}`] : []),
+    ...(f.search ? [searchClause(db, f.search)] : []),
+    ...(f.within ? [db`b.id IN (${f.within})`] : []),
+  ];
 }
 
 function and(db: Db, parts: readonly postgres.PendingQuery<postgres.Row[]>[]) {

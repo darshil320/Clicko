@@ -10,7 +10,8 @@ import { describeError } from '../../shared/errors';
 export function PasswordStep({
   onChallenge,
 }: {
-  readonly onChallenge: (challenge: StaffLoginChallenge) => void;
+  /** `password` is kept only while a temporary one must be replaced (never stored). */
+  readonly onChallenge: (challenge: StaffLoginChallenge, email: string, password: string) => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +23,7 @@ export function PasswordStep({
     setBusy(true);
     setError(null);
     try {
-      onChallenge(await adminApi.auth.login({ email, password }));
+      onChallenge(await adminApi.auth.login({ email, password }), email.trim(), password);
     } catch (failure) {
       // A 401 here is a wrong email or password, not an ended session: show the server's words.
       const message =

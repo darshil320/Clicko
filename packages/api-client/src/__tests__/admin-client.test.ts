@@ -41,6 +41,7 @@ const staffRow = (grants: unknown[]) => ({
   isActive: true,
   totpEnrolled: false,
   lastLoginAt: null,
+  temporaryPasswordExpiresAt: null,
   grants,
 });
 
@@ -71,6 +72,7 @@ describe('createAdminApiClient — sign-in (ADR-0025 D2)', () => {
         secret: 'JBSWY3DPEHPK3PXP',
         otpauthUri: 'otpauth://totp/Clickco:priya.sharma%40clickco.in?secret=JBSWY3DPEHPK3PXP',
       },
+      mustChangePassword: false,
       expiresAt: '2026-11-14T10:05:00+05:30',
     };
     const { api, calls } = client(() => ok(challenge), null);

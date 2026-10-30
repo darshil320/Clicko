@@ -6,6 +6,7 @@ import {
   bootstrapStaff,
   cityIdOf,
   codeFor,
+  currentPassword,
   signIn,
   staffToken,
 } from './test-support/staff-fixtures';
@@ -381,10 +382,11 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
       });
       expect(refresh.status).toBe(401);
       e2e.advance(31_000);
+      // signIn replaced the temporary password at the first sign-in (ADR-0026 D7).
       const login = await e2e.call('POST', '/admin/auth/login', {
-        body: { email, password: created.cm?.password },
+        body: { email, password: currentPassword(secrets, email, created.cm?.password as string) },
       });
-      expect(login.json.data.step).toBe('ENROL_TOTP');
+      expect(login.json.data).toMatchObject({ step: 'ENROL_TOTP', mustChangePassword: false });
       expect((await audit('staff.reset_totp')).map((r) => r.entity_id)).toEqual([created.cm?.id]);
     });
 

@@ -20,6 +20,7 @@ import type {
   PartExpectation,
   PartReceipt,
   PutObjectInput,
+  ReadLink,
   StorageKind,
   StoragePort,
   StorageUsage,
@@ -452,6 +453,23 @@ export class LocalDiskAdapter implements StoragePort {
     if (!meta) throw new StorageNotFoundError(`Link ${linkId}`);
     if (meta.revokedAt !== null) return;
     await this.writeJson(path, { ...meta, revokedAt: this.clock().toISOString() });
+  }
+
+  // ── read links (ADR-0026 D5) ─────────────────────────────────────────────
+
+  /**
+   * Local disk cannot serve a browser, so the link is a `local://` marker the panel describes
+   * instead of opening (like a local delivery link). It still checks the object exists.
+   */
+  async createReadLink(objectId: string, expiresAt: Date): Promise<ReadLink> {
+    if (!UUID.test(objectId)) throw new StorageNotFoundError(`Object ${objectId}`);
+    try {
+      await stat(this.dir('objects', objectId));
+    } catch (error) {
+      if (isMissing(error)) throw new StorageNotFoundError(`Object ${objectId}`);
+      throw error;
+    }
+    return { url: `local://objects/${objectId}?expires=${expiresAt.getTime()}`, expiresAt };
   }
 
   /** Test/dev introspection: whether a link is currently revoked (not part of the port). */

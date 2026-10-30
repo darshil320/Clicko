@@ -1,58 +1,10 @@
 'use client';
 
-import {
-  BellIcon,
-  CalendarDaysIcon,
-  CameraIcon,
-  ClipboardCheckIcon,
-  LayoutDashboardIcon,
-  LifeBuoyIcon,
-  type LucideIcon,
-  RadarIcon,
-  ReceiptTextIcon,
-  ScaleIcon,
-  ShieldCheckIcon,
-  SidebarItem,
-  SidebarNav,
-  SidebarSection,
-  SirenIcon,
-  StarIcon,
-  TagIcon,
-  TimerOffIcon,
-  UsersIcon,
-  WalletIcon,
-  WrenchIcon,
-} from '@clickco/ui-web';
+import type { AdminNeedsYou } from '@clickco/contracts';
+import { CountBadge, SidebarItem, SidebarNav, SidebarSection, WrenchIcon } from '@clickco/ui-web';
 import Link from 'next/link';
-import type { Desk, NavEntry, NavSection } from '../../shared/access';
-
-const ICONS: Readonly<Record<Desk, LucideIcon>> = {
-  overview: LayoutDashboardIcon,
-  bookings: CalendarDaysIcon,
-  dispatch: RadarIcon,
-  qa: ClipboardCheckIcon,
-  incidents: SirenIcon,
-  alerts: BellIcon,
-  reviews: ScaleIcon,
-  refunds: ReceiptTextIcon,
-  payouts: WalletIcon,
-  pricing: TagIcon,
-  photographers: CameraIcon,
-  quality: StarIcon,
-  tickets: LifeBuoyIcon,
-  claims: ShieldCheckIcon,
-  breaches: TimerOffIcon,
-  staff: UsersIcon,
-};
-
-/** Entries grouped by section, keeping the NAV order of both sections and entries. */
-function bySection(entries: ReadonlyArray<NavEntry>): ReadonlyArray<[NavSection, NavEntry[]]> {
-  const groups = new Map<NavSection, NavEntry[]>();
-  for (const entry of entries) {
-    groups.set(entry.section, [...(groups.get(entry.section) ?? []), entry]);
-  }
-  return [...groups.entries()];
-}
+import { bySection, type Desk, type NavEntry } from '../../shared/access';
+import { DESK_ICONS } from '../../shared/desk-icons';
 
 /** The simulators, linked only in development (ADR-0025 D6). */
 const DEV_LINKS = [
@@ -66,24 +18,40 @@ const DEV_LINKS = [
 const isActive = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(`${href}/`);
 
+/**
+ * The grouped navigation (ADR-0026 D8): sections in NAV order, the current desk marked, and a
+ * live count beside every desk with work waiting (from GET /admin/overview) — red when urgent,
+ * a quiet grey otherwise, so the page's one amber action stays the only accent.
+ */
 export function PanelNav({
   entries,
   pathname,
+  counts,
 }: {
   readonly entries: ReadonlyArray<NavEntry>;
   readonly pathname: string;
+  readonly counts: ReadonlyMap<Desk, AdminNeedsYou>;
 }) {
   return (
     <SidebarNav aria-label="Desks">
       {bySection(entries).map(([section, items]) => (
         <SidebarSection key={section} label={section}>
           {items.map((entry) => {
-            const Icon = ICONS[entry.desk];
+            const Icon = DESK_ICONS[entry.desk];
+            const work = counts.get(entry.desk);
             return (
               <SidebarItem key={entry.href} asChild active={isActive(pathname, entry.href)}>
                 <Link href={entry.href}>
                   <Icon aria-hidden="true" />
-                  {entry.label}
+                  <span className="min-w-0 flex-1 truncate">{entry.label}</span>
+                  {work ? (
+                    <CountBadge
+                      count={work.count}
+                      capped={work.capped}
+                      tone={work.tone === 'urgent' ? 'urgent' : 'neutral'}
+                      label={work.tone === 'urgent' ? 'urgent, waiting' : 'waiting'}
+                    />
+                  ) : null}
                 </Link>
               </SidebarItem>
             );

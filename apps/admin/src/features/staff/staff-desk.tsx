@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
   PageHeader,
   RefreshCwIcon,
+  RelativeTime,
   UserPlusIcon,
   XIcon,
 } from '@clickco/ui-web';
@@ -24,17 +25,34 @@ import { formatDateTime } from '../../shared/format';
 import { usePagedList } from '../../shared/paged';
 import { keys } from '../../shared/query';
 import { useSession } from '../../shared/session';
+import { useNow } from '../../shared/use-now';
 import { CreateStaffDialog } from './create-staff-dialog';
 import { GrantDialog } from './grant-dialog';
+import { ResetPasswordDialog } from './reset-password-dialog';
 import { canDeactivate, canRevoke } from './rules';
 import { type StaffAction, StaffActionDialog } from './staff-actions';
 
 const PAGE_SIZE = 100;
 
+/** ADR-0026 D7: a temporary password still to be replaced, or one that ran out. */
+function PasswordBadge({ row, now }: { readonly row: AdminStaffRow; readonly now: number }) {
+  if (!row.temporaryPasswordExpiresAt) return null;
+  const expired = Date.parse(row.temporaryPasswordExpiresAt) <= now;
+  return expired ? (
+    <Badge variant="destructive">Temporary password expired</Badge>
+  ) : (
+    <Badge variant="warning">
+      Temporary password · ends <RelativeTime at={row.temporaryPasswordExpiresAt} now={now} />
+    </Badge>
+  );
+}
+
 function columns(
   myId: string,
+  now: number,
   act: (action: StaffAction) => void,
   addRole: (staff: AdminStaffRow) => void,
+  resetPassword: (staff: AdminStaffRow) => void,
 ): ReadonlyArray<ColumnDef<AdminStaffRow>> {
   return [
     {
@@ -63,6 +81,7 @@ function columns(
           <Badge variant={row.original.totpEnrolled ? 'outline' : 'warning'}>
             {row.original.totpEnrolled ? 'Authenticator set' : 'No authenticator yet'}
           </Badge>
+          <PasswordBadge row={row.original} now={now} />
         </div>
       ),
     },
@@ -96,7 +115,13 @@ function columns(
       header: 'Last sign-in',
       accessorFn: (row) => (row.lastLoginAt ? Date.parse(row.lastLoginAt) : 0),
       cell: ({ row }) =>
-        row.original.lastLoginAt ? formatDateTime(row.original.lastLoginAt) : <Muted>Never</Muted>,
+        row.original.lastLoginAt ? (
+          <span title={formatDateTime(row.original.lastLoginAt)}>
+            <RelativeTime at={row.original.lastLoginAt} now={now} />
+          </span>
+        ) : (
+          <Muted>Never</Muted>
+        ),
     },
     {
       id: 'actions',
@@ -115,6 +140,11 @@ function columns(
                 <DropdownMenuItem onSelect={() => addRole(row.original)}>
                   Add a role
                 </DropdownMenuItem>
+                {row.original.id !== myId ? (
+                  <DropdownMenuItem onSelect={() => resetPassword(row.original)}>
+                    Reset password
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem onSelect={() => act({ kind: 'reset-totp', staff: row.original })}>
                   Reset authenticator
                 </DropdownMenuItem>
@@ -141,12 +171,14 @@ export function StaffDesk() {
   const [creating, setCreating] = useState(false);
   const [granting, setGranting] = useState<AdminStaffRow | null>(null);
   const [action, setAction] = useState<StaffAction | null>(null);
+  const [resetting, setResetting] = useState<AdminStaffRow | null>(null);
+  const now = useNow();
   const list = usePagedList(keys.staff, (cursor) =>
     adminApi.staff.list({ cursor, limit: PAGE_SIZE }),
   );
 
   const cities = useCities();
-  const cols = useMemo(() => columns(myId, setAction, setGranting), [myId]);
+  const cols = useMemo(() => columns(myId, now, setAction, setGranting, setResetting), [myId, now]);
 
   return (
     <>
@@ -191,6 +223,13 @@ export function StaffDesk() {
         />
       ) : null}
       {action ? <StaffActionDialog action={action} onClose={() => setAction(null)} /> : null}
+      {resetting ? (
+        <ResetPasswordDialog
+          key={resetting.id}
+          staff={resetting}
+          onClose={() => setResetting(null)}
+        />
+      ) : null}
     </>
   );
 }

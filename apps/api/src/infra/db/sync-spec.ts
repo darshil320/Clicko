@@ -20,4 +20,12 @@ writeFileSync(
   join(MIGRATIONS, '0004_outbox_backoff.sql'),
   readFileSync(join(ROOT, 'docs/schema-addenda/0004-outbox-backoff.sql'), 'utf8'),
 );
-process.stdout.write('Migrations 0001–0004 regenerated from docs/.\n');
+writeFileSync(
+  join(MIGRATIONS, '0005_credit_notes.sql'),
+  readFileSync(join(ROOT, 'docs/schema-addenda/0005-credit-notes.sql'), 'utf8'),
+);
+writeFileSync(
+  join(MIGRATIONS, '0006_review_resolutions.sql'),
+  readFileSync(join(ROOT, 'docs/schema-addenda/0006-review-resolutions.sql'), 'utf8'),
+);
+process.stdout.write('Migrations 0001–0006 regenerated from docs/.\n');

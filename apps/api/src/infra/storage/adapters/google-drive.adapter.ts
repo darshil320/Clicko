@@ -7,6 +7,7 @@ import type {
   PartExpectation,
   PartReceipt,
   PutObjectInput,
+  ReadLink,
   StoragePort,
   StorageUsage,
   StoredObject,
@@ -106,6 +107,11 @@ export class GoogleDriveAdapter implements StoragePort {
   }
 
   async revokeDeliveryLink(_linkId: string): Promise<void> {
+    return this.notConfigured();
+  }
+
+  /** Drive has no signed URLs: stream through the API under a signed token when wired (S11+). */
+  async createReadLink(_objectId: string, _expiresAt: Date): Promise<ReadLink> {
     return this.notConfigured();
   }
 

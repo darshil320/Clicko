@@ -125,8 +125,11 @@ export function createHttp(options: HttpOptions): Http {
       .catch((error: unknown) => {
         // Only an explicit rejection (400/401/403) ends the session. A rate limit (429 — many
         // Indian mobile users share one CGNAT IP), a 5xx or a flaky network must not sign anyone out.
-        if (isApiError(error) && error.kind === 'HTTP' && SESSION_REJECTED.has(error.status))
-          return false;
+        if (isApiError(error) && error.kind === 'HTTP' && SESSION_REJECTED.has(error.status)) {
+          // The session was replaced meanwhile (a password change returns a new pair): the
+          // refusal is about the old token, so carry on with the new one instead of signing out.
+          return tokens.getRefreshToken() !== refreshToken && tokens.getAccessToken() !== null;
+        }
         throw error;
       })
       .finally(() => {

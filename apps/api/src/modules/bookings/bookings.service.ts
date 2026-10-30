@@ -13,6 +13,7 @@ import type { IdSubquery } from '../../infra/db/id-subquery';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
 import type { OnsiteCharge } from '../pricing/engine';
 import {
+  type AdminBookingCountFilter,
   type AdminBookingFacts,
   type AdminBookingFilter,
   type AssignmentBookingDetail,
@@ -186,6 +187,11 @@ export class BookingsService {
     return this.admin.page(this.sql, filter);
   }
 
+  /** How many bookings the board's filters match (the staff panel's Today, ADR-0026 D8). */
+  adminCount(filter: AdminBookingCountFilter): Promise<number> {
+    return this.admin.count(this.sql, filter);
+  }
+
   adminFacts(bookingIds: readonly string[]): Promise<AdminBookingFacts[]> {
     return this.admin.byIds(this.sql, bookingIds);
   }
@@ -193,6 +199,11 @@ export class BookingsService {
   /** null when the booking does not exist. A booking's city never changes. */
   cityOf(bookingId: string): Promise<string | null> {
     return this.admin.cityOf(this.sql, bookingId);
+  }
+
+  /** The booking a staff member typed the reference of ("CLK-1004"); null when unknown. */
+  idByReference(reference: string): Promise<string | null> {
+    return this.admin.idByReference(this.sql, reference);
   }
 
   /** Booking ids in these cities (and statuses), for another module's SQL filter. */

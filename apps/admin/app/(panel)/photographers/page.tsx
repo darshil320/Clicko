@@ -1,6 +1,8 @@
-import { DeskInProgress } from '../../../src/features/shell/desk-in-progress';
+import type { Metadata } from 'next';
+import { PhotographersDesk } from '../../../src/features/photographers/photographers-desk';
 
-/** ADR-0026 D9 placeholder — replaced by the stream that owns this desk. */
-export default function Page() {
-  return <DeskInProgress title="Photographers" />;
+export const metadata: Metadata = { title: 'Photographers' };
+
+export default function PhotographersPage() {
+  return <PhotographersDesk />;
 }

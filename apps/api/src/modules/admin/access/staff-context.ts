@@ -16,6 +16,8 @@ export interface StaffPrincipal {
   readonly email: string;
   readonly fullName: string;
   readonly grants: readonly StaffGrantRecord[];
+  /** ADR-0026 D7 session epoch: access tokens issued before it are refused. */
+  readonly sessionsValidAfter?: Date | null;
 }
 
 /** The caller, plus the cities this route's roles open for them. */
@@ -61,6 +63,8 @@ export interface StaffRequest {
   readonly params: Record<string, string | undefined>;
   readonly ip?: string;
   subject?: { readonly kind: string; readonly id: string };
+  /** Set by AuthGuard from the access token's `iat`. */
+  accessIssuedAt?: Date;
   staff?: StaffCaller;
   audit?: AuditContext;
 }
