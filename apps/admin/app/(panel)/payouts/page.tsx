@@ -1,6 +1,8 @@
-import { DeskInProgress } from '../../../src/features/shell/desk-in-progress';
+import type { Metadata } from 'next';
+import { PayoutsDesk } from '../../../src/features/payouts/payouts-desk';
 
-/** ADR-0026 D9 placeholder — replaced by the stream that owns this desk. */
-export default function Page() {
-  return <DeskInProgress title="Payouts" />;
+export const metadata: Metadata = { title: 'Payouts' };
+
+export default function PayoutsPage() {
+  return <PayoutsDesk />;
 }
