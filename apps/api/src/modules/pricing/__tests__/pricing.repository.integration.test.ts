@@ -79,8 +79,16 @@ describe.runIf(TEST_DATABASE_URL)('pricing ruleset in Postgres', () => {
 
   it('allows only one open-ended ruleset', async () => {
     await expect(
-      db.sql`INSERT INTO pricing_rulesets (version, effective_from, prices_include_gst) VALUES ('dup', now(), false)`,
+      db.sql`INSERT INTO pricing_rulesets (version, effective_from, prices_include_gst, published_at)
+             VALUES ('dup', now(), false, now())`,
     ).rejects.toThrow(/pricing_rulesets_one_current/);
+  });
+
+  it('an unpublished ruleset (a draft) never carries a real window (addendum 0010)', async () => {
+    await expect(
+      db.sql`INSERT INTO pricing_rulesets (version, effective_from, effective_to, prices_include_gst)
+             VALUES ('draft-x', now(), now() + interval '1 day', false)`,
+    ).rejects.toThrow(/pricing_rulesets_draft_window/);
   });
 
   it('refuses any UPDATE to a price snapshot', async () => {

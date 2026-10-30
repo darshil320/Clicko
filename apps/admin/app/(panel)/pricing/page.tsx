@@ -1,6 +1,8 @@
-import { DeskInProgress } from '../../../src/features/shell/desk-in-progress';
+import type { Metadata } from 'next';
+import { PricingHome } from '../../../src/features/pricing/pricing-home';
 
-/** ADR-0026 D9 placeholder — replaced by the stream that owns this desk. */
-export default function Page() {
-  return <DeskInProgress title="Pricing" />;
+export const metadata: Metadata = { title: 'Pricing' };
+
+export default function PricingPage() {
+  return <PricingHome />;
 }

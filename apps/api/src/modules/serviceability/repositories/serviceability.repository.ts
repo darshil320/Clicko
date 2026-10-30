@@ -51,6 +51,8 @@ export interface CitySummary {
   readonly name: string;
   readonly state: string;
   readonly status: AreaStatus;
+  /** Drives the rate card (the pricing editor's calculator). */
+  readonly tier: CityTier;
 }
 
 export const SERVICEABILITY_REPOSITORY = Symbol('SERVICEABILITY_REPOSITORY');
@@ -135,7 +137,7 @@ export class PgServiceabilityRepository implements ServiceabilityRepository {
   async cities(ids: readonly string[] | null): Promise<CitySummary[]> {
     if (ids !== null && ids.length === 0) return [];
     return this.sql<CitySummary[]>`
-      SELECT id, name, state, status FROM cities
+      SELECT id, name, state, status, tier FROM cities
       WHERE ${ids === null ? this.sql`TRUE` : this.sql`id IN ${this.sql([...new Set(ids)])}`}
       ORDER BY name, id`;
   }
