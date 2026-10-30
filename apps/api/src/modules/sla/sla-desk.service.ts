@@ -1,8 +1,10 @@
 import type { SlaClockView, SlaKind } from '@clickco/contracts';
+import { fromPaiseBigint } from '@clickco/utils';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type postgres from 'postgres';
 import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
+import type { IdSubquery } from '../../infra/db/id-subquery';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
 import {
   type BreachPageQuery,
@@ -42,6 +44,17 @@ export interface SlaBoardFacts {
 }
 
 const BREACH_NOT_FOUND = { code: 'BREACH_NOT_FOUND', message: 'Breach not found' };
+
+/**
+ * A recorded payout deduction (ADR-0026 D2/D3): an applied breach put down to the photographer.
+ * Payouts (stream B) cut `payoutDeductionBps` of the photographer's expected payout for it.
+ */
+export interface AppliedDeduction {
+  readonly breachId: string;
+  readonly bookingId: string;
+  readonly payoutDeductionBps: number;
+  readonly appliedAt: Date;
+}
 
 export const toClockView = (c: SlaClockRecord): SlaClockView => ({
   kind: c.kind,
@@ -88,6 +101,14 @@ export class SlaDeskService {
 
   async clockViews(bookingId: string): Promise<SlaClockView[]> {
     return (await this.clocks.forBooking(this.sql, bookingId)).map(toClockView);
+  }
+
+  /**
+   * Deliveries promised by `until` and not yet made (the running DELIVERY_DUE clock), on the
+   * bookings of an owner-built subquery — the staff panel's Today number (ADR-0026 D8).
+   */
+  deliveriesDueCount(bookings: IdSubquery, until: Date): Promise<number> {
+    return this.clocks.countRunningDue(this.sql, 'DELIVERY_DUE', bookings, until);
   }
 
   breachesForBooking(bookingId: string): Promise<BreachRecord[]> {
@@ -171,6 +192,76 @@ export class SlaDeskService {
       });
       return { ...before, waivedBy: staffId, waiveReason: reason };
     });
+  }
+
+  /** One breach, unlocked (review items show it). */
+  breach(breachId: string): Promise<BreachRecord | null> {
+    return this.breaches.find(this.sql, breachId);
+  }
+
+  /**
+   * ADR-0026 D2 — for the payouts module: every applied breach on these bookings that was put
+   * down to the photographer, with its deduction. CLICKCO-attributed breaches cost the photographer
+   * nothing; waived, re-attributed and unapplied breaches are not deductions.
+   */
+  async appliedDeductions(bookingIds: readonly string[]): Promise<AppliedDeduction[]> {
+    const all = await this.breaches.forBookings(this.sql, bookingIds);
+    return all.flatMap((b) =>
+      b.appliedAt !== null &&
+      b.waivedBy === null &&
+      b.attributedTo === 'PHOTOGRAPHER' &&
+      b.payoutDeductionBps > 0
+        ? [
+            {
+              breachId: b.id,
+              bookingId: b.bookingId,
+              payoutDeductionBps: b.payoutDeductionBps,
+              appliedAt: b.appliedAt,
+            },
+          ]
+        : [],
+    );
+  }
+
+  /** Locks a breach for applying its remedy, in the caller's tx (lock order: booking first). */
+  async lockForRemedy(tx: Tx, breachId: string): Promise<BreachRecord> {
+    const breach = await this.breaches.lock(tx, breachId);
+    if (!breach) throw new NotFoundException(BREACH_NOT_FOUND);
+    return breach;
+  }
+
+  /**
+   * ADR-0026 D2: the remedy of an owed breach (`isOwed`) was applied — `applied_at` set, which
+   * records the payout deduction — with `sla.breach_applied`, in the caller's tx.
+   */
+  async markRemedyApplied(
+    tx: Tx,
+    breach: BreachRecord,
+    staffId: string,
+    now: Date,
+  ): Promise<BreachRecord> {
+    if (!isOwed(breach) || !(await this.breaches.markApplied(tx, breach.id, now))) {
+      throw new ConflictException({
+        code: 'BREACH_NOT_OWED',
+        message: 'This late delivery owes nothing now (already applied, waived or re-attributed)',
+      });
+    }
+    await appendDomainEvent(tx, {
+      eventType: 'sla.breach_applied',
+      aggregateKind: 'booking',
+      aggregateId: breach.bookingId,
+      occurredAt: now,
+      payload: {
+        booking_id: breach.bookingId,
+        breach_id: breach.id,
+        remedy_kind: breach.remedyKind,
+        remedy_paise: fromPaiseBigint(breach.remedyPaise),
+        payout_deduction_bps: breach.payoutDeductionBps,
+        attributed_to: breach.attributedTo,
+        staff_id: staffId,
+      },
+    });
+    return { ...breach, appliedAt: now };
   }
 
   /** A breach is decided only while its remedy is neither applied nor waived. */

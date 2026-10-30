@@ -7,10 +7,12 @@ import { SQL } from '../../infra/db/db.module';
 import { BookingsService } from '../bookings/bookings.service';
 import type { BookingRow, Tx } from '../bookings/bookings.types';
 import { ACCEPTED_STATUSES } from '../bookings/state-machine';
-import type {
-  PaymentFailedEvent,
-  PaymentSucceededEvent,
+import {
+  isRefundEvent,
+  type PaymentFailedEvent,
+  type PaymentSucceededEvent,
 } from '../payments/gateways/payment-gateway.port';
+import { PaymentRefundsService } from '../payments/payment-refunds.service';
 import { PaymentsService } from '../payments/payments.service';
 import type { IncomingWebhook, PaymentRecord, PaymentStatus } from '../payments/payments.types';
 import { bookingNotFound, conflict } from './http-errors';
@@ -72,6 +74,7 @@ export class PaymentFlowService {
     @Inject(PaymentsService) private readonly payments: PaymentsService,
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(PaymentRefundsService) private readonly refunds?: PaymentRefundsService,
   ) {}
 
   /** Opens the advance (or full / authorise-only) payment. Re-asking returns the same open order. */
@@ -94,6 +97,12 @@ export class PaymentFlowService {
     if (event.kind === 'IGNORED') {
       await this.payments.markWebhookProcessed(webhookEventId, null);
       return 'IGNORED';
+    }
+    // ADR-0026 D1: a refund settled at the gateway — the refunds module applies it (outbox).
+    if (isRefundEvent(event)) {
+      if (!this.refunds) throw new Error('Refund webhooks need PaymentRefundsService');
+      await this.refunds.relayWebhook(webhookEventId, event, this.clock());
+      return 'APPLIED';
     }
     try {
       const result = await this.sql.begin((tx) => this.apply(tx, event));

@@ -17,6 +17,10 @@ export const LEDGER_ACCOUNTS = {
   REFUNDS_ISSUED: 'REFUNDS_ISSUED',
   CLIENT_CREDITS_LIABILITY: 'CLIENT_CREDITS_LIABILITY',
   SLA_REMEDY_EXPENSE: 'SLA_REMEDY_EXPENSE',
+  /** Asset: breach / penalty deductions a photographer owes back, until a payout recovers them. */
+  VENDOR_RECOVERABLE: 'VENDOR_RECOVERABLE',
+  /** Contra-expense (reduces COGS_VENDOR): breach and penalty deductions recognised (ADR-0026 D3). */
+  VENDOR_DEDUCTIONS: 'VENDOR_DEDUCTIONS',
 } as const;
 export type LedgerAccount = keyof typeof LEDGER_ACCOUNTS;
 
@@ -24,6 +28,8 @@ export type TxnKind =
   | 'ADVANCE_CAPTURED'
   | 'BALANCE_CAPTURED'
   | 'REFUND_ISSUED'
+  | 'PAYOUT_ACCRUED'
+  | 'PAYOUT_DEDUCTION'
   | 'PAYOUT_PAID'
   | 'GST_ACCRUED'
   | 'TDS_WITHHELD'
@@ -107,4 +113,45 @@ export function travelShareOf(
   if (snapshot.subtotalPaise <= 0n || snapshot.travelPaise <= 0n) return 0n;
   const share = roundHalfUp(invoiceTaxablePaise * snapshot.travelPaise, snapshot.subtotalPaise);
   return share > invoiceTaxablePaise ? invoiceTaxablePaise : share;
+}
+
+export interface RefundPosting {
+  /** What goes back to the client. */
+  readonly totalPaise: bigint;
+  /** Taxable value and GST reversed by the refund's credit note(s); 0 when nothing was invoiced. */
+  readonly creditedTaxablePaise: bigint;
+  readonly creditedGstPaise: bigint;
+  /** Past the CGST s.34(2) window: the GST can no longer reduce output tax, so it is a cost too. */
+  readonly lateGst: boolean;
+}
+
+/**
+ * REFUND_ISSUED (ADR-0026 D1), when the gateway confirms: the credit-noted part reverses revenue
+ * (REFUNDS_ISSUED, contra-income) and output GST; money that was never invoiced goes back out of
+ * the client receivable; all of it leaves gateway cash.
+ */
+export function refundIssuedEntries(r: RefundPosting): LedgerLine[] {
+  const uninvoiced = r.totalPaise - r.creditedTaxablePaise - r.creditedGstPaise;
+  if (
+    r.totalPaise <= 0n ||
+    uninvoiced < 0n ||
+    r.creditedTaxablePaise < 0n ||
+    r.creditedGstPaise < 0n
+  ) {
+    throw new RangeError(`refundIssuedEntries: inconsistent refund of ${r.totalPaise}`);
+  }
+  return nonZero([
+    debit('REFUNDS_ISSUED', r.creditedTaxablePaise + (r.lateGst ? r.creditedGstPaise : 0n)),
+    debit('GST_OUTPUT_PAYABLE', r.lateGst ? 0n : r.creditedGstPaise),
+    debit('CLIENT_RECEIVABLE', uninvoiced),
+    credit('CASH_GATEWAY', r.totalPaise),
+  ]);
+}
+
+/** CREDIT_ISSUED (ADR-0026 D2): a service credit is an expense owed to the client until used. */
+export function creditIssuedEntries(amountPaise: bigint): LedgerLine[] {
+  return [
+    debit('SLA_REMEDY_EXPENSE', amountPaise),
+    credit('CLIENT_CREDITS_LIABILITY', amountPaise),
+  ];
 }

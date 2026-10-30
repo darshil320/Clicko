@@ -1,5 +1,6 @@
 import type { SlaKind } from '@clickco/contracts';
 import { Injectable } from '@nestjs/common';
+import type { IdSubquery } from '../../../infra/db/id-subquery';
 import type { PlannedClock } from '../rules/schedule';
 import type { Db, SlaClockRecord, SlaClockState, Tx } from '../sla.types';
 
@@ -117,6 +118,19 @@ export class SlaClocksRepository {
   /** Terminal booking: every armed clock is cancelled. */
   async cancelArmed(tx: Tx, bookingId: string): Promise<void> {
     await tx`UPDATE sla_clocks SET state = 'CANCELLED' WHERE booking_id = ${bookingId} AND state = 'ARMED'`;
+  }
+
+  /**
+   * Running clocks of one kind falling due by `until` (effective due: due_at + paused time),
+   * on the bookings of an owner-built subquery — the staff panel's "due in the next 24 h".
+   */
+  async countRunningDue(db: Db, kind: SlaKind, bookings: IdSubquery, until: Date): Promise<number> {
+    const [row] = await db<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM sla_clocks
+       WHERE kind = ${kind} AND state = 'ARMED' AND paused_at IS NULL
+         AND due_at + paused_ms * interval '1 millisecond' <= ${until}
+         AND booking_id IN (${bookings})`;
+    return row?.n ?? 0;
   }
 
   /** The sweep: armed, unpaused, overdue (a lost job), oldest first. */

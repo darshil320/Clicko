@@ -9,6 +9,9 @@ export interface LedgerRefs {
   readonly bookingId?: string;
   readonly paymentId?: string;
   readonly userId?: string;
+  readonly refundId?: string;
+  readonly payoutId?: string;
+  readonly photographerId?: string;
 }
 
 export interface LedgerTxn {
@@ -31,10 +34,13 @@ export class LedgerService {
     for (const line of txn.entries) {
       await tx`
         INSERT INTO ledger_entries (txn_id, txn_kind, account, direction, amount_paise,
-                                    booking_id, payment_id, user_id, memo, occurred_at)
+                                    booking_id, payment_id, user_id, refund_id, payout_id,
+                                    photographer_id, memo, occurred_at)
         VALUES (${txnId}, ${txn.txnKind}, ${line.account}, ${line.direction}, ${pg(line.amountPaise)},
                 ${txn.refs.bookingId ?? null}, ${txn.refs.paymentId ?? null},
-                ${txn.refs.userId ?? null}, ${txn.memo}, ${txn.occurredAt})`;
+                ${txn.refs.userId ?? null}, ${txn.refs.refundId ?? null},
+                ${txn.refs.payoutId ?? null}, ${txn.refs.photographerId ?? null},
+                ${txn.memo}, ${txn.occurredAt})`;
     }
     return txnId;
   }

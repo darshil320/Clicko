@@ -35,10 +35,45 @@ export interface PaymentFailedEvent extends PaymentEventBase {
   readonly failureReason: string | null;
 }
 
+/** ADR-0026 D1: the gateway settled (or gave up on) a refund it had accepted as pending. */
+export interface RefundWebhookEvent {
+  readonly kind: 'REFUND_PROCESSED' | 'REFUND_FAILED';
+  readonly eventType: string;
+  readonly providerRefundId: string;
+  readonly providerPaymentId: string;
+  readonly amountPaise: bigint;
+  /** Our refunds.id (+ `.n` for a retry), when Clickco made the refund. */
+  readonly receipt: string | null;
+}
+
 export type GatewayEvent =
   | PaymentSucceededEvent
   | PaymentFailedEvent
+  | RefundWebhookEvent
   | { readonly kind: 'IGNORED'; readonly eventType: string };
+
+export const isRefundEvent = (e: GatewayEvent): e is RefundWebhookEvent =>
+  e.kind === 'REFUND_PROCESSED' || e.kind === 'REFUND_FAILED';
+
+export interface RefundInput {
+  readonly providerPaymentId: string;
+  readonly amountPaise: bigint;
+  /**
+   * Our refunds.id (`<id>.<attempt>` on a retry). Sent as the gateway receipt, so a repeated call
+   * finds the earlier refund instead of refunding twice.
+   */
+  readonly receipt: string;
+  readonly notes: Readonly<Record<string, string>>;
+}
+
+/**
+ * PROCESSED: the money is on its way back (the ledger posts now). PENDING: accepted, settles later
+ * (refund webhook). FAILED: definitive, nothing moved. UNKNOWN: no answer — ask again, never guess.
+ */
+export type RefundResult =
+  | { readonly status: 'PROCESSED' | 'PENDING'; readonly providerRefundId: string }
+  | { readonly status: 'FAILED'; readonly providerRefundId: string | null; readonly reason: string }
+  | { readonly status: 'UNKNOWN' };
 
 /**
  * ADR-0012 D4. CAPTURED: the money is ours. DECLINED: definitive — the authorisation no longer
@@ -76,4 +111,12 @@ export interface PaymentGatewayPort {
    * not captured. Never throws. Idempotent: already released/refunded is RELEASED.
    */
   releaseAuthorization(providerPaymentId: string, amountPaise: bigint): Promise<ReleaseResult>;
+  /**
+   * Refunds part or all of a captured payment (ADR-0026 D1). Never throws. Idempotent per
+   * receipt: an earlier refund carrying the same receipt is reported, never repeated. Callers
+   * serialise refunds of one refund row (RefundsService lease).
+   */
+  refund(input: RefundInput): Promise<RefundResult>;
+  /** The refund carrying this receipt on the payment; null when the gateway has none. */
+  findRefund(providerPaymentId: string, receipt: string): Promise<RefundResult | null>;
 }

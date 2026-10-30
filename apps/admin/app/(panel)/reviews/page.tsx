@@ -1,6 +1,8 @@
-import { DeskInProgress } from '../../../src/features/shell/desk-in-progress';
+import type { Metadata } from 'next';
+import { ReviewsDesk } from '../../../src/features/reviews/reviews-desk';
 
-/** ADR-0026 D9 placeholder — replaced by the stream that owns this desk. */
-export default function Page() {
-  return <DeskInProgress title="To settle" />;
+export const metadata: Metadata = { title: 'To settle' };
+
+export default function ReviewsPage() {
+  return <ReviewsDesk />;
 }

@@ -7,6 +7,8 @@ import type {
   GatewayEvent,
   GatewayName,
   PaymentGatewayPort,
+  RefundInput,
+  RefundResult,
   ReleaseResult,
 } from './payment-gateway.port';
 import { parseRazorpayWebhook } from './razorpay-webhook.parser';
@@ -24,6 +26,25 @@ export type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
 
 const OrderResponse = z.object({ id: z.string().min(1) });
 const PaymentResponse = z.object({ status: z.string() });
+/** https://razorpay.com/docs/api/refunds/ — status is pending | processed | failed. */
+const RefundEntity = z.object({
+  id: z.string().min(1),
+  status: z.string(),
+  receipt: z.string().nullish(),
+});
+const RefundList = z.object({ items: z.array(RefundEntity) });
+/** Razorpay keeps refunds per payment; a payment never has anywhere near this many. */
+const REFUND_LIST_COUNT = 100;
+/** 4xx answers that are not a refusal (retry later instead). */
+const RETRYABLE_STATUS: ReadonlySet<number> = new Set([408, 409, 425, 429]);
+
+function toRefundResult(r: z.infer<typeof RefundEntity>): RefundResult {
+  if (r.status === 'processed') return { status: 'PROCESSED', providerRefundId: r.id };
+  if (r.status === 'failed') {
+    return { status: 'FAILED', providerRefundId: r.id, reason: 'The gateway failed the refund' };
+  }
+  return { status: 'PENDING', providerRefundId: r.id };
+}
 
 class RazorpayHttpError extends Error {
   constructor(
@@ -118,6 +139,64 @@ export class RazorpayGateway implements PaymentGatewayPort {
     }
   }
 
+  /**
+   * ADR-0026 D1. Looks for an earlier refund with our receipt first (Razorpay does not dedupe
+   * refunds), then refunds `amount` paise at normal speed with the receipt and notes. After any
+   * error it asks again: found is reported; a definite 4xx refusal is FAILED; anything else is
+   * UNKNOWN. Verify the request shape against the test account once keys exist (PLAN gate S3).
+   */
+  async refund(input: RefundInput): Promise<RefundResult> {
+    const id = encodeURIComponent(input.providerPaymentId);
+    const earlier = await this.lookupRefund(id, input.receipt).catch(() => undefined);
+    if (earlier === undefined) return { status: 'UNKNOWN' };
+    if (earlier) return earlier;
+    try {
+      const json = await this.request(
+        'POST',
+        `/payments/${id}/refund`,
+        {
+          amount: fromPaiseBigint(input.amountPaise),
+          speed: 'normal',
+          receipt: input.receipt,
+          notes: input.notes,
+        },
+        // Razorpay's refund idempotency header (verify on the test account at PLAN gate S3).
+        { 'x-refund-idempotency': input.receipt },
+      );
+      return toRefundResult(RefundEntity.parse(json));
+    } catch (error) {
+      const after = await this.lookupRefund(id, input.receipt).catch(() => undefined);
+      if (after) return after;
+      const refused =
+        after === null &&
+        error instanceof RazorpayHttpError &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        !RETRYABLE_STATUS.has(error.status);
+      if (!refused) return { status: 'UNKNOWN' };
+      return {
+        status: 'FAILED',
+        providerRefundId: null,
+        reason: `The gateway refused the refund (HTTP ${error.status})`,
+      };
+    }
+  }
+
+  async findRefund(providerPaymentId: string, receipt: string): Promise<RefundResult | null> {
+    try {
+      return await this.lookupRefund(encodeURIComponent(providerPaymentId), receipt);
+    } catch {
+      return { status: 'UNKNOWN' };
+    }
+  }
+
+  /** The payment's refund carrying `receipt`, or null. Throws when the gateway cannot be read. */
+  private async lookupRefund(id: string, receipt: string): Promise<RefundResult | null> {
+    const json = await this.request('GET', `/payments/${id}/refunds?count=${REFUND_LIST_COUNT}`);
+    const found = RefundList.parse(json).items.find((r) => r.receipt === receipt);
+    return found ? toRefundResult(found) : null;
+  }
+
   /** The gateway's payment status, or null when it cannot be read. */
   private async state(id: string): Promise<string | null> {
     try {
@@ -133,11 +212,20 @@ export class RazorpayGateway implements PaymentGatewayPort {
   }
 
   /** Errors carry the method, path and status only — never the credentials or the response body. */
-  private async request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+  private async request(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+    extraHeaders: Readonly<Record<string, string>> = {},
+  ): Promise<unknown> {
     const basic = Buffer.from(`${this.creds.keyId}:${this.creds.keySecret}`).toString('base64');
     const res = await this.fetchFn(`${API_BASE}${path}`, {
       method,
-      headers: { authorization: `Basic ${basic}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Basic ${basic}`,
+        'content-type': 'application/json',
+        ...extraHeaders,
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });

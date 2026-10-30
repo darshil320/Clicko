@@ -1,6 +1,8 @@
-import { DeskInProgress } from '../../../src/features/shell/desk-in-progress';
+import type { Metadata } from 'next';
+import { RefundsDesk } from '../../../src/features/refunds/refunds-desk';
 
-/** ADR-0026 D9 placeholder — replaced by the stream that owns this desk. */
-export default function Page() {
-  return <DeskInProgress title="Refunds" />;
+export const metadata: Metadata = { title: 'Refunds' };
+
+export default function RefundsPage() {
+  return <RefundsDesk />;
 }

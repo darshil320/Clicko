@@ -158,6 +158,19 @@ export class SlaBreachesRepository {
     await tx`UPDATE sla_breaches SET attributed_to = ${to} WHERE id = ${id}`;
   }
 
+  /**
+   * ADR-0026 D2: the remedy was applied (credit issued or refund requested) and the payout
+   * deduction is now recorded. Only an owed breach is touched; returns whether it was.
+   */
+  async markApplied(tx: Tx, id: string, at: Date): Promise<boolean> {
+    const rows = await tx`
+      UPDATE sla_breaches SET applied_at = ${at}
+      WHERE id = ${id} AND applied_at IS NULL AND waived_by IS NULL
+        AND attributed_to IN ${tx(OWED_ATTRIBUTIONS)}
+      RETURNING id`;
+    return rows.length === 1;
+  }
+
   /** No remedy will be applied (ADR-0025 D5). Only an unapplied, unwaived breach is touched. */
   async waive(tx: Tx, id: string, staffId: string, reason: string): Promise<void> {
     await tx`

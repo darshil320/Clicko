@@ -7,10 +7,13 @@ import { RazorpayGateway } from './gateways/razorpay.gateway';
 import { SandboxGateway } from './gateways/sandbox.gateway';
 import { InvoicesService } from './invoices.service';
 import { LedgerService } from './ledger/ledger.service';
+import { PaymentRefundsService } from './payment-refunds.service';
 import { PaymentsService } from './payments.service';
 import { PaymentsSubscribers } from './payments.subscribers';
+import { CreditNotesRepository } from './repositories/credit-notes.repository';
 import { InvoicesRepository } from './repositories/invoices.repository';
 import { PaymentsRepository } from './repositories/payments.repository';
+import { RefundTargetsRepository } from './repositories/refund-targets.repository';
 import { WebhookEventsRepository } from './repositories/webhook-events.repository';
 
 /** env.ts guarantees the sandbox never runs in staging/production and that Razorpay has its keys. */
@@ -43,7 +46,10 @@ function gatewayFor(env: Env, clock: Clock): PaymentGatewayPort {
     PaymentsService,
     AuthHoldsService,
     PaymentsSubscribers,
+    RefundTargetsRepository,
+    CreditNotesRepository,
+    PaymentRefundsService,
   ],
-  exports: [PaymentsService, AuthHoldsService, PAYMENT_GATEWAY],
+  exports: [PaymentsService, AuthHoldsService, PaymentRefundsService, PAYMENT_GATEWAY],
 })
 export class PaymentsModule {}
