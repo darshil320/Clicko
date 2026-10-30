@@ -2,6 +2,57 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-10-30 · Sprint 10 — money, payouts, supply, care, pricing, and the modern panel (ADR-0026, branch main)
+**Shipped (five parallel streams, integrated)**
+- **Money:**
+  - Refunds with four-eyes approval, run through the gateway.
+  - GST credit notes in their own `CN/<FY>` series.
+  - Review items settled once, from the "To settle" desk.
+  - Client credits valid 12 months.
+  - Breach remedies applied only when owed.
+  - Migrations 0005 and 0006.
+- **Payouts:**
+  - Weekly Monday batches.
+  - TDS 194C at 1 %, 2 % or 20 %, with the ₹30,000 / ₹1,00,000 thresholds and year catch-up.
+  - Bulk-NEFT bank file, UTR confirmation, statements and the monthly TDS report.
+  - Migration 0009.
+- **Supply and care:**
+  - Onboarding kanban.
+  - KYC with audited links.
+  - Directory and penalty waivers.
+  - Quality issues.
+  - Support tickets with 48 h / 30 d deadline badges.
+  - Equipment claims (₹2,00,000 cap, four-eyes).
+- **Pricing:** draft → preview → diff → publish with a fresh authenticator code; scheduled changes;
+  migration 0010.
+- **Platform and UX:**
+  - Today home with live tiles and "Needs you" cards.
+  - Grouped sidebar with live counts and a drawer on small screens.
+  - ⌘K search.
+  - Staff password lifecycle: 72 h temporary passwords, forced change, reset, change, and a
+    session epoch that revokes access instantly; migration 0007.
+  - New kit components.
+- The desk list and role matrix now come from one shared source (`ADMIN_DESKS` /
+  `ADMIN_DESK_ROLES`).
+- **Tests:** API 1,296; every other package green; typecheck 17/17.
+- **Reviews:** security and domain reviews ran per stream. Highs and mediums are fixed, except
+  those deferred in ADR-0026.
+- **Browser check:** Today and To settle seen working on live data.
+
+**Owner/CA:**
+- penalty amounts;
+- GST on late credit notes;
+- TDS on gross vs net;
+- GST-registered photographers;
+- a `BANK_ACCOUNT_KEY` before real bank details.
+
+**Next:** S11 notifications and polish:
+- WhatsApp, FCM and Exotel;
+- the client entry points for tickets and quality;
+- payouts for undelivered shoots;
+- Refund and Credit buttons on the booking page;
+- the KYC proxy link.
+
 ## 2026-10-28 · Sprint 9 — staff admin panel foundation + ops desks (ADR-0025, branch main)
 **Shipped**
 - **API (`modules/admin`):**

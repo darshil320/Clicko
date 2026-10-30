@@ -184,3 +184,28 @@ The bar is the consumer-grade products ops teams already know (Urban Company, St
 - **Open:** a BullMQ sweep that reconciles refunds stuck in `PROCESSING` (today: webhook or the
   desk's "check again"); a second approver for large finance-issued credits; the booking page's
   Refund / Issue credit buttons.
+
+## Decisions taken while building (30 Oct 2026, overridable)
+- **Pricing:**
+  - Changing an hourly rate sets the extra-hour and waiting rates by the doc 05 formula.
+    Finance may override them; "Review changes" warns but allows.
+  - Editing and publishing need a FINANCE grant for all cities. A city-limited finance grant
+    can view only.
+  - Cancelling a scheduled change needs no authenticator code: it only keeps the live prices.
+- **Payouts:**
+  - TDS is worked out on gross, before deductions (the conservative choice; the CA may change
+    it).
+  - No second approver for batches: every transfer still needs a bank UTR.
+  - Payouts for shoots that never reach delivery (DATA_LOSS, ACCESS_DENIED, CLIENT_ABSENT) move
+    to S11.
+  - GST-registered photographers will be paid GST on top, with export blocked until their
+    invoice is recorded. This is built after the CA confirms.
+  - Bank account numbers need their own `BANK_ACCOUNT_KEY` before real details are stored.
+- **Supply and care:**
+  - Before Drive ships, KYC documents open through an API-streamed, audited, single-use link;
+    Drive has no expiring links of its own.
+  - The equipment cap is per claim for now.
+  - Waiving a penalty after a payout already deducted it is refunded on the next payout (S11).
+- **Owner input needed:** penalty amounts for no-shows and late cancellations. They are a
+  percentage of the booking's payout today, which deducts nothing, because those bookings never
+  pay out. Flat amounts are the likely answer.
