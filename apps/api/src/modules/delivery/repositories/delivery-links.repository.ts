@@ -7,7 +7,7 @@ interface Row {
   delivery_id: string;
   booking_id: string;
   kind: DeliveryLinkKind;
-  public_token: string;
+  public_token_sha256: string;
   provider_link: string;
   provider_link_id: string | null;
   expires_at: Date;
@@ -15,7 +15,7 @@ interface Row {
   access_count: number;
 }
 
-const COLUMNS = `id, delivery_id, booking_id, kind, public_token, provider_link, provider_link_id,
+const COLUMNS = `id, delivery_id, booking_id, kind, public_token_sha256, provider_link, provider_link_id,
   expires_at, revoked_at, access_count`;
 
 const toRecord = (r: Row): DeliveryLinkRecord => ({
@@ -23,7 +23,7 @@ const toRecord = (r: Row): DeliveryLinkRecord => ({
   deliveryId: r.delivery_id,
   bookingId: r.booking_id,
   kind: r.kind,
-  publicToken: r.public_token,
+  tokenSha256: r.public_token_sha256,
   providerLink: r.provider_link,
   providerLinkId: r.provider_link_id,
   expiresAt: r.expires_at,
@@ -32,16 +32,21 @@ const toRecord = (r: Row): DeliveryLinkRecord => ({
 });
 
 export interface NewDeliveryLink {
+  /** Chosen by the caller: the public token is derived from it (DeliveryLinkTokens). */
+  readonly id: string;
   readonly deliveryId: string;
   readonly bookingId: string;
   readonly kind: DeliveryLinkKind;
-  readonly publicToken: string;
+  readonly tokenSha256: string;
   readonly providerLink: string;
   readonly providerLinkId: string;
   readonly expiresAt: Date;
 }
 
-/** delivery_links (schema §9): our opaque token → the provider link, resolved server-side. */
+/**
+ * delivery_links (schema §9 + addendum 0012): the sha256 of our opaque token → the link, resolved
+ * server-side. The provider link is kept for revocation only and never leaves the server.
+ */
 @Injectable()
 export class DeliveryLinksRepository {
   async forBooking(db: Db, bookingId: string): Promise<DeliveryLinkRecord[]> {
@@ -53,18 +58,18 @@ export class DeliveryLinksRepository {
 
   async insert(tx: Tx, l: NewDeliveryLink): Promise<string> {
     const [row] = await tx<{ id: string }[]>`
-      INSERT INTO delivery_links (delivery_id, booking_id, kind, public_token, provider_link,
-                                  provider_link_id, expires_at)
-      VALUES (${l.deliveryId}, ${l.bookingId}, ${l.kind}, ${l.publicToken}, ${l.providerLink},
-              ${l.providerLinkId}, ${l.expiresAt})
+      INSERT INTO delivery_links (id, delivery_id, booking_id, kind, public_token_sha256,
+                                  provider_link, provider_link_id, expires_at)
+      VALUES (${l.id}, ${l.deliveryId}, ${l.bookingId}, ${l.kind}, ${l.tokenSha256},
+              ${l.providerLink}, ${l.providerLinkId}, ${l.expiresAt})
       RETURNING id`;
     if (!row) throw new Error('delivery_links.insert: no row returned');
     return row.id;
   }
 
-  async findByToken(db: Db, token: string): Promise<DeliveryLinkRecord | null> {
+  async findByTokenSha256(db: Db, sha256: string): Promise<DeliveryLinkRecord | null> {
     const [row] = await db<Row[]>`
-      SELECT ${db.unsafe(COLUMNS)} FROM delivery_links WHERE public_token = ${token}`;
+      SELECT ${db.unsafe(COLUMNS)} FROM delivery_links WHERE public_token_sha256 = ${sha256}`;
     return row ? toRecord(row) : null;
   }
 

@@ -11,6 +11,8 @@ export const QUEUE = {
   /** JPEG export only: CPU-bound, kept off the queue the monitors and the reaper run on. */
   MEDIA_EXPORT: 'media-export',
   SLA: 'sla',
+  /** Checkout housekeeping (audit L3: stale ADVANCE_PENDING bookings). */
+  CHECKOUT: 'checkout',
 } as const;
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
@@ -43,6 +45,11 @@ export const JOB = {
   SLA_CLOCK_DUE: 'sla.clock-due',
   /** Repeatable: fires overdue armed clocks whose job was lost. */
   SLA_SWEEP: 'sla.sweep',
+  /**
+   * Repeatable (5 min): cancels ADVANCE_PENDING bookings whose payment window closed (quote
+   * expiry + grace), which releases their promo redemption (audit L3).
+   */
+  CHECKOUT_STALE_SWEEP: 'checkout.stale-advance-sweep',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -61,6 +68,7 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.MEDIA_UPLOAD_REAPER]: QUEUE.MEDIA,
   [JOB.SLA_CLOCK_DUE]: QUEUE.SLA,
   [JOB.SLA_SWEEP]: QUEUE.SLA,
+  [JOB.CHECKOUT_STALE_SWEEP]: QUEUE.CHECKOUT,
 };
 
 export interface JobOptions {
@@ -90,6 +98,7 @@ export const REPEATABLE_JOBS: readonly RepeatableJob[] = [
   { job: JOB.MEDIA_QUOTA_MONITOR, everyMs: 15 * 60_000 },
   { job: JOB.MEDIA_UPLOAD_REAPER, everyMs: 60 * 60_000 },
   { job: JOB.SLA_SWEEP, everyMs: 60_000 },
+  { job: JOB.CHECKOUT_STALE_SWEEP, everyMs: 5 * 60_000 },
 ];
 
 /** The outbox is drained by one job at a time; dispatch timers may overlap (they lock rows). */
@@ -102,4 +111,5 @@ export const WORKER_CONCURRENCY: Readonly<Record<QueueName, number>> = {
   // JPEG export is CPU-bound (darktable): two at a time per worker.
   [QUEUE.MEDIA_EXPORT]: 2,
   [QUEUE.SLA]: 4,
+  [QUEUE.CHECKOUT]: 1,
 };

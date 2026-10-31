@@ -33,6 +33,11 @@ import { generateTemporaryPassword, hashPassword } from '../auth/password';
 import { temporaryPasswordExpiry } from '../auth/password-policy';
 import { type StaffRecord, StaffRepository, type Tx } from './staff.repository';
 
+/** A new account as the service takes it: the step-up code stays in the controller (M3). */
+export type NewStaffAccount = Omit<AdminCreateStaffBody, 'code'>;
+/** One role grant as the service stores it: role and city only, never the step-up code. */
+export type GrantInput = Pick<AdminGrantBody, 'role' | 'cityId'>;
+
 const STAFF_NOT_FOUND = { code: 'STAFF_NOT_FOUND', message: 'Staff member not found' };
 
 const grantState = (g: StaffGrantRecord) => ({ grant_id: g.id, role: g.role, city_id: g.cityId });
@@ -91,7 +96,7 @@ export class StaffService implements StaffAccessPort {
    * A SUPER_ADMIN creates an account; the temporary password is returned once, never stored, and
    * stops working after 72 hours (ADR-0026 D7).
    */
-  async create(ctx: AuditContext, body: AdminCreateStaffBody): Promise<AdminCreateStaffResponse> {
+  async create(ctx: AuditContext, body: NewStaffAccount): Promise<AdminCreateStaffResponse> {
     await this.assertCities(body.grants.map((g) => g.cityId));
     const temporaryPassword = generateTemporaryPassword();
     const passwordHash = await hashPassword(temporaryPassword);
@@ -132,7 +137,7 @@ export class StaffService implements StaffAccessPort {
     return { staff: row, temporaryPassword };
   }
 
-  async grant(ctx: AuditContext, staffId: string, body: AdminGrantBody): Promise<AdminStaffRow> {
+  async grant(ctx: AuditContext, staffId: string, body: GrantInput): Promise<AdminStaffRow> {
     await this.assertCities([body.cityId]);
     await this.sql.begin(async (tx) => {
       await this.lockStaff(tx, staffId);
@@ -328,7 +333,7 @@ export class StaffService implements StaffAccessPort {
   private async addGrant(
     tx: Tx,
     staffId: string,
-    g: AdminGrantBody,
+    g: GrantInput,
     grantedBy: string | null,
   ): Promise<StaffGrantRecord> {
     if (g.role === 'SUPER_ADMIN' && g.cityId !== null) {
@@ -338,7 +343,13 @@ export class StaffService implements StaffAccessPort {
         message: 'A super admin covers every city — leave the city empty',
       });
     }
-    const result = await this.repo.insertGrant(tx, { staffId, ...g, grantedBy });
+    // Field by field: whatever else the caller's object carries is never stored.
+    const result = await this.repo.insertGrant(tx, {
+      staffId,
+      role: g.role,
+      cityId: g.cityId,
+      grantedBy,
+    });
     if (result === 'DUPLICATE') {
       throw new ConflictException({
         code: 'GRANT_EXISTS',
@@ -360,7 +371,7 @@ const cityNotFound = () =>
   new UnprocessableEntityException({ code: 'CITY_NOT_FOUND', message: 'Unknown city' });
 
 /** The same role + city twice in one request is one grant. */
-function uniqueGrants(grants: AdminCreateStaffBody['grants']): AdminCreateStaffBody['grants'] {
+function uniqueGrants(grants: NewStaffAccount['grants']): NewStaffAccount['grants'] {
   const seen = new Set<string>();
   return grants.filter((g) => {
     const key = `${g.role}:${g.cityId ?? '*'}`;

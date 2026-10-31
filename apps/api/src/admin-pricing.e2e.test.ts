@@ -544,7 +544,7 @@ describe.runIf(TEST_DATABASE_URL)('the pricing editor', () => {
     });
 
     it('publishes now: new quotes use it, an existing quoted booking keeps its price', async () => {
-      const client = await insertClient(e2e, '+919700070001');
+      const client = await insertClient(e2e, '+919999270001');
       const userToken = await tokenFor(e2e, 'USER', client);
       const created = await e2e.call('POST', '/bookings', {
         token: userToken,
@@ -556,7 +556,7 @@ describe.runIf(TEST_DATABASE_URL)('the pricing editor', () => {
           scheduledStart: START,
           hours: 2,
           venueAddress: '4 Athwalines, Surat',
-          booker: { name: 'Rohan Shah', phone: '+919700070001' },
+          booker: { name: 'Rohan Shah', phone: '+919999270001' },
           modelReleaseConsent: false,
           acceptedTermsVersion: '2.0',
         },

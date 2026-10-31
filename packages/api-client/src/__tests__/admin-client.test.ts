@@ -416,6 +416,7 @@ describe('createAdminApiClient — staff (SUPER_ADMIN)', () => {
 
     const res = await api.staff.create(
       {
+        code: '123456',
         email: 'aisha.khan@clickco.in',
         fullName: 'Aisha Khan',
         grants: [{ role: 'SUPPORT', cityId: null }],
@@ -426,27 +427,64 @@ describe('createAdminApiClient — staff (SUPER_ADMIN)', () => {
     expect(res.temporaryPassword).toBe('tmp-Password-1234567');
     expect(calls[0]?.url).toBe(`${BASE}/admin/staff`);
     expect(calls[0]?.headers['idempotency-key']).toBe(KEY);
+    expect(calls[0]?.body).toMatchObject({ code: '123456' });
+  });
+
+  it('refuses staff management without a 6-digit authenticator code, before any call (M3)', async () => {
+    const { api, calls } = client(() => ok(staffRow([])));
+    const idem = { idempotencyKey: KEY };
+
+    const errors = await Promise.all([
+      rejection(
+        api.staff.create(
+          {
+            code: '12345',
+            email: 'aisha.khan@clickco.in',
+            fullName: 'Aisha Khan',
+            grants: [{ role: 'SUPPORT', cityId: null }],
+          },
+          idem,
+        ),
+      ),
+      rejection(api.staff.grant(UUID_2, { code: '', role: 'SUPPORT', cityId: null }, idem)),
+      rejection(api.staff.deactivate(UUID_2, 'abcdef', idem)),
+      rejection(api.staff.resetTotp(UUID_2, '1234567', idem)),
+      rejection(api.staff.resetPassword(UUID_2, '')),
+    ]);
+
+    expect(errors.map((e) => e.message)).toEqual(
+      Array(5).fill('Enter the 6-digit code from your authenticator app'),
+    );
+    expect(calls).toHaveLength(0);
   });
 
   it('refuses a city manager grant without a city', async () => {
     const { api, calls } = client(() => ok(staffRow([])));
 
     const error = await rejection(
-      api.staff.grant(UUID_2, { role: 'CITY_MANAGER', cityId: null }, { idempotencyKey: KEY }),
+      api.staff.grant(
+        UUID_2,
+        { code: '123456', role: 'CITY_MANAGER', cityId: null },
+        { idempotencyKey: KEY },
+      ),
     );
-    await api.staff.grant(UUID_2, { role: 'CITY_MANAGER', cityId: CITY }, { idempotencyKey: KEY });
+    await api.staff.grant(
+      UUID_2,
+      { code: '123456', role: 'CITY_MANAGER', cityId: CITY },
+      { idempotencyKey: KEY },
+    );
 
     expect(error.message).toBe('A city manager needs a city');
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.body).toEqual({ role: 'CITY_MANAGER', cityId: CITY });
+    expect(calls[0]?.body).toEqual({ code: '123456', role: 'CITY_MANAGER', cityId: CITY });
   });
 
   it('revokes a grant, deactivates and resets TOTP on UUID paths', async () => {
     const { api, calls } = client(() => ok(staffRow([])));
 
     await api.staff.revokeGrant(UUID_2, UUID_3, { idempotencyKey: KEY });
-    await api.staff.deactivate(UUID_2, { idempotencyKey: KEY });
-    await api.staff.resetTotp(UUID_2, { idempotencyKey: KEY });
+    await api.staff.deactivate(UUID_2, '123456', { idempotencyKey: KEY });
+    await api.staff.resetTotp(UUID_2, '654321', { idempotencyKey: KEY });
     const bad = await rejection(api.staff.revokeGrant(UUID_2, 'grant-1', { idempotencyKey: KEY }));
 
     expect(calls.map((c) => c.url.replace(BASE, ''))).toEqual([
@@ -455,6 +493,7 @@ describe('createAdminApiClient — staff (SUPER_ADMIN)', () => {
       `/admin/staff/${UUID_2}/reset-totp`,
     ]);
     expect(calls.every((c) => c.headers['idempotency-key'] === KEY)).toBe(true);
+    expect(calls.map((c) => c.body)).toEqual([undefined, { code: '123456' }, { code: '654321' }]);
     expect(bad.code).toBe('INVALID_ID');
   });
 

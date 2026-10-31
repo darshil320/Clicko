@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TOKEN_POLICY, TokenService } from './modules/auth/token.service';
 import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
 import { TEST_DATABASE_URL } from './test-support/scratch-db';
@@ -146,7 +146,7 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
       ]);
     });
 
-    it('5 failed passwords lock the email for 15 minutes (429), even with the right one', async () => {
+    it('5 failed passwords from one network lock the email there for 15 minutes (429), even with the right one', async () => {
       const victim = await bootstrapStaff(e2e, 'locked@clickco.test', 'SUPPORT');
       for (let i = 0; i < 5; i++) {
         const r = await e2e.call('POST', '/admin/auth/login', {
@@ -222,7 +222,7 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
 
     it('client and photographer sessions cannot use /admin', async () => {
       const [user] = await e2e.db.sql<{ id: string }[]>`
-        INSERT INTO users (phone_e164) VALUES ('+919700089001') RETURNING id`;
+        INSERT INTO users (phone_e164) VALUES ('+919999289001') RETURNING id`;
       const t = await e2e.get(TokenService).issue({ kind: 'USER', id: user?.id as string }, null);
       const res = await e2e.call('GET', '/admin/me', { token: t.accessToken });
       expect(res.status).toBe(403);
@@ -232,8 +232,21 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
 
   describe('staff management (SUPER_ADMIN, D5)', () => {
     const created: Record<string, { id: string; password: string; grants: Json[] }> = {};
+    /** Root's authenticator code one step on: never a replay of the last one used (M3). */
+    const freshCode = () => {
+      e2e.advance(31_000);
+      return codeFor(e2e, secrets.get('root@clickco.test') as string);
+    };
+    const wrongCode = () => {
+      const right = freshCode();
+      return right === '000000' ? '111111' : '000000';
+    };
+    // Every step-up moves the clock: a fresh 15-minute access token per test.
+    beforeEach(async () => {
+      adminToken = await staffToken(e2e, admin.id);
+    });
     const create = async (key: string, body: Json) => {
-      const res = await post('/admin/staff', adminToken, body);
+      const res = await post('/admin/staff', adminToken, { ...body, code: freshCode() });
       expect(res.status, JSON.stringify(res.json)).toBe(201);
       created[key] = {
         id: res.json.data.staff.id,
@@ -262,18 +275,21 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
         grants: [{ role: 'FINANCE', cityId: null }],
       });
       const dup = await post('/admin/staff', adminToken, {
+        code: freshCode(),
         email: 'CM.Surat@clickco.test',
         fullName: 'Again',
         grants: [{ role: 'OPS_AGENT', cityId: null }],
       });
       expect(dup.status).toBe(409);
       const unscoped = await post('/admin/staff', adminToken, {
+        code: freshCode(),
         email: 'cm2@clickco.test',
         fullName: 'No City',
         grants: [{ role: 'CITY_MANAGER', cityId: null }],
       });
       expect(unscoped.status).toBe(400);
       const scopedAdmin = await post('/admin/staff', adminToken, {
+        code: freshCode(),
         email: 'sa2@clickco.test',
         fullName: 'City Admin',
         grants: [{ role: 'SUPER_ADMIN', cityId: surat }],
@@ -327,6 +343,7 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
     it('grants and revokes roles; a SUPER_ADMIN keeps their own role and account', async () => {
       const id = created.finance?.id as string;
       const granted = await post(`/admin/staff/${id}/grants`, adminToken, {
+        code: freshCode(),
         role: 'READ_ONLY',
         cityId: null,
       });
@@ -334,6 +351,7 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
       const grant = granted.json.data.grants.find((g: Json) => g.role === 'READ_ONLY');
       expect(grant.id).toBeTruthy();
       const twice = await post(`/admin/staff/${id}/grants`, adminToken, {
+        code: freshCode(),
         role: 'READ_ONLY',
         cityId: null,
       });
@@ -344,7 +362,9 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
       const own = (await e2e.call('GET', '/admin/me', { token: adminToken })).json.data.grants[0];
       const drop = await post(`/admin/staff/${admin.id}/grants/${own.id}/revoke`, adminToken);
       expect(drop.json.error.code).toBe('CANNOT_DROP_OWN_SUPER_ADMIN');
-      const self = await post(`/admin/staff/${admin.id}/deactivate`, adminToken);
+      const self = await post(`/admin/staff/${admin.id}/deactivate`, adminToken, {
+        code: freshCode(),
+      });
       expect(self.json.error.code).toBe('CANNOT_DEACTIVATE_SELF');
       expect((await audit('staff.grant')).length).toBe(1);
       expect((await audit('staff.revoke_grant')).length).toBe(1);
@@ -358,7 +378,9 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
         created.finance?.password as string,
       );
       expect((await e2e.call('GET', '/admin/me', { token: session.accessToken })).status).toBe(200);
-      const res = await post(`/admin/staff/${created.finance?.id}/deactivate`, adminToken);
+      const res = await post(`/admin/staff/${created.finance?.id}/deactivate`, adminToken, {
+        code: freshCode(),
+      });
       expect(res.json.data.isActive).toBe(false);
       const me = await e2e.call('GET', '/admin/me', { token: session.accessToken });
       expect([me.status, me.json.error.code]).toEqual([401, 'ACCOUNT_INACTIVE']);
@@ -375,7 +397,9 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
     it('resetting TOTP ends sessions and makes the next sign-in enrol again', async () => {
       const email = 'cm.surat@clickco.test';
       const session = await signIn(e2e, secrets, email, created.cm?.password as string);
-      const res = await post(`/admin/staff/${created.cm?.id}/reset-totp`, adminToken);
+      const res = await post(`/admin/staff/${created.cm?.id}/reset-totp`, adminToken, {
+        code: freshCode(),
+      });
       expect(res.json.data.totpEnrolled).toBe(false);
       const refresh = await e2e.call('POST', '/admin/auth/refresh', {
         body: { refreshToken: session.refreshToken },
@@ -388,6 +412,117 @@ describe.runIf(TEST_DATABASE_URL)('staff sign-in and staff management', () => {
       });
       expect(login.json.data).toMatchObject({ step: 'ENROL_TOTP', mustChangePassword: false });
       expect((await audit('staff.reset_totp')).map((r) => r.entity_id)).toEqual([created.cm?.id]);
+    });
+
+    describe('M3: high-risk staff actions need a fresh authenticator code', () => {
+      const staffRow = async (email: string) => {
+        const [row] = await e2e.db.sql<{ id: string; is_active: boolean }[]>`
+          SELECT id, is_active FROM staff_users WHERE email = ${email}`;
+        return row;
+      };
+      const stepUpFailures = async (purpose: string) =>
+        (await audit('staff.step_up_failed'))
+          .filter((r) => r.after_state?.purpose === purpose)
+          .map((r) => r.after_state?.reason);
+      const newcomer = (email: string) => ({
+        email,
+        fullName: 'Step Up',
+        grants: [{ role: 'SUPPORT', cityId: null }],
+      });
+
+      it('M3: staff.create refuses without a fresh authenticator code', async () => {
+        const missing = await post('/admin/staff', adminToken, newcomer('m3.a@clickco.test'));
+        expect(missing.status).toBe(400);
+        const wrong = await post('/admin/staff', adminToken, {
+          ...newcomer('m3.a@clickco.test'),
+          code: wrongCode(),
+        });
+        expect([wrong.status, wrong.json.error.code]).toEqual([422, 'STEP_UP_CODE_INVALID']);
+        expect(await staffRow('m3.a@clickco.test')).toBeUndefined();
+
+        const code = freshCode();
+        const ok = await post('/admin/staff', adminToken, {
+          ...newcomer('m3.a@clickco.test'),
+          code,
+        });
+        expect(ok.status, JSON.stringify(ok.json)).toBe(201);
+        const replay = await post('/admin/staff', adminToken, {
+          ...newcomer('m3.b@clickco.test'),
+          code,
+        });
+        expect([replay.status, replay.json.error.code]).toEqual([422, 'STEP_UP_CODE_USED']);
+        expect(await staffRow('m3.b@clickco.test')).toBeUndefined();
+        expect(await stepUpFailures('staff.create')).toEqual(['BAD_TOTP', 'TOTP_REUSED']);
+        // The code never reaches the audit row.
+        const [row] = (await audit('staff.create')).slice(-1);
+        expect(row?.entity_id).toBe(ok.json.data.staff.id);
+        expect(row?.after_state).not.toHaveProperty('code');
+        expect(JSON.stringify(row?.after_state)).not.toContain(code);
+      });
+
+      it('M3: staff.deactivate refuses without a fresh authenticator code', async () => {
+        const target = await bootstrapStaff(e2e, 'm3.target@clickco.test', 'SUPPORT');
+        const other = await bootstrapStaff(e2e, 'm3.other@clickco.test', 'SUPPORT');
+        const path = `/admin/staff/${target.id}/deactivate`;
+        expect((await post(path, adminToken)).status).toBe(400);
+        expect((await post(path, adminToken, {})).status).toBe(400);
+        const wrong = await post(path, adminToken, { code: wrongCode() });
+        expect([wrong.status, wrong.json.error.code]).toEqual([422, 'STEP_UP_CODE_INVALID']);
+        expect((await staffRow('m3.target@clickco.test'))?.is_active).toBe(true);
+
+        const code = freshCode();
+        const first = await post(`/admin/staff/${other.id}/deactivate`, adminToken, { code });
+        expect(first.json.data.isActive).toBe(false);
+        const replay = await post(path, adminToken, { code });
+        expect([replay.status, replay.json.error.code]).toEqual([422, 'STEP_UP_CODE_USED']);
+        expect((await staffRow('m3.target@clickco.test'))?.is_active).toBe(true);
+        expect(await stepUpFailures('staff.deactivate')).toEqual(['BAD_TOTP', 'TOTP_REUSED']);
+
+        const ok = await post(path, adminToken, { code: freshCode() });
+        expect(ok.json.data.isActive).toBe(false);
+        const [row] = (await audit('staff.deactivate')).slice(-1);
+        expect(row?.after_state).toEqual({ is_active: false });
+      });
+
+      it('M3: staff.grant, reset-totp and reset-password refuse without a fresh authenticator code', async () => {
+        const target = await bootstrapStaff(e2e, 'm3.grantee@clickco.test', 'SUPPORT');
+        await signIn(e2e, secrets, 'm3.grantee@clickco.test', target.password);
+        const grants = `/admin/staff/${target.id}/grants`;
+        const missing = await post(grants, adminToken, { role: 'READ_ONLY', cityId: null });
+        expect(missing.status).toBe(400);
+        const wrong = await post(grants, adminToken, {
+          role: 'READ_ONLY',
+          cityId: null,
+          code: wrongCode(),
+        });
+        expect([wrong.status, wrong.json.error.code]).toEqual([422, 'STEP_UP_CODE_INVALID']);
+        const totp = await post(`/admin/staff/${target.id}/reset-totp`, adminToken, {});
+        expect(totp.status).toBe(400);
+        const password = await e2e.call('POST', `/admin/staff/${target.id}/reset-password`, {
+          token: adminToken,
+        });
+        expect(password.status).toBe(400);
+        const page = await e2e.call('GET', '/admin/staff?limit=100', { token: adminToken });
+        const row = page.json.data.items.find((s: Json) => s.id === target.id);
+        expect(row).toMatchObject({
+          totpEnrolled: true,
+          temporaryPasswordExpiresAt: null,
+          grants: [{ role: 'SUPPORT' }],
+        });
+
+        const granted = await post(grants, adminToken, {
+          role: 'READ_ONLY',
+          cityId: null,
+          code: freshCode(),
+        });
+        expect(granted.status, JSON.stringify(granted.json)).toBe(200);
+        const [audited] = (await audit('staff.grant')).slice(-1);
+        expect(Object.keys(audited?.after_state ?? {}).sort()).toEqual([
+          'city_id',
+          'grant_id',
+          'role',
+        ]);
+      });
     });
 
     it('audit_logs refuses UPDATE and DELETE', async () => {

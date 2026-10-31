@@ -80,7 +80,7 @@ describe.runIf(TEST_DATABASE_URL)('the photographers desk', () => {
     it('ops adds a walk-in applicant: an APPLICANT photographer and an APPLIED application', async () => {
       const res = await post('ops', '/admin/supply/applicants', {
         fullName: 'Asha Patel',
-        phone: '+919825088001',
+        phone: '+919999188001',
         cityId: surat,
         source: 'WALK_IN',
         portfolioUrl: 'https://portfolio.example/asha',
@@ -103,14 +103,14 @@ describe.runIf(TEST_DATABASE_URL)('the photographers desk', () => {
     it('refuses a duplicate phone, another city, a bad link and a role that cannot add', async () => {
       const body = {
         fullName: 'Asha Two',
-        phone: '+919825088001',
+        phone: '+919999188001',
         cityId: surat,
         source: 'REFERRAL',
       };
       expect((await post('ops', '/admin/supply/applicants', body)).json.error.code).toBe(
         'PHOTOGRAPHER_EXISTS',
       );
-      const other = { ...body, phone: '+919825088002' };
+      const other = { ...body, phone: '+919999188002' };
       expect((await post('cmMumbai', '/admin/supply/applicants', other)).status).toBe(403);
       expect((await post('support', '/admin/supply/applicants', other)).status).toBe(403);
       const script = { ...other, portfolioUrl: 'javascript:alert(1)' };
@@ -130,7 +130,7 @@ describe.runIf(TEST_DATABASE_URL)('the photographers desk', () => {
       const hidden = await get('readOnly', '/admin/supply/applications');
       const card = (hidden.json.data.columns as Json[]).find((c) => c.stage === 'APPLIED')
         ?.items[0];
-      expect(card.phone).not.toBe('+919825088001');
+      expect(card.phone).not.toBe('+919999188001');
       expect(card.phone).toMatch(/\*/);
       expect((await get('finance', '/admin/supply/applications')).status).toBe(403);
     });
@@ -210,21 +210,61 @@ describe.runIf(TEST_DATABASE_URL)('the photographers desk', () => {
       expect((await get('cmMumbai', '/admin/supply/kyc')).json.data.items).toEqual([]);
     });
 
-    it('opens a document only through a 5-minute link, audited per view', async () => {
+    it('opens a document only through a single-use 5-minute Clickco link, audited per open', async () => {
       const path = `/admin/supply/kyc/${docs.pan}/view-link`;
       expect((await post('ops', path)).status).toBe(403);
       expect((await post('cmMumbai', path)).status).toBe(404);
       const res = await post('cmSurat', path);
       expect(res.status).toBe(200);
-      expect(res.json.data).toMatchObject({ opensInBrowser: false });
+      // Audit M2: never a provider URL — an opaque path on the API, good once, for 5 minutes.
+      expect(res.json.data.path).toMatch(/^\/admin\/supply\/kyc\/view\/[A-Za-z0-9_-]{43}$/);
+      expect(JSON.stringify(res.json)).not.toMatch(/local:\/\/|https?:\/\//);
       expect(Date.parse(res.json.data.expiresAt) - e2e.now().getTime()).toBe(300_000);
       expect(res.headers.get('cache-control')).toBe('no-store');
       const views = await auditRows('kyc.document_view');
       expect(views).toHaveLength(1);
       expect(views[0]).toMatchObject({ actor_id: staff.cmSurat, entity_id: docs.pan });
+
+      const viewPath = res.json.data.path as string;
+      // Another staff member cannot use it (it is bound to whoever asked for it).
+      const stolen = await fetch(`${e2e.baseUrl}${viewPath}`, {
+        headers: { authorization: `Bearer ${await as('admin')}` },
+      });
+      expect(stolen.status).toBe(410);
+      const second = await post('cmSurat', path);
+      const opened = await fetch(`${e2e.baseUrl}${second.json.data.path}`, {
+        headers: { authorization: `Bearer ${await as('cmSurat')}` },
+      });
+      expect(opened.status).toBe(200);
+      expect(opened.headers.get('cache-control')).toBe('no-store');
+      expect(opened.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(opened.headers.get('content-type')).toMatch(/^application\/pdf/);
+      expect(Buffer.from(await opened.arrayBuffer()).toString()).toBe('%PDF-1.4 test pan card');
+      // Single use: the same link never opens twice.
+      const replay = await fetch(`${e2e.baseUrl}${second.json.data.path}`, {
+        headers: { authorization: `Bearer ${await as('cmSurat')}` },
+      });
+      expect(replay.status).toBe(410);
+      // No staff session, no document.
+      expect((await fetch(`${e2e.baseUrl}${viewPath}`)).status).toBe(401);
+      const opens = await auditRows('kyc.document_opened');
+      expect(opens).toHaveLength(1);
+      expect(opens[0]).toMatchObject({ actor_id: staff.cmSurat, entity_id: docs.pan });
+
+      // The link expires after 5 minutes even if unused.
+      const third = await post('cmSurat', path);
+      e2e.advance(300_001);
+      const late = await fetch(`${e2e.baseUrl}${third.json.data.path}`, {
+        headers: { authorization: `Bearer ${await as('cmSurat')}` },
+      });
+      expect(late.status).toBe(410);
+
       const missing = await post('cmSurat', `/admin/supply/kyc/${docs.dl}/view-link`);
-      expect(missing.status).toBe(404);
-      expect(missing.json.error.code).toBe('DOCUMENT_FILE_MISSING');
+      const gone = await fetch(`${e2e.baseUrl}${missing.json.data.path}`, {
+        headers: { authorization: `Bearer ${await as('cmSurat')}` },
+      });
+      expect(gone.status).toBe(404);
+      expect(((await gone.json()) as Json).error.code).toBe('DOCUMENT_FILE_MISSING');
     });
 
     it('a rejection needs a reason; an expired document cannot be approved', async () => {
@@ -282,7 +322,7 @@ describe.runIf(TEST_DATABASE_URL)('the photographers desk', () => {
     let penaltyId: string;
 
     beforeAll(async () => {
-      await insertPhotographer(e2e.db.sql, { phone: '+919825088010', name: 'Bhavin Shah' });
+      await insertPhotographer(e2e.db.sql, { phone: '+919999188010', name: 'Bhavin Shah' });
       const [row] = await e2e.db.sql<{ id: string }[]>`
         INSERT INTO photographer_penalties (photographer_id, kind, severity, note, created_at)
         VALUES (${photographerId}, 'NO_SHOW', 1, 'no-show on a test booking', ${e2e.now()})

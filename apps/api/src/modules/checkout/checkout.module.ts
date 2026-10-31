@@ -10,6 +10,7 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { PaymentFlowService } from './payment-flow.service';
 import { PaymentWebhooksController } from './payment-webhooks.controller';
+import { WebhookSignatureLimiter } from './webhook-signature-limiter';
 
 /**
  * Orchestrates pricing → bookings → payments and owns their HTTP surface. Only DevToolsModule
@@ -26,7 +27,7 @@ import { PaymentWebhooksController } from './payment-webhooks.controller';
     OnsiteModule,
   ],
   controllers: [CheckoutController, PaymentWebhooksController],
-  providers: [CheckoutService, PaymentFlowService],
+  providers: [CheckoutService, PaymentFlowService, WebhookSignatureLimiter],
   exports: [PaymentFlowService],
 })
 export class CheckoutModule {}

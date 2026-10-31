@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { isIP } from 'node:net';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import { ipBucket } from '../../../common/http/client-ip';
 import { ENV, type Env } from '../../../config/env';
 import { REDIS } from '../../../infra/queues/redis';
 
@@ -10,9 +10,19 @@ export const STAFF_LOGIN_POLICY = {
   challengeTtlMs: 5 * 60 * 1000,
   /** Wrong TOTP codes before the challenge is burnt (the password must be entered again). */
   maxTotpAttempts: 5,
-  /** Failed passwords per email, then per IP, inside the window — then 429. */
-  maxFailuresPerEmail: 5,
+  /**
+   * Audit M2: the hard lockout (429) is per email AND client network (IPv4 address / IPv6 /64),
+   * so an attacker elsewhere cannot lock the real owner out; plus a per-IP ceiling across emails.
+   */
+  maxFailuresPerEmailIp: 5,
   maxFailuresPerIp: 20,
+  /**
+   * Per email across every network is a SIGNAL, not a lock: past it each attempt is slowed
+   * (progressive delay) and the first crossing is audited and alerted.
+   */
+  emailSignalThreshold: 5,
+  emailDelayBaseMs: 250,
+  emailDelayMaxMs: 4_000,
   failureWindowMs: 15 * 60 * 1000,
   /** Wrong codes per staff account across challenges, then no new challenge (anti brute force). */
   maxTotpFailuresPerStaff: 10,
@@ -71,26 +81,8 @@ return 1`;
 const hashEmail = (email: string): string =>
   createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
 
-/** IPv6 counts per /64 (one subscriber's block), so address rotation does not reset limits. */
-export function ipBucket(ip: string | null): string {
-  if (!ip) return 'unknown';
-  if (isIP(ip) !== 6) return ip;
-  const [head = '', tail] = ip.toLowerCase().split('::');
-  const left = head ? head.split(':') : [];
-  const right = tail ? tail.split(':') : [];
-  const groups =
-    tail === undefined
-      ? left
-      : [
-          ...left,
-          ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill('0'),
-          ...right,
-        ];
-  return `${groups
-    .slice(0, 4)
-    .map((g) => Number.parseInt(g || '0', 16).toString(16))
-    .join(':')}::/64`;
-}
+/** IPv6 counts per /64, IPv4 per address (`::ffff:` stripped — audit H1); see common/http. */
+export { ipBucket };
 
 /**
  * Sign-in state in Redis (ADR-0025 D2): the 5-minute challenge bound to the staff id, lockout
@@ -105,27 +97,46 @@ export class LoginStore {
   ) {}
 
   /**
-   * Counts this password attempt against the email and the IP BEFORE the password is checked
-   * (atomic, so parallel requests cannot all slip under the limit). Returns the counts including
-   * it; `release` gives it back when the password was right.
+   * Counts this password attempt against (email, IP), the IP and the email BEFORE the password is
+   * checked (atomic, so parallel requests cannot all slip under the limit). Returns the counts
+   * including it; `release` gives it back when the password was right.
    */
-  async reserve(email: string, ip: string | null): Promise<{ email: number; ip: number }> {
-    const [byEmail, byIp] = (await this.redis.eval(
+  async reserve(
+    email: string,
+    ip: string | null,
+  ): Promise<{ emailIp: number; ip: number; email: number }> {
+    const [byEmailIp, byIp, byEmail] = (await this.redis.eval(
       COUNT,
-      2,
-      this.emailKey(email),
+      3,
+      this.emailIpKey(email, ip),
       this.ipKey(ip),
+      this.emailKey(email),
       String(STAFF_LOGIN_POLICY.failureWindowMs),
-    )) as [number, number];
-    return { email: Number(byEmail), ip: Number(byIp) };
+    )) as [number, number, number];
+    return { emailIp: Number(byEmailIp), ip: Number(byIp), email: Number(byEmail) };
   }
 
   async release(email: string, ip: string | null): Promise<void> {
-    await this.redis.eval(RELEASE, 2, this.emailKey(email), this.ipKey(ip));
+    await this.redis.eval(
+      RELEASE,
+      3,
+      this.emailIpKey(email, ip),
+      this.ipKey(ip),
+      this.emailKey(email),
+    );
   }
 
+  /** Clears the email's failure counts on every network (a password reset, a good sign-in). */
   async clearEmail(email: string): Promise<void> {
-    await this.redis.del(this.emailKey(email));
+    const pattern = `${this.key(`fail:email-ip:${hashEmail(email)}`)}:*`;
+    const keys: string[] = [this.emailKey(email)];
+    let cursor = '0';
+    do {
+      const [next, found] = await this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      keys.push(...found);
+      cursor = next;
+    } while (cursor !== '0');
+    await this.redis.del(...keys);
   }
 
   async totpFailures(staffId: string): Promise<number> {
@@ -134,15 +145,17 @@ export class LoginStore {
 
   /**
    * A wrong code counts against the account only: the password before it is already limited per
-   * email and per IP, and typos must not lock out everyone behind one office NAT.
+   * (email, IP) and per IP, and typos must not lock out everyone behind one office NAT.
    */
-  async recordTotpFailure(staffId: string): Promise<void> {
-    await this.redis.eval(
+  /** Returns the count including this one (atomic), so callers can count before checking. */
+  async recordTotpFailure(staffId: string): Promise<number> {
+    const [count] = (await this.redis.eval(
       COUNT,
       1,
       this.key(`fail:totp:${staffId}`),
       String(STAFF_LOGIN_POLICY.failureWindowMs),
-    );
+    )) as [number];
+    return Number(count);
   }
 
   async clearTotpFailures(staffId: string): Promise<void> {
@@ -202,6 +215,10 @@ export class LoginStore {
 
   private emailKey(email: string): string {
     return this.key(`fail:email:${hashEmail(email)}`);
+  }
+
+  private emailIpKey(email: string, ip: string | null): string {
+    return this.key(`fail:email-ip:${hashEmail(email)}:${ipBucket(ip)}`);
   }
 
   private ipKey(ip: string | null): string {

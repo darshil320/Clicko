@@ -43,7 +43,8 @@ export async function createStaffAccount(
   input: BootstrapStaffInput,
   now: Date,
 ): Promise<BootstrapResult> {
-  const body = AdminCreateStaffBody.parse({
+  // No step-up code here: the CLI runs on the server itself, with no signed-in caller (M3).
+  const body = AdminCreateStaffBody.omit({ code: true }).parse({
     email: input.email,
     fullName: input.fullName,
     grants: [{ role: input.role, cityId: input.cityId }],

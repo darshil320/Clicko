@@ -10,7 +10,7 @@ import { JobRegistry } from './infra/queues/job-registry';
 import { JOB_SCHEDULER } from './infra/queues/job-scheduler';
 import { QueueWorkers } from './infra/queues/queue-workers';
 import { SMS_PORT, type SmsPort } from './modules/auth/sms/sms.port';
-import { NO_QUEUE_WORKERS } from './test-support/e2e-app';
+import { NO_QUEUE_WORKERS, TEST_REDIS_URL } from './test-support/e2e-app';
 import { RecordingScheduler } from './test-support/recording-scheduler';
 import { createScratchDb, type ScratchDb, TEST_DATABASE_URL } from './test-support/scratch-db';
 
@@ -72,7 +72,9 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
       NODE_ENV: 'test',
       PORT: '0',
       DATABASE_URL: db.url,
-      REDIS_URL: 'redis://localhost:6380',
+      // The OTP limits live in Redis (audit M5/L2): the local Redis, under a prefix of its own.
+      REDIS_URL: TEST_REDIS_URL,
+      QUEUE_PREFIX: `clickco-test-app-${Date.now().toString(36)}`,
       QUEUE_WORKERS: 'off',
       JWT_ACCESS_SECRET: 'e2e-access-secret-'.padEnd(40, 'x'),
       OTP_HASH_PEPPER: 'e2e-otp-pepper-'.padEnd(40, 'y'),
@@ -100,22 +102,22 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
   });
 
   it('logs a new user in by OTP and serves /me with the access token', async () => {
-    const res = await login('+919876543210');
+    const res = await login('+919999443210');
     expect(res.status).toBe(200);
-    expect(res.json.data.user).toMatchObject({ phone: '+919876543210', isNew: true });
+    expect(res.json.data.user).toMatchObject({ phone: '+919999443210', isNew: true });
     const me = await call('GET', '/me', undefined, res.json.data.accessToken);
     expect(me.status).toBe(200);
-    expect(me.json.data.phone).toBe('+919876543210');
+    expect(me.json.data.phone).toBe('+919999443210');
   });
 
   it('recognises a returning user', async () => {
     advance(31_000); // past the resend cooldown from the first login
-    const res = await login('+919876543210');
+    const res = await login('+919999443210');
     expect(res.json.data.user.isNew).toBe(false);
   });
 
   it('rotates refresh tokens and detects reuse', async () => {
-    const res = await login('+919812345678');
+    const res = await login('+919999345678');
     const first = res.json.data.refreshToken;
     const rotated = await call('POST', '/auth/refresh', { refreshToken: first });
     expect(rotated.status).toBe(200);
@@ -141,7 +143,7 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
   });
 
   it('rejects a wrong code without saying why', async () => {
-    const phone = '+919700000001';
+    const phone = '+919999200001';
     const req = await call('POST', '/auth/otp/request', { phone });
     const wrong = sms.last.get(phone) === '000000' ? '111111' : '000000';
     const res = await call('POST', '/auth/otp/verify', {
@@ -154,7 +156,7 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
   });
 
   it('rate-limits a second OTP request inside the cooldown', async () => {
-    const phone = '+919700000002';
+    const phone = '+919999200002';
     await call('POST', '/auth/otp/request', { phone });
     const again = await call('POST', '/auth/otp/request', { phone });
     expect(again.status).toBe(429);
@@ -183,13 +185,13 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
     const before = await call('GET', '/serviceability/600001');
     expect(before.json.data).toMatchObject({ bookable: false, status: 'UNKNOWN', waitingCount: 0 });
     const join = await call('POST', '/waitlist', {
-      phone: '+919876543210',
+      phone: '+919999443210',
       fullName: 'Ananya Iyer',
       pincode: '600001',
     });
     expect(join.json.data).toEqual({ joined: true, waitingCount: 1 });
     const repeat = await call('POST', '/waitlist', {
-      phone: '+919876543210',
+      phone: '+919999443210',
       fullName: 'Ananya Iyer',
       pincode: '600001',
     });
@@ -198,7 +200,7 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
 
   it('refuses the waitlist for a pincode it already serves', async () => {
     const res = await call('POST', '/waitlist', {
-      phone: '+919876543210',
+      phone: '+919999443210',
       fullName: 'Ananya Iyer',
       pincode: '395007',
     });

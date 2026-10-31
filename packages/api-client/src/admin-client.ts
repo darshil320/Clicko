@@ -38,6 +38,7 @@ import {
   StaffLoginChallenge,
   StaffProfile,
   StaffSessionResponse,
+  AdminStaffStepUpBody as StaffStepUpSchema,
   StaffTotpBody,
   AdminWaiveBreachBody as WaiveBreachSchema,
 } from '@clickco/contracts';
@@ -246,7 +247,11 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         list('/admin/alerts', AdminAlertPage, listParams(query)),
     },
 
-    /** SUPER_ADMIN only. */
+    /**
+     * SUPER_ADMIN only. Every change but revoking a grant carries a fresh code from the caller's
+     * authenticator app (`code`, step-up — audit M3): a code works once, so a retry with a new
+     * code needs a new Idempotency-Key.
+     */
     staff: {
       list: async (query: AdminListQuery = {}) =>
         list('/admin/staff', AdminStaffPage, listParams(query)),
@@ -266,20 +271,31 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
           AdminStaffChangeResponse,
           idem,
         ),
-      deactivate: async (staffId: string, idem: Idempotent) =>
-        post(`/admin/staff/${idSegment(staffId)}/deactivate`, AdminStaffChangeResponse, idem),
-      resetTotp: async (staffId: string, idem: Idempotent) =>
-        post(`/admin/staff/${idSegment(staffId)}/reset-totp`, AdminStaffChangeResponse, idem),
+      deactivate: async (staffId: string, code: string, idem: Idempotent) =>
+        post(
+          `/admin/staff/${idSegment(staffId)}/deactivate`,
+          AdminStaffChangeResponse,
+          idem,
+          checked(StaffStepUpSchema, { code }),
+        ),
+      resetTotp: async (staffId: string, code: string, idem: Idempotent) =>
+        post(
+          `/admin/staff/${idSegment(staffId)}/reset-totp`,
+          AdminStaffChangeResponse,
+          idem,
+          checked(StaffStepUpSchema, { code }),
+        ),
       /**
        * ADR-0026 D7: a new temporary password (72 h), shown once; their sessions end. Not
        * idempotent on purpose: the answer holds the password, which must never be stored.
        */
-      resetPassword: async (staffId: string) =>
+      resetPassword: async (staffId: string, code: string) =>
         http.request({
           method: 'POST',
           path: `/admin/staff/${idSegment(staffId)}/reset-password`,
           schema: AdminResetPasswordResponse,
           auth: true,
+          body: checked(StaffStepUpSchema, { code }),
         }),
     },
   };

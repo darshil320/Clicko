@@ -7,12 +7,15 @@ import type {
   AdminReviewPage,
   AdminReviewQuery,
   AdminSettleReviewBody,
+  CreditCoApprover,
 } from '@clickco/contracts';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { z } from 'zod';
 import { BookingsService } from '../../bookings/bookings.service';
 import type { AlertRecord } from '../../ops/ops-alerts.reader';
 import { CreditsService } from '../../refunds/credits.service';
+import { creditNeedsFourEyes, rupees } from '../../refunds/refund-rules';
+import { MONEY_DESK_CONFIG } from '../../refunds/refunds.config';
 import type { SettleDecision } from '../../refunds/reviews.service';
 import { ReviewsService } from '../../refunds/reviews.service';
 import { ServiceabilityService } from '../../serviceability/serviceability.service';
@@ -23,6 +26,7 @@ import { decodeCursor, pageOf, TimeCursor, TimeSeqCursor } from '../desks/paging
 import { OverviewRegistry } from '../overview/overview.registry';
 import { isAre, plural } from '../overview/overview-source';
 import { assertInScope, rolesIn } from './money-access';
+import { MoneyStepUp, withCoApprover } from './money-step-up';
 import { toCreditItem, toReviewItem } from './money-views';
 import { StaffNames } from './staff-names';
 
@@ -68,6 +72,7 @@ export class ReviewDeskService {
     @Inject(ServiceabilityService) private readonly serviceability: ServiceabilityService,
     @Inject(StaffNames) private readonly staffNames: StaffNames,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(MoneyStepUp) private readonly stepUp: MoneyStepUp,
     @Inject(OverviewRegistry) overview: OverviewRegistry,
   ) {
     overview.register({
@@ -122,11 +127,21 @@ export class ReviewDeskService {
       : caller.grants
           .filter((g) => g.role === 'SUPER_ADMIN' || g.cityId === null)
           .map((g) => g.role);
+    const creditPaise =
+      body.outcome === 'CREDIT_ISSUED'
+        ? BigInt(body.amountPaise)
+        : body.outcome === 'REFUND_REQUESTED'
+          ? BigInt(body.creditPaise ?? 0)
+          : 0n;
+    const co =
+      body.outcome === 'CREDIT_ISSUED' || body.outcome === 'REFUND_REQUESTED'
+        ? await this.fourEyes(caller, ctx, creditPaise, cityId, body, 'review.settle')
+        : null;
     await this.reviews.settle(
       eventId,
       decisionOf(body),
       { staffId: caller.id, roles },
-      this.audit.hook(ctx, 'review', eventId),
+      withCoApprover(this.audit.hook(ctx, 'review', eventId), co),
     );
     const [item] = await this.items([review]);
     if (!item) throw new NotFoundException(NOT_FOUND);
@@ -140,6 +155,14 @@ export class ReviewDeskService {
     body: AdminIssueCreditBody,
   ): Promise<AdminCreditItem> {
     const cityId = await this.bookings.cityOf(bookingId);
+    const co = await this.fourEyes(
+      caller,
+      ctx,
+      BigInt(body.amountPaise),
+      cityId,
+      body,
+      'credit.issue',
+    );
     const credit = await this.credits.issue(
       {
         bookingId,
@@ -148,10 +171,31 @@ export class ReviewDeskService {
         note: body.note,
         actor: { staffId: caller.id, roles: cityId ? rolesIn(caller, cityId) : [] },
       },
-      this.audit.hook(ctx, 'booking', bookingId),
+      withCoApprover(this.audit.hook(ctx, 'booking', bookingId), co),
     );
     const [booking] = await this.bookings.adminFacts([bookingId]);
     return toCreditItem(credit, booking, await this.staffNames.of([credit.issuedBy]));
+  }
+
+  /**
+   * Audit L8: a credit above ₹5,000 is four-eyes — the issuer's fresh authenticator code and a
+   * second finance person's, both in this request. Resolves to the co-approver (null below).
+   */
+  private async fourEyes(
+    caller: StaffCaller,
+    ctx: AuditContext,
+    creditPaise: bigint,
+    cityId: string | null,
+    approval: {
+      readonly code?: string | undefined;
+      readonly coApprover?: CreditCoApprover | undefined;
+    },
+    purpose: string,
+  ): Promise<string | null> {
+    if (!creditNeedsFourEyes(creditPaise)) return null;
+    const why = `Credits above ${rupees(MONEY_DESK_CONFIG.creditFourEyesPaise)} need your authenticator code and a second finance person's approval with their own code.`;
+    await this.stepUp.requireCode(caller, approval.code, ctx, purpose, why);
+    return this.stepUp.requireCoApprover(caller, approval.coApprover, cityId, ctx, purpose, why);
   }
 
   async creditList(caller: StaffCaller, q: CreditQuery): Promise<AdminCreditPage> {

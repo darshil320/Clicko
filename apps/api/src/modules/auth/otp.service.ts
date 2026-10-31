@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../common/clock';
 import { OtpDelivery, type OtpDeliveryQueue } from './otp-delivery';
+import { OTP_LIMITS, type OtpLimits, type SmsReservation } from './otp-limits';
 import { OTP_PEPPER } from './otp-tokens';
 import { OTP_REPOSITORY, type OtpRepository } from './repositories/otp.repository';
 
@@ -31,6 +32,14 @@ const DAY_MS = 24 * HOUR_MS;
 /** One message for every verify failure, so responses never reveal which check failed. */
 const INVALID_CODE = { code: 'OTP_INVALID', message: 'The code is invalid or has expired' };
 
+const SMS_UNAVAILABLE = {
+  code: 'SMS_UNAVAILABLE',
+  message: 'We could not send the code right now. Please try again shortly.',
+};
+
+const phoneLockedToday = () =>
+  rateLimited('Too many wrong codes for this number. Try again tomorrow.', 86400);
+
 function rateLimited(message: string, retryAfterSeconds: number): HttpException {
   return new HttpException(
     { code: 'RATE_LIMITED', message, details: { retryAfterSeconds } },
@@ -47,6 +56,7 @@ export class OtpService {
     @Inject(OtpDelivery) private readonly delivery: OtpDeliveryQueue,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(OTP_PEPPER) private readonly pepper: string,
+    @Inject(OTP_LIMITS) private readonly limits: OtpLimits,
   ) {}
 
   /**
@@ -64,9 +74,15 @@ export class OtpService {
     const id = randomUUID();
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const expiresAt = new Date(now.getTime() + OTP_POLICY.ttlMs);
+    // Audit L2: a phone locked for wrong codes gets no new code until the window ends.
+    if ((await this.guardedLimits(() => this.limits.verifyFailures(phone))) >= this.maxFailures) {
+      throw phoneLockedToday();
+    }
 
     await this.repo.withLocks(phone, ip, async (repo) => {
       await this.enforceLimits(repo, phone, purpose, ip, now);
+      // Audit M5, last: only a request every other limit allowed spends the SMS budget.
+      this.assertSmsBudget(await this.guardedLimits(() => this.limits.reserveSms(phone)));
       await repo.supersedeActive(phone, purpose, now);
       await repo.insert({
         id,
@@ -90,10 +106,7 @@ export class OtpService {
       this.logger.error(
         `OTP SMS could not be queued (${error instanceof Error ? error.name : 'unknown error'})`,
       );
-      throw new ServiceUnavailableException({
-        code: 'SMS_UNAVAILABLE',
-        message: 'We could not send the code right now. Please try again shortly.',
-      });
+      throw new ServiceUnavailableException(SMS_UNAVAILABLE);
     }
 
     return {
@@ -111,12 +124,17 @@ export class OtpService {
     code: string,
   ): Promise<void> {
     const now = this.clock();
+    // Audit L2: past the daily limit of wrong codes, even the right code is refused today.
+    if ((await this.guardedLimits(() => this.limits.verifyFailures(phone))) >= this.maxFailures) {
+      throw phoneLockedToday();
+    }
     const attempt = await this.repo.recordAttempt(challengeId, phone, purpose, now);
     if (!attempt) throw new UnauthorizedException(INVALID_CODE);
 
     const expected = Buffer.from(attempt.codeHash, 'hex');
     const actual = Buffer.from(this.hash(challengeId, phone, code), 'hex');
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      await this.guardedLimits(() => this.limits.recordVerifyFailure(phone));
       throw new UnauthorizedException(INVALID_CODE);
     }
     if (!(await this.repo.consume(challengeId, now))) {
@@ -146,8 +164,37 @@ export class OtpService {
     if ((await repo.countForPhoneSince(phone, purpose, dayAgo)) >= OTP_POLICY.maxPerPhonePerDay) {
       throw rateLimited('Too many codes requested for this number today.', 86400);
     }
-    if (ip && (await repo.countForIpSince(ip, hourAgo)) >= OTP_POLICY.maxPerIpPerHour) {
+    // Always: a request without a usable IP counts in one shared bucket (audit H1), so sending
+    // garbage cannot skip the limit.
+    if ((await repo.countForIpSince(ip, hourAgo)) >= OTP_POLICY.maxPerIpPerHour) {
       throw rateLimited('Too many requests. Try again later.', 3600);
+    }
+  }
+
+  private get maxFailures(): number {
+    return this.limits.policy.maxVerifyFailuresPerPhonePerDay;
+  }
+
+  /** Audit M5: past a budget, no SMS — the same 503 for every number (it reveals nothing). */
+  private assertSmsBudget(outcome: SmsReservation): void {
+    if (outcome === 'OK') return;
+    this.logger.warn(`OTP SMS refused by the SMS budget (${outcome})`);
+    throw new ServiceUnavailableException({
+      ...SMS_UNAVAILABLE,
+      details: { retryAfterSeconds: this.limits.policy.circuitOpenMs / 1000 },
+    });
+  }
+
+  /** The abuse counters live in Redis: without them, fail closed with the same 503. */
+  private async guardedLimits<T>(op: () => Promise<T>): Promise<T> {
+    try {
+      return await op();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error(
+        `OTP limits store unavailable (${error instanceof Error ? error.name : 'unknown error'})`,
+      );
+      throw new ServiceUnavailableException(SMS_UNAVAILABLE);
     }
   }
 

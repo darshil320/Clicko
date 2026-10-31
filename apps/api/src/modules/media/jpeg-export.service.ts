@@ -19,6 +19,7 @@ import { SYSTEM_ACTOR } from '../bookings/bookings.types';
 import { runExportLoop } from './export/export-loop';
 import {
   JPEG_EXPORT_PORT,
+  JpegExportError,
   type JpegExportPort,
   type JpegExportResult,
 } from './export/jpeg-export.port';
@@ -72,6 +73,12 @@ export class JpegExportService {
   }
 
   private async exportOne(booking: UploadBookingFacts, raw: MediaAssetRecord): Promise<void> {
+    // Audit H1: an oversized RAW is never even downloaded to the export worker.
+    if (raw.sizeBytes > MEDIA_CONFIG.maxExportRawBytes) {
+      throw new JpegExportError(
+        `The RAW is larger than the ${MEDIA_CONFIG.maxExportRawBytes}-byte export limit`,
+      );
+    }
     const work = await mkdtemp(join(tmpdir(), 'clickco-export-'));
     try {
       const inputPath = join(work, `in${extname(raw.originalFilename).toLowerCase()}`);

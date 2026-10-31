@@ -80,6 +80,17 @@ export class StaffRepository {
     return row ? toRecord(row) : null;
   }
 
+  /** Clients audit L3: whether the dev seed created this account (its staff.create audit row). */
+  async createdByDevSeed(db: Db, id: string): Promise<boolean> {
+    const [row] = await db<{ yes: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM audit_logs
+        WHERE action = 'staff.create' AND entity_kind = 'staff_user' AND entity_id = ${id}
+          AND after_state->>'via' = 'dev-seed'
+      ) AS yes`;
+    return row?.yes ?? false;
+  }
+
   async findById(db: Db, id: string): Promise<StaffRecord | null> {
     const [row] = await db<Row[]>`SELECT ${db.unsafe(COLUMNS)} FROM staff_users WHERE id = ${id}`;
     return row ? toRecord(row) : null;

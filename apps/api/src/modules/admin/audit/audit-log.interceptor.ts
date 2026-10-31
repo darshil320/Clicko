@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { isIP } from 'node:net';
 import {
   type CallHandler,
   type ExecutionContext,
@@ -8,6 +7,7 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import type { Observable } from 'rxjs';
+import { clientIp } from '../../../common/http/client-ip';
 import type { AuditContext, StaffRequest } from '../access/staff-context';
 
 const AUDIT_ACTION_KEY = 'clickco:audit-action';
@@ -20,11 +20,7 @@ const header = (req: StaffRequest, name: string): string | null => {
 };
 
 /** `::ffff:10.1.2.3` → `10.1.2.3`; anything that is not an IP is dropped (the column is inet). */
-export function normaliseIp(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const ip = raw.startsWith('::ffff:') && isIP(raw.slice(7)) === 4 ? raw.slice(7) : raw;
-  return isIP(ip) ? ip : null;
-}
+export const normaliseIp = (raw: string | undefined): string | null => clientIp(raw);
 
 /**
  * ADR-0025 D4. On every /admin controller: refuses to run a mutating handler that is not

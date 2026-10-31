@@ -18,7 +18,11 @@ REDIS_URL=redis://:clickco_local_only@localhost:6380
 JWT_ACCESS_SECRET=local-dev-access-secret-at-least-32-chars
 OTP_HASH_PEPPER=local-dev-otp-pepper-at-least-32-chars
 SMS_ADAPTER=console
+DEV_TOOLS=on
 ```
+
+`DEV_TOOLS=on` mounts the `/dev/*` helpers the ops console uses (development + localhost database
+only). These secrets are refused in staging and production, where each must be 32 random bytes.
 
 Then `pnpm --filter @clickco/api db:seed` loads Surat, Mumbai and Vadodara. With `SMS_ADAPTER=console`
 the OTP is printed to the API log.

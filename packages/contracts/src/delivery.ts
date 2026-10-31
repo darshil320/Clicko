@@ -82,11 +82,26 @@ export const SlaTimelineView = z.object({
 });
 export type SlaTimelineView = z.infer<typeof SlaTimelineView>;
 
-/** GET /d/:token on the local adapter (development): what the link would open. */
-export const LocalDeliveryLinkView = z.object({
+/** One delivered file, downloaded through Clickco (`/d/<token>/files/<id>`). */
+export const DeliveryFileView = z.object({
+  id: Uuid,
+  name: z.string(),
+  sizeBytes: z.int().min(0),
+  contentType: z.string(),
+  /** Clickco's own path; the bytes are streamed by the API, never from a provider URL. */
+  path: z.string(),
+});
+export type DeliveryFileView = z.infer<typeof DeliveryFileView>;
+
+/**
+ * GET /d/:token — the files behind one delivery link (audit M5: listed and streamed through
+ * Clickco; the API never redirects to the storage provider).
+ */
+export const DeliveryFolderView = z.object({
   kind: DeliveryLinkKind,
   expiresAt: IsoDateTime,
   fileCount: z.int().min(0),
-  note: z.string(),
+  totalBytes: z.int().min(0),
+  files: z.array(DeliveryFileView),
 });
-export type LocalDeliveryLinkView = z.infer<typeof LocalDeliveryLinkView>;
+export type DeliveryFolderView = z.infer<typeof DeliveryFolderView>;

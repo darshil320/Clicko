@@ -1,28 +1,21 @@
-import {
-  Controller,
-  ForbiddenException,
-  Get,
-  Inject,
-  NotFoundException,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Inject, NotFoundException, UseGuards } from '@nestjs/common';
 import { CurrentSubject } from '../../common/decorators/current-subject.decorator';
 import { ok } from '../../common/envelope';
-import { AuthGuard } from '../../common/guards/auth.guard';
+import { UserGuard } from '../../common/guards/user.guard';
 import type { Subject } from '../auth/token.service';
 import { UsersService } from './users.service';
 
 @Controller('me')
-@UseGuards(AuthGuard)
+// Audit L1: USER sessions of accounts that are not blocked, checked on every request.
+@UseGuards(UserGuard)
 export class UsersController {
   constructor(@Inject(UsersService) private readonly users: UsersService) {}
 
   @Get()
   async me(@CurrentSubject() subject: Subject) {
-    const user = subject.kind === 'USER' ? await this.users.findById(subject.id) : null;
+    // UserGuard has checked the kind and that the account exists and is not blocked.
+    const user = await this.users.findById(subject.id);
     if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Account not found' });
-    if (user.isBlocked)
-      throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'This account is blocked' });
     return ok({ id: user.id, phone: user.phone, fullName: user.fullName });
   }
 }

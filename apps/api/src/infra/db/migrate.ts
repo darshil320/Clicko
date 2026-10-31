@@ -131,7 +131,11 @@ export function assertLocalTestDatabase(url: string, name = 'TEST_DATABASE_URL')
 
 async function main(): Promise<void> {
   const env = loadEnv(process.env);
-  const sql = postgres(env.DATABASE_URL, { max: 1, onnotice: () => {} });
+  // Security audit M4: migrations run as the table owner; the API itself runs as clickco_app.
+  const sql = postgres(env.MIGRATION_DATABASE_URL ?? env.DATABASE_URL, {
+    max: 1,
+    onnotice: () => {},
+  });
   try {
     const applied = await runMigrations(sql);
     process.stdout.write(

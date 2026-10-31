@@ -28,7 +28,8 @@ export interface DeliveryLinkRecord {
   readonly deliveryId: string;
   readonly bookingId: string;
   readonly kind: DeliveryLinkKind;
-  readonly publicToken: string;
+  /** sha256 of the public token (audit L2: the token itself is derived, never stored). */
+  readonly tokenSha256: string;
   readonly providerLink: string;
   readonly providerLinkId: string | null;
   readonly expiresAt: Date;

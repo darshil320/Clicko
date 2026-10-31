@@ -2,8 +2,6 @@ import type { DeliveryLinkKind } from '@clickco/contracts';
 
 /** ADR-0016 delivery numbers in one place. */
 export const DELIVERY_CONFIG = {
-  /** Random bytes in a link's public token (base64url, 43 characters). */
-  tokenBytes: 32,
   /** Clickco's own link path: the provider link is resolved server-side and never shown. */
   publicPathPrefix: '/d/',
   /** Per-IP limit on the public link route. */

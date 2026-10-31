@@ -1,5 +1,6 @@
 import type { StaffRole } from '@clickco/contracts';
 import type postgres from 'postgres';
+import { DEV_STAFF_TOTP_KEY } from '../../../modules/admin/auth/secret-box';
 import { base32Decode } from '../../../modules/admin/auth/totp';
 import { createStaffAccount } from '../../../modules/admin/staff/bootstrap';
 
@@ -31,6 +32,11 @@ export async function seedDevStaff(
   totpKey: string,
   now: Date,
 ): Promise<{ inserted: number }> {
+  // Clients audit L3: a public password belongs only under the public dev key — never sealed with
+  // a real key, which would make the accounts usable wherever that key is deployed.
+  if (!Buffer.from(totpKey, 'base64').equals(Buffer.from(DEV_STAFF_TOTP_KEY, 'base64'))) {
+    throw new Error('seedDevStaff: refused — STAFF_TOTP_KEY is not the built-in development key');
+  }
   const [surat] = await sql<{ id: string }[]>`SELECT id FROM cities WHERE name = 'Surat'`;
   if (!surat) throw new Error('seedDevStaff: run `pnpm db:seed` first (no Surat)');
   let inserted = 0;

@@ -7,7 +7,7 @@ import { ServiceabilityModule } from '../serviceability/serviceability.module';
 import { SlaModule } from '../sla/sla.module';
 import { PhotographerReadsAdapter } from './adapters/photographer-reads.adapter';
 import { SlaBreachesAdapter } from './adapters/sla-breaches.adapter';
-import { BANK_ACCOUNT_CIPHER, BankAccountCipher, bankAccountKeyFrom } from './bank-account-cipher';
+import { BANK_ACCOUNT_CIPHER, BankAccountCipher, bankKeyringFrom } from './bank-account-cipher';
 import { PayoutAssessmentService } from './payout-assessment.service';
 import { PayoutBatchesService } from './payout-batches.service';
 import { PayoutFilesService } from './payout-files.service';
@@ -47,7 +47,8 @@ import { PayoutsRepository } from './repositories/payouts.repository';
     {
       provide: BANK_ACCOUNT_CIPHER,
       inject: [ENV],
-      useFactory: (env: Env) => new BankAccountCipher(bankAccountKeyFrom(env.STAFF_TOTP_KEY)),
+      // Audit M4: its own BANK_ACCOUNT_KEY (versioned keyring); never STAFF_TOTP_KEY when deployed.
+      useFactory: (env: Env) => new BankAccountCipher(bankKeyringFrom(env)),
     },
     PayoutAssessmentService,
     PayoutsService,

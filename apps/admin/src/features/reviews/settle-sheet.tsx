@@ -3,6 +3,7 @@
 import {
   type AdminReviewItem,
   AdminSettleReviewBody,
+  CREDIT_FOUR_EYES_PAISE,
   CreditReason,
   MONEY_APPROVER_ROLES,
   RefundReason,
@@ -41,6 +42,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { isSuperAdmin } from '../../shared/access';
 import { adminApi } from '../../shared/api';
+import { AuthenticatorCodeField } from '../../shared/authenticator-code-field';
 import { formatBps, formatDateTime, formatMinutes } from '../../shared/format';
 import {
   CREDIT_REASON_LABEL,
@@ -60,6 +62,13 @@ import { consequence } from './settle-copy';
 
 const INVALIDATE = [['money', 'reviews'], ['money', 'refunds'], keys.bookingAll] as const;
 
+/** The credit this outcome issues (audit L8: above ₹5,000 it is four-eyes). */
+function creditOf(outcome: ReviewOutcome, amount: string, credit: string): number {
+  if (outcome === 'CREDIT_ISSUED') return parseRupees(amount) ?? 0;
+  if (outcome === 'REFUND_REQUESTED') return parseRupees(credit) ?? 0;
+  return 0;
+}
+
 function bodyOf(f: {
   outcome: ReviewOutcome;
   amount: string;
@@ -67,9 +76,13 @@ function bodyOf(f: {
   refundReason: RefundReason;
   creditReason: CreditReason;
   note: string;
+  approval: { code: string; coEmail: string; coCode: string } | null;
 }) {
   const amountPaise = parseRupees(f.amount) ?? -1;
   const creditPaise = parseRupees(f.credit) ?? 0;
+  const approval = f.approval
+    ? { code: f.approval.code, coApprover: { email: f.approval.coEmail, code: f.approval.coCode } }
+    : {};
   if (f.outcome === 'REFUND_REQUESTED') {
     return AdminSettleReviewBody.safeParse({
       outcome: f.outcome,
@@ -77,6 +90,7 @@ function bodyOf(f: {
       refundReason: f.refundReason,
       ...(creditPaise > 0 ? { creditPaise } : {}),
       note: f.note,
+      ...approval,
     });
   }
   if (f.outcome === 'CREDIT_ISSUED') {
@@ -85,6 +99,7 @@ function bodyOf(f: {
       amountPaise,
       creditReason: f.creditReason,
       note: f.note,
+      ...approval,
     });
   }
   if (f.outcome === 'CHARGE_RAISED') {
@@ -117,7 +132,19 @@ export function SettleSheet({
   const [note, setNote] = useState('');
   const [touched, setTouched] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const check = bodyOf({ outcome, amount, credit, refundReason, creditReason, note });
+  const [code, setCode] = useState('');
+  const [coEmail, setCoEmail] = useState('');
+  const [coCode, setCoCode] = useState('');
+  const fourEyes = creditOf(outcome, amount, credit) > CREDIT_FOUR_EYES_PAISE;
+  const check = bodyOf({
+    outcome,
+    amount,
+    credit,
+    refundReason,
+    creditReason,
+    note,
+    approval: fourEyes ? { code, coEmail, coCode } : null,
+  });
 
   const settle = useAdminMutation({
     run: (vars: { eventId: string; body: AdminSettleReviewBody }, idem) =>
@@ -129,6 +156,10 @@ export function SettleSheet({
     invalidate: INVALIDATE,
     onSuccess: onClose,
   });
+  const clearCodes = () => {
+    setCode('');
+    setCoCode('');
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -289,6 +320,44 @@ export function SettleSheet({
                 onChange={setNote}
                 error={touched ? fieldError(check, 'note') : null}
               />
+              {fourEyes ? (
+                <div className="grid gap-4 rounded-md border p-4">
+                  <p className="text-sm">
+                    Credits above {formatRupees(CREDIT_FOUR_EYES_PAISE)} need two people: your
+                    authenticator code, and a second finance person (or super admin) entering theirs
+                    here with you.
+                  </p>
+                  <AuthenticatorCodeField
+                    id="settle-code"
+                    label="Your authenticator code"
+                    hint="A fresh code, even though you are signed in."
+                    value={code}
+                    onChange={setCode}
+                    error={touched ? fieldError(check, 'code') : null}
+                  />
+                  <Field
+                    label="Second approver's email"
+                    htmlFor="settle-co-email"
+                    error={touched ? fieldError(check, 'coApprover') : null}
+                  >
+                    <Input
+                      id="settle-co-email"
+                      type="email"
+                      autoComplete="off"
+                      value={coEmail}
+                      onChange={(e) => setCoEmail(e.target.value)}
+                    />
+                  </Field>
+                  <AuthenticatorCodeField
+                    id="settle-co-code"
+                    label="Second approver's authenticator code"
+                    hint="From their own authenticator app."
+                    value={coCode}
+                    onChange={setCoCode}
+                    error={null}
+                  />
+                </div>
+              ) : null}
             </form>
           ) : null}
         </div>
@@ -326,7 +395,12 @@ export function SettleSheet({
               <Button
                 disabled={settle.isPending}
                 onClick={() => {
-                  if (check.success) settle.mutate({ eventId: item.eventId, body: check.data });
+                  if (check.success) {
+                    settle.mutate(
+                      { eventId: item.eventId, body: check.data },
+                      { onError: clearCodes },
+                    );
+                  }
                 }}
               >
                 {settle.isPending ? <Spinner /> : null}

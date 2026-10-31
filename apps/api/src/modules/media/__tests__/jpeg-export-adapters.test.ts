@@ -2,7 +2,11 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DarktableCliAdapter, jpegDimensions } from '../export/darktable-cli.adapter';
+import {
+  DarktableCliAdapter,
+  darktableCommand,
+  jpegDimensions,
+} from '../export/darktable-cli.adapter';
 import { DevPassthroughAdapter } from '../export/dev-passthrough.adapter';
 import { JpegExportError } from '../export/jpeg-export.port';
 import { PLACEHOLDER_NOTE, placeholderJpeg } from '../export/placeholder-jpeg';
@@ -152,5 +156,51 @@ describe('DarktableCliAdapter (with a stand-in binary)', () => {
       }),
     ).rejects.toThrow(/does not look like/);
     await expect(readFile(marker)).rejects.toThrow();
+  });
+
+  it('refuses a RAW above the size cap without running darktable (audit H1)', async () => {
+    const marker = join(dir, 'ran-big.txt');
+    const fake = await script('never-big.sh', `touch "${marker}"`);
+    await expect(
+      new DarktableCliAdapter({
+        binary: fake,
+        timeoutMs: 5_000,
+        quality: 92,
+        maxInputBytes: 16,
+      }).exportRaw({ inputPath: raw, outputPath: join(dir, 'x6.jpg') }),
+    ).rejects.toThrow(/larger than/);
+    await expect(readFile(marker)).rejects.toThrow();
+  });
+});
+
+describe('darktableCommand — the child memory cap (audit H1)', () => {
+  it('on Linux runs darktable under `ulimit -v`, refusing to start if the cap cannot be set', () => {
+    const cmd = darktableCommand('/usr/bin/darktable-cli', ['a.cr3', 'b.jpg'], 6_144, 'linux');
+    expect(cmd.file).toBe('/bin/sh');
+    expect(cmd.args[0]).toBe('-c');
+    expect(cmd.args[1]).toContain(`ulimit -v ${6_144 * 1024} || exit 97`);
+    expect(cmd.args[1]).toContain('exec "$0" "$@"');
+    expect(cmd.args.slice(2)).toEqual(['/usr/bin/darktable-cli', 'a.cr3', 'b.jpg']);
+  });
+
+  it('elsewhere (macOS has no RLIMIT_AS) runs the binary directly; no cap = no wrapper', () => {
+    expect(darktableCommand('dt', ['a'], 6_144, 'darwin')).toEqual({ file: 'dt', args: ['a'] });
+    expect(darktableCommand('dt', ['a'], undefined, 'linux')).toEqual({ file: 'dt', args: ['a'] });
+  });
+
+  it.runIf(process.platform === 'linux')('really applies the cap to the child', async () => {
+    const out = join(dir, 'ulimit.txt');
+    const sample = join(dir, 'sample-ulimit.jpg');
+    await writeFile(sample, placeholderJpeg('ulimit stand-in'));
+    const path = join(dir, 'ulimit.sh');
+    await writeFile(path, `#!/bin/sh\nulimit -v > "${out}"\ncp "${sample}" "$2"\n`);
+    await chmod(path, 0o755);
+    await new DarktableCliAdapter({
+      binary: path,
+      timeoutMs: 10_000,
+      quality: 92,
+      memoryLimitMb: 2_048,
+    }).exportRaw({ inputPath: raw, outputPath: join(dir, 'ul.jpg') });
+    expect((await readFile(out, 'utf8')).trim()).toBe(String(2_048 * 1024));
   });
 });

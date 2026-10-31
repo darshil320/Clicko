@@ -2,6 +2,12 @@ import { HttpException, Logger } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { OTP_POLICY, OtpService } from '../otp.service';
 import type { OtpDeliveryQueue, OtpDeliveryRequest } from '../otp-delivery';
+import {
+  OTP_LIMITS_POLICY,
+  type OtpLimits,
+  type OtpLimitsPolicy,
+  type SmsReservation,
+} from '../otp-limits';
 import type { OtpChallengeRow, OtpRepository } from '../repositories/otp.repository';
 
 const PHONE = '+919876543210';
@@ -15,7 +21,7 @@ class FakeOtpRepository implements OtpRepository {
       (r) => r.phone === phone && r.purpose === purpose && r.createdAt >= since,
     ).length;
   }
-  async countForIpSince(ip: string, since: Date) {
+  async countForIpSince(ip: string | null, since: Date) {
     return this.rows.filter((r) => r.ip === ip && r.createdAt >= since).length;
   }
   async latestCreatedAt(phone: string, purpose: string) {
@@ -63,6 +69,33 @@ class FakeOtpRepository implements OtpRepository {
   }
 }
 
+/** In-memory OtpLimits: `next` is what the next SMS reservation answers; `down` = Redis is down. */
+class FakeLimits implements OtpLimits {
+  readonly policy: OtpLimitsPolicy = OTP_LIMITS_POLICY;
+  next: SmsReservation = 'OK';
+  down = false;
+  reserved = 0;
+  failures = new Map<string, number>();
+  private check() {
+    if (this.down) throw new Error('ECONNREFUSED');
+  }
+  async reserveSms() {
+    this.check();
+    this.reserved += 1;
+    return this.next;
+  }
+  async verifyFailures(phone: string) {
+    this.check();
+    return this.failures.get(phone) ?? 0;
+  }
+  async recordVerifyFailure(phone: string) {
+    this.check();
+    const n = (this.failures.get(phone) ?? 0) + 1;
+    this.failures.set(phone, n);
+    return n;
+  }
+}
+
 /** Records what would be queued; `sent` holds the codes that would reach a phone. */
 class CapturingDelivery implements OtpDeliveryQueue {
   queued: OtpDeliveryRequest[] = [];
@@ -89,13 +122,15 @@ describe('OtpService', () => {
   let repo: FakeOtpRepository;
   let sms: CapturingDelivery;
   let service: OtpService;
+  let limits: FakeLimits;
 
   beforeEach(() => {
     Logger.overrideLogger(false);
     now = new Date('2026-11-02T10:00:00.000Z');
     repo = new FakeOtpRepository();
     sms = new CapturingDelivery();
-    service = new OtpService(repo, sms, () => now, PEPPER);
+    limits = new FakeLimits();
+    service = new OtpService(repo, sms, () => now, PEPPER, limits);
   });
 
   const advance = (ms: number) => {
@@ -140,6 +175,50 @@ describe('OtpService', () => {
     expect(await statusOf(service.verify(challengeId, PHONE, 'LOGIN', code))).toBe(401);
   });
 
+  it('L2: locks a phone for the day after too many wrong codes, even for the right code', async () => {
+    const max = OTP_LIMITS_POLICY.maxVerifyFailuresPerPhonePerDay;
+    // Two codes, five wrong guesses each: only two requests, far under the request caps.
+    for (let c = 0; c < max / OTP_POLICY.maxAttempts; c += 1) {
+      const { challengeId } = await service.request(PHONE, 'LOGIN', `10.0.2.${c}`);
+      const code = sms.sent.at(-1)?.code ?? '';
+      const wrong = code === '000000' ? '111111' : '000000';
+      for (let i = 0; i < OTP_POLICY.maxAttempts; i += 1) {
+        expect(await statusOf(service.verify(challengeId, PHONE, 'LOGIN', wrong))).toBe(401);
+      }
+      advance(OTP_POLICY.resendCooldownMs);
+    }
+    expect(limits.failures.get(PHONE)).toBe(max);
+    // Both the code check and a new code are refused for the rest of the day.
+    expect(await statusOf(service.request(PHONE, 'LOGIN', '10.0.3.1'))).toBe(429);
+    const other = '+919812345678';
+    const { challengeId } = await service.request(other, 'LOGIN', '10.0.3.2');
+    limits.failures.set(other, max);
+    const code = sms.sent.at(-1)?.code ?? '';
+    expect(await statusOf(service.verify(challengeId, other, 'LOGIN', code))).toBe(429);
+  });
+
+  it('L2: a right code does not count as a failure', async () => {
+    const { challengeId } = await service.request(PHONE, 'LOGIN', '10.0.0.1');
+    await service.verify(challengeId, PHONE, 'LOGIN', sms.sent[0]?.code ?? '');
+    expect(limits.failures.get(PHONE)).toBeUndefined();
+  });
+
+  it.each(['GLOBAL_BUDGET', 'CIRCUIT_OPEN', 'PREFIX_BUDGET'] as const)(
+    'M5: refuses with 503 and queues nothing when the SMS budget says %s',
+    async (outcome) => {
+      limits.next = outcome;
+      expect(await statusOf(service.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(503);
+      expect(sms.queued).toHaveLength(0);
+      expect(repo.rows).toHaveLength(0);
+    },
+  );
+
+  it('M5: fails closed with 503 when the limits store (Redis) is down', async () => {
+    limits.down = true;
+    expect(await statusOf(service.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(503);
+    expect(sms.queued).toHaveLength(0);
+  });
+
   it('enforces the resend cooldown per phone', async () => {
     await service.request(PHONE, 'LOGIN', '10.0.0.1');
     expect(await statusOf(service.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(429);
@@ -175,6 +254,7 @@ describe('OtpService', () => {
       { enqueue: async () => Promise.reject(new Error('redis down')) },
       () => now,
       PEPPER,
+      limits,
     );
     expect(await statusOf(failing.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(503);
     expect(await statusOf(failing.request(PHONE, 'LOGIN', '10.0.0.1'))).toBe(429);

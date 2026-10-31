@@ -4,15 +4,21 @@ import { loadEnv } from './env';
 
 /** A deployed-looking STAFF_TOTP_KEY (32 bytes, base64); not a real secret. */
 const TOTP_KEY = Buffer.alloc(32, 7).toString('base64');
+/** A deployed-looking BANK_ACCOUNT_KEY (audit M4); not a real secret. */
+const BANK_KEY = Buffer.alloc(32, 9).toString('base64');
+/** A deployed-looking DELIVERY_LINK_KEY (audit L2); not a real secret. */
+const LINK_KEY = 'l'.repeat(40);
 
 const valid = {
   NODE_ENV: 'development',
   PORT: '4000',
   DATABASE_URL: 'postgres://clickco:pw@localhost:5432/clickco',
   REDIS_URL: 'redis://localhost:6379',
-  JWT_ACCESS_SECRET: 'a'.repeat(32),
-  OTP_HASH_PEPPER: 'b'.repeat(32),
+  // Random-looking test-only values: deployed environments refuse weak secrets (audit M1).
+  JWT_ACCESS_SECRET: 'DJjKlrrRwyToOxDX2wUzTDn83ZLyfw9zTakdekF9DpM=',
+  OTP_HASH_PEPPER: 'r1Cfqxvo58R2rDckz6SogNW/rpEMyEwcYY2WFHvoEVU=',
   SMS_ADAPTER: 'console',
+  SANDBOX_WEBHOOK_SECRET: 'local-sandbox-webhook-secret-0123456789',
 };
 
 describe('loadEnv', () => {
@@ -25,12 +31,15 @@ describe('loadEnv', () => {
       TRUST_PROXY_HOPS: 0,
       CORS_ORIGINS: [],
       PAYMENT_GATEWAY: 'sandbox',
-      SANDBOX_WEBHOOK_SECRET: 'clickco-sandbox-webhook-secret-dev-only',
+      SANDBOX_WEBHOOK_SECRET: 'local-sandbox-webhook-secret-0123456789',
       STORAGE_ADAPTER: 'local',
       STORAGE_LOCAL_LIMIT_BYTES: 50 * 1024 ** 3,
       JPEG_EXPORT_ADAPTER: 'passthrough',
       DARKTABLE_CLI_PATH: 'darktable-cli',
+      MEDIA_WORKER_ISOLATED: false,
       STAFF_TOTP_KEY: DEV_STAFF_TOTP_KEY,
+      BANK_ACCOUNT_KEY_VERSION: 2,
+      DEV_TOOLS: 'off',
     });
   });
 
@@ -57,6 +66,9 @@ describe('loadEnv', () => {
       RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
       STORAGE_ADAPTER: 'drive',
       JPEG_EXPORT_ADAPTER: 'darktable',
+      MEDIA_WORKER_ISOLATED: 'true',
+      BANK_ACCOUNT_KEY: BANK_KEY,
+      DELIVERY_LINK_KEY: LINK_KEY,
       TRUST_PROXY_HOPS: '1',
       STAFF_TOTP_KEY: TOTP_KEY,
     };
@@ -119,6 +131,9 @@ describe('loadEnv', () => {
       RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
       STORAGE_ADAPTER: 'drive',
       JPEG_EXPORT_ADAPTER: 'darktable',
+      MEDIA_WORKER_ISOLATED: 'true',
+      BANK_ACCOUNT_KEY: BANK_KEY,
+      DELIVERY_LINK_KEY: LINK_KEY,
       TRUST_PROXY_HOPS: '1',
     };
 
@@ -161,6 +176,9 @@ describe('loadEnv', () => {
       RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
       STORAGE_ADAPTER: 'drive',
       JPEG_EXPORT_ADAPTER: 'darktable',
+      MEDIA_WORKER_ISOLATED: 'true',
+      BANK_ACCOUNT_KEY: BANK_KEY,
+      DELIVERY_LINK_KEY: LINK_KEY,
       STAFF_TOTP_KEY: TOTP_KEY,
     };
 
@@ -178,6 +196,87 @@ describe('loadEnv', () => {
       expect(loadEnv({ ...env, CORS_ORIGINS: 'https://admin.clickco.in' }).CORS_ORIGINS).toEqual([
         'https://admin.clickco.in',
       ]);
+    });
+  });
+
+  describe('secret strength when deployed (security audit M1)', () => {
+    const deployed = {
+      ...valid,
+      NODE_ENV: 'production',
+      SMS_ADAPTER: 'dlt',
+      REDIS_URL: 'rediss://cache:6380',
+      QUEUE_PREFIX: 'clickco-prod',
+      PAYMENT_GATEWAY: 'razorpay',
+      RAZORPAY_KEY_ID: 'rzp_live_x',
+      RAZORPAY_KEY_SECRET: 'rzp-key-secret',
+      RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
+      STORAGE_ADAPTER: 'drive',
+      JPEG_EXPORT_ADAPTER: 'darktable',
+      MEDIA_WORKER_ISOLATED: 'true',
+      BANK_ACCOUNT_KEY: BANK_KEY,
+      DELIVERY_LINK_KEY: LINK_KEY,
+      STAFF_TOTP_KEY: TOTP_KEY,
+      TRUST_PROXY_HOPS: '1',
+    };
+
+    it('accepts random 32-byte secrets', () => {
+      expect(loadEnv(deployed).NODE_ENV).toBe('production');
+    });
+
+    it.each(['staging', 'production'])(
+      'M1: %s refuses the README development secrets',
+      (NODE_ENV) => {
+        const readme = {
+          ...deployed,
+          NODE_ENV,
+          JWT_ACCESS_SECRET: 'local-dev-access-secret-at-least-32-chars',
+          OTP_HASH_PEPPER: 'local-dev-otp-pepper-at-least-32-chars',
+        };
+        expect(() => loadEnv(readme)).toThrow(
+          /JWT_ACCESS_SECRET.*OTP_HASH_PEPPER|OTP_HASH_PEPPER.*JWT_ACCESS_SECRET/,
+        );
+      },
+    );
+
+    it('M1: refuses a 32-character secret that only passes a length check', () => {
+      expect(() => loadEnv({ ...deployed, JWT_ACCESS_SECRET: 'a'.repeat(32) })).toThrow(
+        /JWT_ACCESS_SECRET/,
+      );
+      expect(() => loadEnv({ ...deployed, OTP_HASH_PEPPER: 'x'.repeat(64) })).toThrow(
+        /OTP_HASH_PEPPER/,
+      );
+    });
+
+    it('M1: refuses placeholder words in any secret, provider-issued ones included', () => {
+      expect(() =>
+        loadEnv({ ...deployed, JWT_ACCESS_SECRET: `${valid.JWT_ACCESS_SECRET}changeme` }),
+      ).toThrow(/JWT_ACCESS_SECRET/);
+      expect(() => loadEnv({ ...deployed, RAZORPAY_KEY_SECRET: 'example-secret' })).toThrow(
+        /RAZORPAY_KEY_SECRET/,
+      );
+      expect(() =>
+        loadEnv({ ...deployed, RAZORPAY_WEBHOOK_SECRET: 'dev-only-webhook-secret' }),
+      ).toThrow(/RAZORPAY_WEBHOOK_SECRET/);
+    });
+
+    it('development keeps accepting simple local values', () => {
+      expect(() =>
+        loadEnv({ ...valid, JWT_ACCESS_SECRET: 'local-dev-access-secret-at-least-32-chars' }),
+      ).not.toThrow();
+    });
+  });
+
+  describe('DEV_TOOLS (security audit L5)', () => {
+    it('defaults to off', () => {
+      expect(loadEnv(valid).DEV_TOOLS).toBe('off');
+    });
+
+    it('L5: on only in development against a localhost database', () => {
+      expect(loadEnv({ ...valid, DEV_TOOLS: 'on' }).DEV_TOOLS).toBe('on');
+      expect(() =>
+        loadEnv({ ...valid, DEV_TOOLS: 'on', DATABASE_URL: 'postgres://u:p@db.internal/clickco' }),
+      ).toThrow(/DEV_TOOLS/);
+      expect(() => loadEnv({ ...valid, NODE_ENV: 'test', DEV_TOOLS: 'on' })).toThrow(/DEV_TOOLS/);
     });
   });
 
@@ -215,6 +314,9 @@ describe('loadEnv', () => {
         QUEUE_PREFIX: 'clickco-prod',
         STORAGE_ADAPTER: 'drive',
         JPEG_EXPORT_ADAPTER: 'darktable',
+        MEDIA_WORKER_ISOLATED: 'true',
+        BANK_ACCOUNT_KEY: BANK_KEY,
+        DELIVERY_LINK_KEY: LINK_KEY,
         TRUST_PROXY_HOPS: '1',
         STAFF_TOTP_KEY: TOTP_KEY,
         ...razorpay,
@@ -237,11 +339,36 @@ describe('loadEnv', () => {
         RAZORPAY_KEY_ID: '',
         RAZORPAY_KEY_SECRET: '',
         RAZORPAY_WEBHOOK_SECRET: '',
-        SANDBOX_WEBHOOK_SECRET: '',
       });
       expect(env.PAYMENT_GATEWAY).toBe('sandbox');
       expect(env.RAZORPAY_KEY_ID).toBeUndefined();
-      expect(env.SANDBOX_WEBHOOK_SECRET).toBe('clickco-sandbox-webhook-secret-dev-only');
+    });
+
+    // Security audit (money and files) L4: no public default for the sandbox's webhook secret.
+    it('needs an explicit, non-public sandbox webhook secret in development', () => {
+      const { SANDBOX_WEBHOOK_SECRET: _set, ...unset } = valid;
+      expect(() => loadEnv(unset)).toThrow(/SANDBOX_WEBHOOK_SECRET/);
+      expect(() => loadEnv({ ...valid, SANDBOX_WEBHOOK_SECRET: '' })).toThrow(
+        /SANDBOX_WEBHOOK_SECRET/,
+      );
+      expect(() =>
+        loadEnv({ ...valid, SANDBOX_WEBHOOK_SECRET: 'clickco-sandbox-webhook-secret-dev-only' }),
+      ).toThrow(/SANDBOX_WEBHOOK_SECRET/);
+      expect(() => loadEnv({ ...valid, SANDBOX_WEBHOOK_SECRET: 's'.repeat(31) })).toThrow(
+        /SANDBOX_WEBHOOK_SECRET/,
+      );
+      // Tests may leave it unset (the gateway then signs with a random per-process secret).
+      expect(loadEnv({ ...unset, NODE_ENV: 'test' }).SANDBOX_WEBHOOK_SECRET).toBeUndefined();
+      // Not needed at all when the sandbox is not the gateway.
+      expect(
+        loadEnv({
+          ...unset,
+          PAYMENT_GATEWAY: 'razorpay',
+          RAZORPAY_KEY_ID: 'rzp_test_key',
+          RAZORPAY_KEY_SECRET: 'rzp-key-secret',
+          RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
+        }).SANDBOX_WEBHOOK_SECRET,
+      ).toBeUndefined();
     });
 
     it('rejects an unknown gateway', () => {
@@ -262,6 +389,8 @@ describe('loadEnv', () => {
       RAZORPAY_WEBHOOK_SECRET: 'rzp-webhook-secret-123',
       TRUST_PROXY_HOPS: '1',
       STAFF_TOTP_KEY: TOTP_KEY,
+      BANK_ACCOUNT_KEY: BANK_KEY,
+      DELIVERY_LINK_KEY: LINK_KEY,
     };
 
     it('defaults to local disk and the passthrough exporter in development', () => {
@@ -281,8 +410,33 @@ describe('loadEnv', () => {
           /JPEG_EXPORT_ADAPTER/,
         );
       }
-      const env = loadEnv({ ...prod, STORAGE_ADAPTER: 'drive', JPEG_EXPORT_ADAPTER: 'darktable' });
+      const env = loadEnv({
+        ...prod,
+        STORAGE_ADAPTER: 'drive',
+        JPEG_EXPORT_ADAPTER: 'darktable',
+        MEDIA_WORKER_ISOLATED: 'true',
+      });
       expect(env).toMatchObject({ STORAGE_ADAPTER: 'drive', JPEG_EXPORT_ADAPTER: 'darktable' });
+    });
+
+    it('audit H1: deployed darktable only runs in the separate, isolated media worker', () => {
+      const deployed = { ...prod, STORAGE_ADAPTER: 'drive', JPEG_EXPORT_ADAPTER: 'darktable' };
+      for (const NODE_ENV of ['staging', 'production']) {
+        expect(() => loadEnv({ ...deployed, NODE_ENV })).toThrow(/MEDIA_WORKER_ISOLATED/);
+        expect(() => loadEnv({ ...deployed, NODE_ENV, MEDIA_WORKER_ISOLATED: 'false' })).toThrow(
+          /MEDIA_WORKER_ISOLATED/,
+        );
+        expect(loadEnv({ ...deployed, NODE_ENV, MEDIA_WORKER_ISOLATED: 'true' })).toMatchObject({
+          MEDIA_WORKER_ISOLATED: true,
+        });
+      }
+      // Development may still run darktable in-process, and defaults to not isolated.
+      expect(loadEnv({ ...valid, JPEG_EXPORT_ADAPTER: 'darktable' }).MEDIA_WORKER_ISOLATED).toBe(
+        false,
+      );
+      expect(() => loadEnv({ ...valid, MEDIA_WORKER_ISOLATED: 'yes' })).toThrow(
+        /MEDIA_WORKER_ISOLATED/,
+      );
     });
 
     it('coerces byte limits and rejects junk adapters', () => {
@@ -303,6 +457,96 @@ describe('loadEnv', () => {
       );
       expect(() => loadEnv({ ...valid, STORAGE_LOCAL_LIMIT_BYTES: '-1' })).toThrow(
         /STORAGE_LOCAL_LIMIT_BYTES/,
+      );
+    });
+  });
+
+  describe('BANK_ACCOUNT_KEY (audit M4)', () => {
+    const deployed = {
+      ...valid,
+      NODE_ENV: 'production',
+      SMS_ADAPTER: 'dlt',
+      REDIS_URL: 'rediss://cache:6380',
+      QUEUE_PREFIX: 'clickco-prod',
+      PAYMENT_GATEWAY: 'razorpay',
+      RAZORPAY_KEY_ID: 'rzp_live_x',
+      RAZORPAY_KEY_SECRET: 'secret',
+      RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
+      STORAGE_ADAPTER: 'drive',
+      JPEG_EXPORT_ADAPTER: 'darktable',
+      MEDIA_WORKER_ISOLATED: 'true',
+      TRUST_PROXY_HOPS: '1',
+      STAFF_TOTP_KEY: TOTP_KEY,
+    };
+
+    it('is required in staging and production', () => {
+      expect(() => loadEnv({ ...deployed, DELIVERY_LINK_KEY: LINK_KEY })).toThrow(
+        /BANK_ACCOUNT_KEY/,
+      );
+      expect(
+        loadEnv({ ...deployed, BANK_ACCOUNT_KEY: BANK_KEY, DELIVERY_LINK_KEY: LINK_KEY }),
+      ).toMatchObject({
+        BANK_ACCOUNT_KEY: BANK_KEY,
+        DELIVERY_LINK_KEY: LINK_KEY,
+        BANK_ACCOUNT_KEY_VERSION: 2,
+      });
+    });
+
+    it('must differ from STAFF_TOTP_KEY (also the development default) and be 32 bytes', () => {
+      expect(() => loadEnv({ ...deployed, BANK_ACCOUNT_KEY: TOTP_KEY })).toThrow(
+        /BANK_ACCOUNT_KEY/,
+      );
+      expect(() => loadEnv({ ...valid, BANK_ACCOUNT_KEY: DEV_STAFF_TOTP_KEY })).toThrow(
+        /BANK_ACCOUNT_KEY/,
+      );
+      const short = Buffer.alloc(16, 1).toString('base64');
+      expect(() => loadEnv({ ...valid, BANK_ACCOUNT_KEY: short })).toThrow(/BANK_ACCOUNT_KEY/);
+    });
+
+    it('rotates: a previous key under another version opens old numbers', () => {
+      const old = Buffer.alloc(32, 3).toString('base64');
+      const env = loadEnv({
+        ...deployed,
+        BANK_ACCOUNT_KEY: BANK_KEY,
+        DELIVERY_LINK_KEY: LINK_KEY,
+        BANK_ACCOUNT_KEY_VERSION: '3',
+        BANK_ACCOUNT_KEY_PREVIOUS: `2:${old}`,
+      });
+      expect(env.BANK_ACCOUNT_KEY_PREVIOUS).toEqual({ version: 2, key: old });
+      expect(() =>
+        loadEnv({ ...deployed, BANK_ACCOUNT_KEY: BANK_KEY, BANK_ACCOUNT_KEY_PREVIOUS: `2:${old}` }),
+      ).toThrow(/BANK_ACCOUNT_KEY_PREVIOUS/);
+      expect(() =>
+        loadEnv({ ...deployed, BANK_ACCOUNT_KEY: BANK_KEY, BANK_ACCOUNT_KEY_VERSION: '1' }),
+      ).toThrow(/BANK_ACCOUNT_KEY_VERSION/);
+    });
+  });
+
+  describe('DELIVERY_LINK_KEY (audit L2)', () => {
+    it('is required in staging and production and never the JWT secret', () => {
+      const prodLike = {
+        ...valid,
+        NODE_ENV: 'production',
+        SMS_ADAPTER: 'dlt',
+        REDIS_URL: 'rediss://cache:6380',
+        QUEUE_PREFIX: 'clickco-prod',
+        PAYMENT_GATEWAY: 'razorpay',
+        RAZORPAY_KEY_ID: 'rzp_live_x',
+        RAZORPAY_KEY_SECRET: 'secret',
+        RAZORPAY_WEBHOOK_SECRET: 'w'.repeat(32),
+        STORAGE_ADAPTER: 'drive',
+        JPEG_EXPORT_ADAPTER: 'darktable',
+        MEDIA_WORKER_ISOLATED: 'true',
+        TRUST_PROXY_HOPS: '1',
+        STAFF_TOTP_KEY: TOTP_KEY,
+        BANK_ACCOUNT_KEY: BANK_KEY,
+      };
+      expect(() => loadEnv(prodLike)).toThrow(/DELIVERY_LINK_KEY/);
+      expect(() => loadEnv({ ...valid, DELIVERY_LINK_KEY: valid.JWT_ACCESS_SECRET })).toThrow(
+        /DELIVERY_LINK_KEY/,
+      );
+      expect(loadEnv({ ...prodLike, DELIVERY_LINK_KEY: LINK_KEY }).DELIVERY_LINK_KEY).toBe(
+        LINK_KEY,
       );
     });
   });

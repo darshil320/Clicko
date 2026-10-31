@@ -1,6 +1,7 @@
 import type { Provider, Type } from '@nestjs/common';
 import { RefundsModule } from '../../refunds/refunds.module';
 import { AdminMoneyController } from './admin-money.controller';
+import { MoneyStepUp } from './money-step-up';
 import { RefundDeskService } from './refund-desk.service';
 import { ReviewDeskService } from './review-desk.service';
 import { StaffNames } from './staff-names';
@@ -11,4 +12,9 @@ import { StaffNames } from './staff-names';
  */
 export const MONEY_IMPORTS: Type[] = [RefundsModule];
 export const MONEY_CONTROLLERS: Type[] = [AdminMoneyController];
-export const MONEY_PROVIDERS: Provider[] = [StaffNames, RefundDeskService, ReviewDeskService];
+export const MONEY_PROVIDERS: Provider[] = [
+  StaffNames,
+  MoneyStepUp,
+  RefundDeskService,
+  ReviewDeskService,
+];

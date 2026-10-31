@@ -18,6 +18,12 @@ export interface DarktableOptions {
   readonly timeoutMs: number;
   /** JPEG quality 1–100. */
   readonly quality: number;
+  /** Audit H1: a RAW larger than this is refused before darktable ever sees it. */
+  readonly maxInputBytes?: number;
+  /** Audit H1: the child's address-space cap (`ulimit -v`, Linux only; cgroups are the real cap). */
+  readonly memoryLimitMb?: number;
+  /** For tests; defaults to `process.platform`. */
+  readonly platform?: NodeJS.Platform;
 }
 
 const STDERR_LIMIT = 4_096;
@@ -49,6 +55,27 @@ export function jpegDimensions(header: Buffer): {
   return { widthPx: null, heightPx: null };
 }
 
+/**
+ * Audit H1: on Linux the child runs under `ulimit -v` (RLIMIT_AS) through a tiny `sh` wrapper that
+ * refuses to start darktable (exit 97) if the cap cannot be set — never an uncapped run. The wrapper
+ * only `exec`s the binary with the same argument array: no user text is ever part of the script.
+ * macOS has no RLIMIT_AS (`ulimit -v` fails there), so development runs the binary directly; the
+ * worker container's cgroup memory limit is the authoritative cap in every deployment.
+ */
+export function darktableCommand(
+  binary: string,
+  args: readonly string[],
+  memoryLimitMb: number | undefined,
+  platform: NodeJS.Platform = process.platform,
+): { file: string; args: string[] } {
+  if (memoryLimitMb === undefined || platform !== 'linux') return { file: binary, args: [...args] };
+  const kib = Math.floor(memoryLimitMb * 1024);
+  return {
+    file: '/bin/sh',
+    args: ['-c', `ulimit -v ${kib} || exit 97; exec "$0" "$@"`, binary, ...args],
+  };
+}
+
 async function readHeader(path: string, bytes = 65_536): Promise<Buffer> {
   const handle = await open(path, 'r');
   try {
@@ -72,6 +99,10 @@ export class DarktableCliAdapter implements JpegExportPort {
   constructor(private readonly options: DarktableOptions) {}
 
   async exportRaw(input: JpegExportInput): Promise<JpegExportResult> {
+    const { maxInputBytes } = this.options;
+    if (maxInputBytes !== undefined && (await stat(input.inputPath)).size > maxInputBytes) {
+      throw new JpegExportError(`The RAW is larger than the ${maxInputBytes}-byte export limit`);
+    }
     const header = await readHeader(input.inputPath, SIGNATURE_PREFIX_BYTES);
     if (!matchesFileSignature(input.inputPath, header)) {
       throw new JpegExportError('The input does not look like the RAW format its name claims');
@@ -107,7 +138,13 @@ export class DarktableCliAdapter implements JpegExportPort {
 
   private run(home: string, args: readonly string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.options.binary, args, {
+      const cmd = darktableCommand(
+        this.options.binary,
+        args,
+        this.options.memoryLimitMb,
+        this.options.platform,
+      );
+      const child = spawn(cmd.file, cmd.args, {
         env: darktableEnv(home, this.options.searchPath),
         stdio: ['ignore', 'ignore', 'pipe'],
         timeout: this.options.timeoutMs,
@@ -129,6 +166,9 @@ export class DarktableCliAdapter implements JpegExportPort {
       // 'exit', not 'close': a grandchild holding stderr open must not outlive the timeout.
       child.on('exit', (code, signal) => {
         if (code === 0) return resolve();
+        if (code === 97 && cmd.file !== this.options.binary) {
+          return reject(new JpegExportError('could not apply the darktable memory limit'));
+        }
         const why = signal
           ? `was killed (${signal}, limit ${this.options.timeoutMs} ms)`
           : `exited ${code}`;

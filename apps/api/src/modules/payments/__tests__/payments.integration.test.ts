@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedLaunchCities } from '../../../infra/db/seed';
@@ -159,26 +159,67 @@ describe.runIf(TEST_DATABASE_URL)('PaymentsService in Postgres', () => {
     expect(await db.sql`SELECT 1 FROM ledger_entries WHERE txn_id = ${txnId}`).toHaveLength(0);
   });
 
-  it('stores a badly signed webhook as invalid, then refuses it with 400', async () => {
+  // Audit M3: a bad signature is counted per provider per hour (with a sample), never one row each.
+  it('counts badly signed webhooks in an hourly bucket, then refuses them with 400', async () => {
     const { payment } = await openPayment();
     const hook = gateway.buildWebhook({
       providerOrderId: payment.providerOrderId ?? '',
       amountPaise: payment.amountPaise,
       event: 'payment.captured',
     });
-    const attempt = payments.ingestWebhook({
+    const forged = () =>
+      payments.ingestWebhook({
+        provider: 'sandbox',
+        rawBody: hook.rawBody,
+        signature: 'f'.repeat(64),
+        eventId: hook.eventId,
+      });
+    const eventsBefore = await db.sql`SELECT 1 FROM payment_webhook_events`;
+    await expect(forged()).rejects.toBeInstanceOf(BadRequestException);
+    await expect(forged()).rejects.toBeInstanceOf(BadRequestException);
+    const buckets = await db.sql<
+      { provider: string; bucket_start: Date; rejected_count: number; last_body_sha256: string }[]
+    >`SELECT provider, bucket_start, rejected_count, last_body_sha256
+        FROM payment_webhook_rejections`;
+    expect(buckets).toEqual([
+      {
+        provider: 'SANDBOX',
+        bucket_start: new Date('2026-11-10T06:00:00.000Z'),
+        rejected_count: 2,
+        last_body_sha256: createHash('sha256').update(hook.rawBody).digest('hex'),
+      },
+    ]);
+    // Nothing per attempt, so the forged request never claimed the genuine event id either.
+    expect(await db.sql`SELECT 1 FROM payment_webhook_events`).toHaveLength(eventsBefore.length);
+  });
+
+  // Audit L1: the payer's email, contact and VPA are never kept; parsed fields + body hash are.
+  it('stores the parsed fields and the body hash of a webhook, not the raw payload', async () => {
+    const { payment } = await openPayment();
+    const hook = gateway.buildWebhook({
+      providerOrderId: payment.providerOrderId ?? '',
+      amountPaise: payment.amountPaise,
+      event: 'payment.captured',
+    });
+    const first = await payments.ingestWebhook({
       provider: 'sandbox',
       rawBody: hook.rawBody,
-      signature: 'f'.repeat(64),
+      signature: hook.signature,
       eventId: hook.eventId,
     });
-    await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
-    const rows = await db.sql<{ signature_valid: boolean; provider_event_id: string }[]>`
-      SELECT signature_valid, provider_event_id FROM payment_webhook_events
-      WHERE event_type = 'payment.captured' AND NOT signature_valid`;
-    expect(rows.length).toBeGreaterThan(0);
-    // The forged request must not have claimed the genuine event id.
-    expect(rows.map((r) => r.provider_event_id)).not.toContain(hook.eventId);
+    expect(first.kind).toBe('NEW');
+    const [row] = await db.sql<{ payload: Record<string, unknown>; body_sha256: string }[]>`
+      SELECT payload, body_sha256 FROM payment_webhook_events
+       WHERE provider_event_id LIKE ${`${hook.eventId}#%`}`;
+    expect(row?.body_sha256).toBe(createHash('sha256').update(hook.rawBody).digest('hex'));
+    expect(row?.payload).toEqual({
+      kind: 'PAYMENT_CAPTURED',
+      event: 'payment.captured',
+      provider_order_id: payment.providerOrderId,
+      provider_payment_id: expect.stringMatching(/^pay_sbx_/),
+      amount_paise: Number(payment.amountPaise),
+    });
+    expect(JSON.stringify(row?.payload)).not.toMatch(/sandbox|vpa|email|contact/);
   });
 
   it('dedupes on the event id once processed, but hands back an unprocessed one for retry', async () => {

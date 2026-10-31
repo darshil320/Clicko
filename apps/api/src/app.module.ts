@@ -1,8 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CLOCK, systemClock } from './common/clock';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { UserGuardModule } from './common/guards/user-guard.module';
+import { IpThrottlerGuard } from './common/http/ip-throttler.guard';
 import { ENV, loadEnv } from './config/env';
 import { devOnlyModules } from './dev/dev-tools.module';
 import { HealthModule } from './health/health.module';
@@ -40,6 +42,7 @@ class CoreModule {}
     // before scaling out). OTP and waitlist have their own per-phone limits on top.
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     DbModule,
+    UserGuardModule,
     QueuesModule,
     OutboxModule,
     HealthModule,
@@ -56,11 +59,11 @@ class CoreModule {}
     OpsModule,
     AdminModule,
     JobsModule,
-    ...devOnlyModules(process.env.NODE_ENV),
+    ...devOnlyModules(process.env),
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: IpThrottlerGuard },
   ],
 })
 export class AppModule {}

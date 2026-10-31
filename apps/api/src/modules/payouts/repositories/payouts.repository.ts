@@ -28,6 +28,13 @@ export interface PayoutRecord {
   readonly utr: string | null;
   readonly paidAt: Date | null;
   readonly failureReason: string | null;
+  /** The bank's return reference recorded with the failure (audit H2). */
+  readonly failureReference: string | null;
+  /** Who created the bank file this transfer last went out in, and when (audit H2). */
+  readonly bankFileBy: string | null;
+  readonly bankFileAt: Date | null;
+  /** The first bank file it went out in: resends never move it. */
+  readonly firstBankFileAt: Date | null;
   /** The batch's export time (the credit date); null until then. */
   readonly creditedAt: Date | null;
   readonly batchReference: string | null;
@@ -53,6 +60,10 @@ interface Row {
   utr: string | null;
   paid_at: Date | null;
   failure_reason: string | null;
+  failure_reference: string | null;
+  bank_file_by: string | null;
+  bank_file_at: Date | null;
+  first_bank_file_at: Date | null;
   credited_at: Date | null;
   batch_ref: string | null;
 }
@@ -60,7 +71,8 @@ interface Row {
 const COLUMNS = `p.id, p.batch_id, p.photographer_id, p.booking_id, p.bank_account_id, p.status,
   p.gross_paise, p.penalty_deduction_paise, p.other_deduction_paise, p.tds_section, p.tds_rate_bps,
   p.tds_paise, p.tds_base_paise, p.net_paise, p.eligible_at, p.provider_payout_id, p.utr,
-  p.paid_at, p.failure_reason, b.approved_at AS credited_at, b.batch_ref`;
+  p.paid_at, p.failure_reason, p.failure_reference, p.bank_file_by, p.bank_file_at,
+  p.first_bank_file_at, b.approved_at AS credited_at, b.batch_ref`;
 const FROM = 'payouts p LEFT JOIN payout_batches b ON b.id = p.batch_id';
 
 const toRecord = (r: Row): PayoutRecord => ({
@@ -83,6 +95,10 @@ const toRecord = (r: Row): PayoutRecord => ({
   utr: r.utr,
   paidAt: r.paid_at,
   failureReason: r.failure_reason,
+  failureReference: r.failure_reference,
+  bankFileBy: r.bank_file_by,
+  bankFileAt: r.bank_file_at,
+  firstBankFileAt: r.first_bank_file_at,
   creditedAt: r.credited_at,
   batchReference: r.batch_ref,
 });
@@ -283,11 +299,15 @@ export class PayoutsRepository {
       WHERE id IN ${tx([...ids])} AND status = 'PENDING'`;
   }
 
-  /** Written into a bank file: never written into another one (no double payment). */
-  async markSent(tx: Tx, ids: readonly string[]): Promise<number> {
+  /**
+   * Written into a bank file: never written into another one (no double payment). Records who
+   * made the file (the maker, audit H2) and keeps the first file's time across resends.
+   */
+  async markSent(tx: Tx, ids: readonly string[], staffId: string, at: Date): Promise<number> {
     if (ids.length === 0) return 0;
     const res = await tx`
-      UPDATE payouts SET status = 'PROCESSING'
+      UPDATE payouts SET status = 'PROCESSING', bank_file_by = ${staffId}, bank_file_at = ${at},
+        first_bank_file_at = COALESCE(first_bank_file_at, ${at})
       WHERE id IN ${tx([...ids])} AND status = 'APPROVED'`;
     return res.count;
   }
@@ -299,16 +319,32 @@ export class PayoutsRepository {
     return res.count;
   }
 
-  /** A UTR already recorded for another photographer's transfer. */
-  async utrUsedByOther(db: Db, utr: string, photographerId: string): Promise<boolean> {
+  /**
+   * A UTR already recorded for any other transfer — another photographer, or the same
+   * photographer in another batch (audit L7; the exclusion constraints are the backstop).
+   */
+  async utrUsedElsewhere(
+    db: Db,
+    utr: string,
+    batchId: string,
+    photographerId: string,
+  ): Promise<boolean> {
     const [row] = await db`
-      SELECT 1 FROM payouts WHERE utr = ${utr} AND photographer_id <> ${photographerId} LIMIT 1`;
+      SELECT 1 FROM payouts
+      WHERE utr = ${utr} AND (photographer_id <> ${photographerId} OR batch_id <> ${batchId})
+      LIMIT 1`;
     return row !== undefined;
   }
 
-  async markFailed(tx: Tx, ids: readonly string[], reason: string, at: Date): Promise<void> {
+  async markFailed(
+    tx: Tx,
+    ids: readonly string[],
+    f: { readonly reason: string; readonly reference: string; readonly staffId: string },
+    at: Date,
+  ): Promise<void> {
     await tx`
-      UPDATE payouts SET status = 'FAILED', failed_at = ${at}, failure_reason = ${reason}
+      UPDATE payouts SET status = 'FAILED', failed_at = ${at}, failure_reason = ${f.reason},
+        failure_reference = ${f.reference}, failed_by = ${f.staffId}
       WHERE id IN ${tx([...ids])} AND status = 'PROCESSING'`;
   }
 
@@ -321,7 +357,7 @@ export class PayoutsRepository {
   ): Promise<void> {
     await tx`
       UPDATE payouts SET status = 'APPROVED', failed_at = NULL, failure_reason = NULL,
-        bank_account_id = ${bankAccountId}, provider_payout_id = ${reference}
+        failure_reference = NULL, failed_by = NULL, bank_account_id = ${bankAccountId}, provider_payout_id = ${reference}
       WHERE id IN ${tx([...ids])} AND status = 'FAILED'`;
   }
 

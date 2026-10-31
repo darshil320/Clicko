@@ -5,7 +5,7 @@ import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
 import { BookingsService } from '../bookings/bookings.service';
-import type { BookingRow, Tx } from '../bookings/bookings.types';
+import { type BookingRow, SYSTEM_ACTOR, type Tx } from '../bookings/bookings.types';
 import { ACCEPTED_STATUSES } from '../bookings/state-machine';
 import {
   isRefundEvent,
@@ -14,7 +14,12 @@ import {
 } from '../payments/gateways/payment-gateway.port';
 import { PaymentRefundsService } from '../payments/payment-refunds.service';
 import { PaymentsService } from '../payments/payments.service';
-import type { IncomingWebhook, PaymentRecord, PaymentStatus } from '../payments/payments.types';
+import type {
+  IncomingWebhook,
+  NewPayment,
+  PaymentRecord,
+  PaymentStatus,
+} from '../payments/payments.types';
 import { bookingNotFound, conflict } from './http-errors';
 import { toPayBookingResponse } from './views';
 
@@ -27,6 +32,10 @@ export const AUTH_RELEASE_LEAD_MS = 90 * 60_000;
  * the emergency band and split were computed for a lead time that no longer holds.
  */
 export const PAYMENT_GRACE_MS = 30 * 60_000;
+/** Audit L3: the cancellation reason of an unpaid booking whose payment window closed. */
+export const PAYMENT_WINDOW_EXPIRED = 'PAYMENT_WINDOW_EXPIRED';
+/** Audit L3: stale ADVANCE_PENDING bookings cancelled per sweep run. */
+export const STALE_SWEEP_BATCH = 200;
 
 /** Statuses a capture may move a payment out of. Anything else is a replay or a second charge. */
 const CAPTURABLE: readonly PaymentStatus[] = ['CREATED', 'FAILED', 'AUTHORIZED'];
@@ -50,6 +59,27 @@ export type WebhookOutcome =
   | 'IGNORED'
   | 'UNKNOWN_ORDER'
   | 'NEEDS_REVIEW';
+
+/** What paying needs (audit L6: decided under the lock, the gateway called outside it). */
+interface NewOrderPlan {
+  readonly kind: 'NEW';
+  readonly order: NewPayment;
+  /** QUOTED → ADVANCE_PENDING once the order is recorded. */
+  readonly transition: boolean;
+}
+type OrderPlan = { readonly kind: 'EXISTING'; readonly payment: PaymentRecord } | NewOrderPlan;
+
+const samePlan = (a: NewOrderPlan, b: NewOrderPlan): boolean =>
+  a.transition === b.transition &&
+  a.order.purpose === b.order.purpose &&
+  a.order.amountPaise === b.order.amountPaise &&
+  a.order.authorizeOnly === b.order.authorizeOnly;
+
+const nothingToPay = () =>
+  new UnprocessableEntityException({
+    code: 'NOTHING_TO_PAY',
+    message: 'This booking has no amount due',
+  });
 
 interface Applied {
   readonly outcome: WebhookOutcome;
@@ -77,82 +107,78 @@ export class PaymentFlowService {
     @Inject(PaymentRefundsService) private readonly refunds?: PaymentRefundsService,
   ) {}
 
-  /** Opens the advance (or full / authorise-only) payment. Re-asking returns the same open order. */
+  /**
+   * Opens the advance (or full / authorise-only) payment. Re-asking returns the same open order.
+   * Audit L6: the gateway call never runs inside the booking-lock transaction (a slow gateway
+   * would hold the row lock). Plan under the lock → create the gateway order with no transaction
+   * open → record it under the lock again, re-planning first: a concurrent pay that won meanwhile
+   * hands back its own open order (ours is never recorded and simply expires unpaid), and a
+   * booking whose amount changed is refused.
+   */
   async pay(userId: string, bookingId: string): Promise<PayBookingResponse> {
-    const now = this.clock();
-    return this.sql.begin(async (tx) => {
+    const plan = await this.sql.begin(async (tx) => {
       const booking = await this.bookings.lock(tx, bookingId);
       if (booking.userId !== userId) throw bookingNotFound();
-      const payment = await this.payableOrder(tx, booking, now);
-      return toPayBookingResponse(payment, this.payments.gatewayName, this.payments.checkoutKeyId);
+      return this.planOrder(tx, booking, this.clock());
+    });
+    const payment = plan.kind === 'EXISTING' ? plan.payment : await this.openNew(bookingId, plan);
+    return toPayBookingResponse(payment, this.payments.gatewayName, this.payments.checkoutKeyId);
+  }
+
+  private async openNew(bookingId: string, plan: NewOrderPlan): Promise<PaymentRecord> {
+    const reserved = await this.payments.reserveOrder(plan.order);
+    return this.sql.begin(async (tx) => {
+      const booking = await this.bookings.lock(tx, bookingId);
+      const now = this.clock();
+      const again = await this.planOrder(tx, booking, now);
+      if (again.kind === 'EXISTING') return again.payment;
+      if (!samePlan(again, plan)) {
+        throw conflict('BOOKING_CHANGED', 'This booking changed meanwhile. Please try again.');
+      }
+      const payment = await this.payments.insertOrder(tx, plan.order, reserved);
+      if (plan.transition) await this.markAdvancePending(tx, booking, payment, now);
+      return payment;
     });
   }
 
-  /** Verified webhook → payment + booking updates in one tx. Gateway retries are safe no-ops. */
-  async handleWebhook(w: IncomingWebhook): Promise<WebhookOutcome> {
-    const ingest = await this.payments.ingestWebhook(w);
-    if (ingest.kind === 'DUPLICATE') return 'DUPLICATE';
-    if (ingest.kind === 'MALFORMED') return 'NEEDS_REVIEW';
-    const { webhookEventId, event } = ingest;
-    if (event.kind === 'IGNORED') {
-      await this.payments.markWebhookProcessed(webhookEventId, null);
-      return 'IGNORED';
-    }
-    // ADR-0026 D1: a refund settled at the gateway — the refunds module applies it (outbox).
-    if (isRefundEvent(event)) {
-      if (!this.refunds) throw new Error('Refund webhooks need PaymentRefundsService');
-      await this.refunds.relayWebhook(webhookEventId, event, this.clock());
-      return 'APPLIED';
-    }
-    try {
-      const result = await this.sql.begin((tx) => this.apply(tx, event));
-      await this.payments.markWebhookProcessed(webhookEventId, result.note);
-      if (result.note) this.logger.warn(`Webhook ${webhookEventId}: ${result.note}`);
-      return result.outcome;
-    } catch (error) {
-      // processed_at stays NULL: the gateway's retry (same event id) processes it again.
-      await this.payments.markWebhookFailed(
-        webhookEventId,
-        error instanceof Error ? error.message : String(error),
-      );
-      throw error;
-    }
-  }
-
-  private async payableOrder(tx: Tx, booking: BookingRow, now: Date): Promise<PaymentRecord> {
+  /** What paying needs now: the open order, or a new one (validated, nothing written). */
+  private async planOrder(tx: Tx, booking: BookingRow, now: Date): Promise<OrderPlan> {
     if (booking.status === 'ADVANCE_PENDING') {
       if (!paymentWindowOpen(booking, now)) {
         throw conflict('QUOTE_EXPIRED', 'This quote has expired — please start a new booking');
       }
       const open = await this.payments.findOpenForBooking(tx, booking.id);
-      if (open) return open;
+      if (open) return { kind: 'EXISTING', payment: open };
       throw conflict('PAYMENT_NOT_OPEN', 'This booking has no payment awaiting completion');
     }
-    if (booking.status === 'BALANCE_PENDING') return this.openBalance(tx, booking);
+    if (booking.status === 'BALANCE_PENDING') return this.planBalance(tx, booking);
     if (booking.status !== 'QUOTED') {
       throw conflict('BOOKING_NOT_PAYABLE', `A ${booking.status} booking has nothing to pay`);
     }
     if (!booking.quoteExpiresAt || booking.quoteExpiresAt.getTime() <= now.getTime()) {
       throw conflict('QUOTE_EXPIRED', 'This quote has expired — please start a new booking');
     }
-    return this.openAdvance(tx, booking, now);
+    if (booking.advancePaise <= 0n) throw nothingToPay();
+    return {
+      kind: 'NEW',
+      transition: true,
+      order: {
+        bookingId: booking.id,
+        userId: booking.userId,
+        // NONE/NEXT_DAY leave a balance; every other band is paid in full up front (doc 05 §8).
+        purpose: booking.balancePaise > 0n ? 'ADVANCE' : 'FULL',
+        amountPaise: booking.advancePaise,
+        authorizeOnly: booking.emergencyBand === 'HOURS_UNDER_3',
+      },
+    };
   }
 
-  private async openAdvance(tx: Tx, booking: BookingRow, now: Date): Promise<PaymentRecord> {
-    if (booking.advancePaise <= 0n) {
-      throw new UnprocessableEntityException({
-        code: 'NOTHING_TO_PAY',
-        message: 'This booking has no amount due',
-      });
-    }
-    const payment = await this.payments.createOrder(tx, {
-      bookingId: booking.id,
-      userId: booking.userId,
-      // NONE/NEXT_DAY leave a balance; every other band is paid in full up front (doc 05 §8).
-      purpose: booking.balancePaise > 0n ? 'ADVANCE' : 'FULL',
-      amountPaise: booking.advancePaise,
-      authorizeOnly: booking.emergencyBand === 'HOURS_UNDER_3',
-    });
+  private async markAdvancePending(
+    tx: Tx,
+    booking: BookingRow,
+    payment: PaymentRecord,
+    now: Date,
+  ): Promise<void> {
     await this.bookings.transition(tx, {
       bookingId: booking.id,
       to: 'ADVANCE_PENDING',
@@ -166,30 +192,97 @@ export class PaymentFlowService {
         is_auth_only: payment.isAuthOnly,
       },
     });
-    return payment;
   }
 
   /**
    * ADR-0016 D4: the balance — everything charged and not yet paid (extensions and waiting
    * included). The open balance order is reused while it is for the amount still due.
    */
-  private async openBalance(tx: Tx, booking: BookingRow): Promise<PaymentRecord> {
+  private async planBalance(tx: Tx, booking: BookingRow): Promise<OrderPlan> {
     const due = booking.totalPaise - booking.amountPaidPaise;
-    if (due <= 0n) {
-      throw new UnprocessableEntityException({
-        code: 'NOTHING_TO_PAY',
-        message: 'This booking has no amount due',
-      });
-    }
+    if (due <= 0n) throw nothingToPay();
     const open = await this.payments.findOpenForBooking(tx, booking.id);
-    if (open?.purpose === 'BALANCE' && open.amountPaise === due) return open;
-    return this.payments.createOrder(tx, {
-      bookingId: booking.id,
-      userId: booking.userId,
-      purpose: 'BALANCE',
-      amountPaise: due,
-      authorizeOnly: false,
-    });
+    if (open?.purpose === 'BALANCE' && open.amountPaise === due) {
+      return { kind: 'EXISTING', payment: open };
+    }
+    return {
+      kind: 'NEW',
+      transition: false,
+      order: {
+        bookingId: booking.id,
+        userId: booking.userId,
+        purpose: 'BALANCE',
+        amountPaise: due,
+        authorizeOnly: false,
+      },
+    };
+  }
+
+  /**
+   * Audit L3: an ADVANCE_PENDING booking whose payment window closed (quote expiry + grace, or
+   * the start passed) is cancelled — its promo redemption counts again and it leaves the client's
+   * list. Each in its own transaction under the booking lock, re-checked there; the transition
+   * writes the status event and the outbox event in that transaction. A capture arriving later
+   * takes the existing "captured on a cancelled booking" review path. Returns how many.
+   */
+  async cancelStaleAdvances(now: Date = this.clock()): Promise<number> {
+    const ids = await this.bookings.staleAdvancePending(
+      new Date(now.getTime() - PAYMENT_GRACE_MS),
+      now,
+      STALE_SWEEP_BATCH,
+    );
+    let cancelled = 0;
+    for (const id of ids) {
+      const done = await this.sql.begin(async (tx) => {
+        const booking = await this.bookings.lock(tx, id);
+        if (booking.status !== 'ADVANCE_PENDING' || paymentWindowOpen(booking, now)) return false;
+        await this.bookings.transition(tx, {
+          bookingId: id,
+          to: 'CANCELLED_CLIENT',
+          actor: SYSTEM_ACTOR,
+          occurredAt: now,
+          reason: 'The advance was not paid before the quote expired',
+          cancellationReason: PAYMENT_WINDOW_EXPIRED,
+          payload: { reason: PAYMENT_WINDOW_EXPIRED },
+        });
+        return true;
+      });
+      if (done) cancelled += 1;
+    }
+    if (cancelled > 0) this.logger.log(`Cancelled ${cancelled} unpaid ADVANCE_PENDING booking(s)`);
+    return cancelled;
+  }
+
+  /** Verified webhook → payment + booking updates in one tx. Gateway retries are safe no-ops. */
+  async handleWebhook(w: IncomingWebhook): Promise<WebhookOutcome> {
+    const ingest = await this.payments.ingestWebhook(w);
+    if (ingest.kind === 'DUPLICATE') return 'DUPLICATE';
+    if (ingest.kind === 'MALFORMED') return 'NEEDS_REVIEW';
+    const { webhookEventId, event } = ingest;
+    if (event.kind === 'IGNORED') {
+      await this.payments.markWebhookProcessed(webhookEventId, null);
+      return 'IGNORED';
+    }
+    try {
+      // ADR-0026 D1: a refund settled at the gateway — the refunds module applies it (outbox).
+      // Audit L9: inside the same try, so a failed relay is marked failed like any other.
+      if (isRefundEvent(event)) {
+        if (!this.refunds) throw new Error('Refund webhooks need PaymentRefundsService');
+        await this.refunds.relayWebhook(webhookEventId, event, this.clock());
+        return 'APPLIED';
+      }
+      const result = await this.sql.begin((tx) => this.apply(tx, event));
+      await this.payments.markWebhookProcessed(webhookEventId, result.note);
+      if (result.note) this.logger.warn(`Webhook ${webhookEventId}: ${result.note}`);
+      return result.outcome;
+    } catch (error) {
+      // processed_at stays NULL: the gateway's retry (same event id) processes it again.
+      await this.payments.markWebhookFailed(
+        webhookEventId,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
   }
 
   /** Lock order everywhere is booking → payment (ADR-0012 D4): find, lock booking, lock payment. */

@@ -8,6 +8,9 @@ import { isValidIdempotencyKey } from './idempotency.js';
 export interface FetchResponseLike {
   readonly status: number;
   text(): Promise<string>;
+  /** Binary answers (a KYC document): browsers, React Native and Node 18+ all have these. */
+  arrayBuffer?(): Promise<ArrayBuffer>;
+  readonly headers?: { get(name: string): string | null };
 }
 export type FetchLike = (
   url: string,
@@ -47,6 +50,17 @@ export interface RequestSpec<T> {
   readonly auth?: boolean;
   /** Required by every money-mutating route; reuse the same key for retries of one action. */
   readonly idempotencyKey?: string;
+  /**
+   * A binary answer: a 2xx body is read as bytes and `schema` validates `{ bytes, contentType }`.
+   * Errors are still the JSON envelope.
+   */
+  readonly binary?: boolean;
+}
+
+/** What a binary request resolves to (before its schema). */
+export interface BinaryBody {
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -67,7 +81,7 @@ export function createHttp(options: HttpOptions): Http {
   let refreshing: Promise<boolean> | null = null;
 
   async function send<T>(spec: RequestSpec<T>, accessToken: string | null): Promise<T> {
-    const headers: Record<string, string> = { accept: 'application/json' };
+    const headers: Record<string, string> = { accept: spec.binary ? '*/*' : 'application/json' };
     if (spec.body !== undefined) headers['content-type'] = 'application/json';
     if (accessToken) headers.authorization = `Bearer ${accessToken}`;
     if (spec.idempotencyKey !== undefined) headers['idempotency-key'] = spec.idempotencyKey;
@@ -83,6 +97,14 @@ export function createHttp(options: HttpOptions): Http {
         ...(spec.body === undefined ? {} : { body: JSON.stringify(spec.body) }),
         ...(controller ? { signal: controller.signal } : {}),
       });
+      if (spec.binary && response.status >= 200 && response.status < 300) {
+        if (!response.arrayBuffer) throw new Error('this fetch cannot read binary answers');
+        const body: BinaryBody = {
+          bytes: new Uint8Array(await response.arrayBuffer()),
+          contentType: response.headers?.get('content-type') ?? 'application/octet-stream',
+        };
+        return spec.schema.parse(body);
+      }
       text = await response.text();
     } catch (error) {
       const aborted = controller?.signal.aborted === true;

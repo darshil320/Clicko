@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JobRegistry } from './infra/queues/job-registry';
 import { JOB } from './infra/queues/queue-names';
@@ -65,13 +66,13 @@ describe.runIf(TEST_DATABASE_URL)(
     beforeAll(async () => {
       e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
       await insertPhotographer(e2e.db.sql, {
-        phone: '+919825079001',
+        phone: '+919999179001',
         km: 3,
         categories: [{ code: 'PORTRAIT', tier: 'EXPERT' }],
       });
-      proToken = await e2e.proLogin('+919825079001');
+      proToken = await e2e.proLogin('+919999179001');
       const walked = await checkedOutBooking(e2e, {
-        clientPhone: '+919700079001',
+        clientPhone: '+919999279001',
         proToken,
         declaredFrames: 1,
       });
@@ -115,7 +116,7 @@ describe.runIf(TEST_DATABASE_URL)(
       expect(res.status).toBe(200);
       expect(res.json.data).toMatchObject({ bookingStatus: 'QA', qaStatus: null, links: [] });
       expect(res.json.data.balanceDuePaise).toBeGreaterThan(0);
-      const stranger = await tokenFor(e2e, 'USER', await insertUser(e2e.db.sql, '+919700079002'));
+      const stranger = await tokenFor(e2e, 'USER', await insertUser(e2e.db.sql, '+919999279002'));
       const theirs = await e2e.call('GET', `/bookings/${bookingId}/delivery`, { token: stranger });
       expect(theirs.status).toBe(404);
     });
@@ -201,15 +202,54 @@ describe.runIf(TEST_DATABASE_URL)(
 
     it('a link opens through Clickco (counted), never exposing the provider link', async () => {
       const raw = links.find((l) => l.kind === 'RAW_PHOTO') as Json;
-      const res = await e2e.call('GET', raw.path);
+      // Audit M5: never a redirect to the provider — the files are listed and streamed by Clickco.
+      const res = await fetch(`${e2e.baseUrl}${raw.path}`, { redirect: 'manual' });
       expect(res.status).toBe(200);
-      expect(res.json.data).toMatchObject({ kind: 'RAW_PHOTO', fileCount: 1 });
-      expect(JSON.stringify(res.json)).not.toContain('local://');
+      expect(res.headers.get('location')).toBeNull();
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      const folder = ((await res.json()) as Json).data;
+      expect(folder).toMatchObject({ kind: 'RAW_PHOTO', fileCount: 1 });
+      expect(folder.files).toHaveLength(1);
+      expect(JSON.stringify(folder)).not.toMatch(/local:\/\/|https?:\/\//);
       const [row] = await e2e.db.sql<{ access_count: number }[]>`
       SELECT access_count FROM delivery_links WHERE booking_id = ${bookingId} AND kind = 'RAW_PHOTO'`;
       expect(row?.access_count).toBe(1);
+
+      const file = folder.files[0] as Json;
+      const download = await fetch(`${e2e.baseUrl}${file.path}`, { redirect: 'manual' });
+      expect(download.status).toBe(200);
+      expect(download.headers.get('content-disposition')).toMatch(/^attachment; filename=/);
+      expect(download.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(download.headers.get('cache-control')).toBe('no-store');
+      const bytes = Buffer.from(await download.arrayBuffer());
+      expect(bytes.length).toBe(file.sizeBytes);
+      // A file of another kind (or booking) is never served under this link.
+      const [jpegAsset] = await e2e.db.sql<{ id: string }[]>`
+      SELECT id FROM media_assets WHERE booking_id = ${bookingId} AND kind = 'JPEG_PHOTO' LIMIT 1`;
+      const wrong = await e2e.call('GET', `${raw.path}/files/${jpegAsset?.id}`);
+      expect(wrong.status).toBe(404);
       expect((await e2e.call('GET', `/d/${'A'.repeat(43)}`)).status).toBe(404);
       expect((await e2e.call('GET', '/d/short')).status).toBe(404);
+    });
+
+    it('audit L2: only the sha256 of a link token is stored', async () => {
+      const rows = await e2e.db.sql<{ public_token: string | null; public_token_sha256: string }[]>`
+      SELECT public_token, public_token_sha256 FROM delivery_links WHERE booking_id = ${bookingId}
+      ORDER BY kind`;
+      expect(rows.length).toBe(2);
+      for (const link of links) {
+        const token = String(link.path).slice('/d/'.length);
+        const hash = createHash('sha256').update(token).digest('hex');
+        expect(rows.map((r) => r.public_token_sha256)).toContain(hash);
+      }
+      expect(rows.every((r) => r.public_token === null)).toBe(true);
+      // The owner sees the same link again later (it is derived, not stored).
+      const again = await e2e.call('GET', `/bookings/${bookingId}/delivery`, {
+        token: clientToken,
+      });
+      expect(again.json.data.links.map((l: Json) => l.path).sort()).toEqual(
+        links.map((l) => l.path).sort(),
+      );
     });
 
     it('+7 days: RAW files are purged for good and the RAW link is gone', async () => {
@@ -254,12 +294,12 @@ describe.runIf(TEST_DATABASE_URL)('SLA breach and zero-balance delivery', () => 
   beforeAll(async () => {
     e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
     proId = await insertPhotographer(e2e.db.sql, {
-      phone: '+919825079101',
+      phone: '+919999179101',
       km: 3,
       categories: [{ code: 'PORTRAIT', tier: 'EXPERT' }],
       acceptsEmergency: true,
     });
-    proToken = await e2e.proLogin('+919825079101');
+    proToken = await e2e.proLogin('+919999179101');
   }, 60_000);
 
   afterAll(async () => {
@@ -268,7 +308,7 @@ describe.runIf(TEST_DATABASE_URL)('SLA breach and zero-balance delivery', () => 
 
   it('a late delivery: milestones missed, the promise breached, a provisional remedy for review', async () => {
     const { bookingId } = await checkedOutBooking(e2e, {
-      clientPhone: '+919700079101',
+      clientPhone: '+919999279101',
       proToken,
       declaredFrames: 1,
     });
@@ -311,7 +351,7 @@ describe.runIf(TEST_DATABASE_URL)('SLA breach and zero-balance delivery', () => 
   it('an emergency booking paid in full goes QA → DELIVERED at once (nothing due)', async () => {
     await freshPro();
     const { bookingId, userId } = await checkedOutBooking(e2e, {
-      clientPhone: '+919700079102',
+      clientPhone: '+919999279102',
       proToken,
       declaredFrames: 1,
       startInMs: 12 * HOUR,

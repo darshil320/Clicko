@@ -73,7 +73,12 @@ export class PayoutFilesService {
    * can never pay anyone twice; a lost file is recovered by marking its transfers failed and
    * sending them again (new references). The audit row lists the references, in the same tx.
    */
-  async createBankFile(batchId: string, audit: TxHook): Promise<FileWire> {
+  async createBankFile(
+    batchId: string,
+    staffId: string,
+    now: Date,
+    audit: TxHook,
+  ): Promise<FileWire> {
     return this.sql.begin(async (tx) => {
       const batch = await this.batches.lock(tx, batchId);
       if (!batch) {
@@ -97,6 +102,8 @@ export class PayoutFilesService {
         const sent = await this.payouts.markSent(
           tx,
           ready.map((p) => p.id),
+          staffId,
+          now,
         );
         if (sent !== ready.length) throw conflict('TRANSFER_CHANGED', 'Reload and try again.');
         await audit(tx, {

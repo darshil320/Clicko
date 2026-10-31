@@ -1,10 +1,16 @@
-import type { PayoutBatchKind } from '@clickco/contracts';
+import { PAYOUT_EARLY_RESEND_DAYS, type PayoutBatchKind } from '@clickco/contracts';
 import { fromPaiseBigint } from '@clickco/utils';
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type postgres from 'postgres';
 import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
-import { appendDomainEvent } from '../../infra/outbox/outbox';
+import { appendDomainEvent, appendDomainEventOnce } from '../../infra/outbox/outbox';
 import { PayoutAssessmentService } from './payout-assessment.service';
 import { PayoutLedger } from './payout-ledger';
 import { BANK_FILE_PROVIDER, PAYOUT_CONFIG } from './payouts.config';
@@ -26,6 +32,20 @@ const NOT_FOUND = { code: 'BATCH_NOT_FOUND', message: 'Payout batch not found' }
 const sum = (ps: readonly PayoutRecord[], f: (p: PayoutRecord) => bigint): bigint =>
   ps.reduce((s, p) => s + f(p), 0n);
 const n = fromPaiseBigint;
+const DAY_MS = 86_400_000;
+
+/** A bank's return of a transfer, as finance records it (audit H2). */
+export interface TransferFailure {
+  readonly reason: string;
+  /** The bank's return / rejection reference. */
+  readonly bankReference: string;
+}
+
+const SECOND_PERSON = {
+  code: 'SECOND_PERSON_REQUIRED',
+  message:
+    'You created the bank file this transfer went out in, so another finance person has to mark it failed or send it again.',
+};
 
 /**
  * Payout batches (ADR-0026 D3): a draft of everything due → export (amounts lock, vendor
@@ -295,11 +315,8 @@ export class PayoutBatchesService {
         if (status !== 'PROCESSING') {
           throw conflict('NOT_IN_BANK_FILE', 'Create the bank file with this transfer first.');
         }
-        if (await this.payouts.utrUsedByOther(tx, t.utr, t.photographerId)) {
-          throw conflict(
-            'UTR_IN_USE',
-            `UTR ${t.utr} is already recorded for another photographer.`,
-          );
+        if (await this.payouts.utrUsedElsewhere(tx, t.utr, batchId, t.photographerId)) {
+          throw conflict('UTR_IN_USE', `UTR ${t.utr} is already recorded for another transfer.`);
         }
         const ids = mine.map((p) => p.id);
         if ((await this.payouts.markPaid(tx, ids, t.utr, now)) !== ids.length) {
@@ -333,24 +350,44 @@ export class PayoutBatchesService {
     });
   }
 
-  /** The bank returned a transfer: it waits, with its reason, until it is sent again. */
+  /**
+   * Maker–checker for mark-failed and send-again (audit H2): whoever created the bank file a
+   * transfer went out in may not declare it failed or resend it. Checked before the caller's
+   * authenticator code is spent, and again inside each change's transaction.
+   */
+  async assertSecondPerson(batchId: string, photographerId: string, staffId: string) {
+    const mine = this.transfer(await this.payouts.forBatch(this.sql, batchId), photographerId);
+    this.secondPerson(mine, staffId);
+  }
+
+  private secondPerson(mine: readonly PayoutRecord[], staffId: string): void {
+    if (mine.some((p) => p.bankFileBy === staffId)) throw new ForbiddenException(SECOND_PERSON);
+  }
+
+  /**
+   * The bank returned a transfer: it waits, with the bank's return reference and the reason,
+   * until it is sent again. Never by the person who made its bank file (audit H2).
+   */
   async markFailed(
     batchId: string,
     photographerId: string,
-    reason: string,
+    failure: TransferFailure,
+    staffId: string,
     now: Date,
     audit: BatchAudit,
   ): Promise<void> {
+    const { reason, bankReference } = failure;
     await this.sql.begin(async (tx) => {
       await this.exportedBatch(tx, batchId);
       const mine = this.transfer(await this.payouts.forBatch(tx, batchId), photographerId);
       if (mine[0]?.status !== 'PROCESSING') {
         throw conflict('NOT_AWAITING', 'Only a transfer waiting for payment can be marked failed.');
       }
+      this.secondPerson(mine, staffId);
       await this.payouts.markFailed(
         tx,
         mine.map((p) => p.id),
-        reason,
+        { reason, reference: bankReference, staffId },
         now,
       );
       await appendDomainEvent(tx, {
@@ -358,19 +395,35 @@ export class PayoutBatchesService {
         aggregateKind: 'photographer',
         aggregateId: photographerId,
         occurredAt: now,
-        payload: { batch_id: batchId, photographer_id: photographerId, reason },
+        payload: {
+          batch_id: batchId,
+          photographer_id: photographerId,
+          reason,
+          bank_reference: bankReference,
+        },
       });
       await audit(batchId)(tx, {
         before: { photographer_id: photographerId, state: 'AWAITING_PAYMENT' },
-        after: { photographer_id: photographerId, state: 'FAILED', reason },
+        after: {
+          photographer_id: photographerId,
+          state: 'FAILED',
+          reason,
+          bank_reference: bankReference,
+          bank_file_by: mine[0]?.bankFileBy ?? null,
+        },
       });
     });
   }
 
-  /** Send a failed transfer again (to the bank account now on file) in the next bank file. */
+  /**
+   * Send a failed transfer again (to the bank account now on file) in the next bank file. Never by
+   * the person who made its bank file; a resend within 7 days of the original file raises a HIGH
+   * ops alert, since a "returned" transfer may still land (audit H2).
+   */
   async retry(
     batchId: string,
     photographerId: string,
+    staffId: string,
     now: Date,
     audit: BatchAudit,
   ): Promise<void> {
@@ -385,25 +438,60 @@ export class PayoutBatchesService {
     await this.sql.begin(async (tx) => {
       await this.exportedBatch(tx, batchId);
       const mine = this.transfer(await this.payouts.forBatch(tx, batchId), photographerId);
-      if (mine[0]?.status !== 'FAILED') {
+      const first = mine[0];
+      if (first?.status !== 'FAILED') {
         throw conflict('NOT_FAILED', 'Only a failed transfer can be sent again.');
       }
+      this.secondPerson(mine, staffId);
+      const reference = retryReference(first.reference);
       await this.payouts.retry(
         tx,
         mine.map((p) => p.id),
         bank.accountId,
-        retryReference(mine[0]?.reference ?? null),
+        reference,
       );
       await appendDomainEvent(tx, {
         eventType: 'payout.transfer_retried',
         aggregateKind: 'photographer',
         aggregateId: photographerId,
         occurredAt: now,
-        payload: { batch_id: batchId, photographer_id: photographerId },
+        payload: { batch_id: batchId, photographer_id: photographerId, reference },
       });
+      const early = earlyResend(first.firstBankFileAt, now);
+      if (early !== null) {
+        await appendDomainEventOnce(tx, {
+          eventType: 'ops.alert',
+          aggregateKind: 'payout_batch',
+          aggregateId: batchId,
+          occurredAt: now,
+          dedupeKey: `payout.early_resend:${batchId}:${photographerId}:${reference}`,
+          payload: {
+            severity: 'HIGH',
+            source_event_id: null,
+            source_event_type: 'payout.early_resend',
+            details: {
+              batch_id: batchId,
+              photographer_id: photographerId,
+              reference,
+              original_file_at: early.toISOString(),
+              bank_reference: first.failureReference,
+              sent_again_by: staffId,
+            },
+          },
+        });
+      }
       await audit(batchId)(tx, {
-        before: { photographer_id: photographerId, state: 'FAILED' },
-        after: { photographer_id: photographerId, state: 'READY_FOR_BANK_FILE' },
+        before: {
+          photographer_id: photographerId,
+          state: 'FAILED',
+          bank_reference: first.failureReference,
+        },
+        after: {
+          photographer_id: photographerId,
+          state: 'READY_FOR_BANK_FILE',
+          reference,
+          early_resend: early !== null,
+        },
       });
     });
   }
@@ -447,6 +535,14 @@ export class PayoutBatchesService {
       payload: { batch_id: batch.id, reference: batch.reference },
     });
   }
+}
+
+/** The original file's time when a resend comes within PAYOUT_EARLY_RESEND_DAYS of it, else null. */
+export function earlyResend(firstFileAt: Date | null, now: Date): Date | null {
+  if (firstFileAt === null) return null;
+  return now.getTime() - firstFileAt.getTime() < PAYOUT_EARLY_RESEND_DAYS * DAY_MS
+    ? firstFileAt
+    : null;
 }
 
 /** PO20261214W001 → PO20261214W001R1 → …R2: a resent transfer never reuses a reference. */

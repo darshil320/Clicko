@@ -6,11 +6,13 @@ import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
 import { appendDomainEvent, appendDomainEventOnce } from '../../infra/outbox/outbox';
 import {
+  type GatewayEvent,
   type GatewayName,
   PAYMENT_GATEWAY,
   type PaymentFailedEvent,
   type PaymentGatewayPort,
 } from './gateways/payment-gateway.port';
+import { rejectionBucket, webhookRecord } from './gateways/webhook-record';
 import { InvoicesService } from './invoices.service';
 import { LedgerService } from './ledger/ledger.service';
 import { advanceCapturedEntries, gatewayFeeEntries } from './ledger/ledger-entries';
@@ -39,15 +41,21 @@ function captureTxnKind(purpose: PaymentPurpose): 'ADVANCE_CAPTURED' | 'BALANCE_
   if (purpose === 'BALANCE') return 'BALANCE_CAPTURED';
   throw new Error(`No ledger posting is defined yet for a captured ${purpose} payment`);
 }
+/** A gateway order created ahead of its payments row (audit L6). */
+export interface ReservedOrder {
+  readonly id: string;
+  readonly providerOrderId: string;
+}
+
 const sha256 = (b: Buffer): string => createHash('sha256').update(b).digest('hex');
 
-function parsePayload(rawBody: Buffer): { payload: postgres.JSONValue; eventType: string } {
+/** The gateway's event name, for the record (the payload itself is never kept, audit L1). */
+function eventTypeOf(rawBody: Buffer): string {
   try {
-    const payload = JSON.parse(rawBody.toString('utf8')) as postgres.JSONValue;
-    const event = (payload as { event?: unknown } | null)?.event;
-    return { payload, eventType: typeof event === 'string' ? event.slice(0, 100) : 'unknown' };
+    const event = (JSON.parse(rawBody.toString('utf8')) as { event?: unknown } | null)?.event;
+    return typeof event === 'string' ? event.slice(0, 100) : 'unknown';
   } catch {
-    return { payload: { unparseable: true }, eventType: 'unparseable' };
+    return 'unparseable';
   }
 }
 
@@ -80,17 +88,29 @@ export class PaymentsService {
 
   /** Opens a gateway order and records it as a CREATED payment, in the caller's tx. */
   async createOrder(tx: Tx, p: NewPayment): Promise<PaymentRecord> {
+    return this.insertOrder(tx, p, await this.reserveOrder(p));
+  }
+
+  /**
+   * The gateway order alone (audit L6): call it with NO transaction open, then `insertOrder`
+   * under the booking lock. An order that is never recorded simply expires unpaid.
+   */
+  async reserveOrder(p: NewPayment): Promise<ReservedOrder> {
     const id = randomUUID();
     const { providerOrderId } = await this.gateway.createOrder({
       amountPaise: p.amountPaise,
       receipt: id,
       authorizeOnly: p.authorizeOnly,
     });
+    return { id, providerOrderId };
+  }
+
+  insertOrder(tx: Tx, p: NewPayment, reserved: ReservedOrder): Promise<PaymentRecord> {
     return this.payments.insert(tx, {
       ...p,
-      id,
+      id: reserved.id,
       provider: this.gateway.name,
-      providerOrderId,
+      providerOrderId: reserved.providerOrderId,
       createdAt: this.clock(),
     });
   }
@@ -122,26 +142,25 @@ export class PaymentsService {
   }
 
   /**
-   * Verify first (an invalid signature is stored with signature_valid=false, then 400), then
-   * dedupe, then parse. Processing is the caller's job. The dedupe key is the gateway event id
-   * bound to a hash of the signed body: the event-id header is not covered by the signature, so
-   * a replayed body under a fresh id is a new row (made harmless by payment-level idempotency)
-   * and a forged id can never pre-claim the genuine event.
+   * Verify first (an invalid signature is counted, audit M3, then 400), then parse, then dedupe.
+   * Processing is the caller's job. The dedupe key is the gateway event id bound to a hash of the
+   * signed body: the event-id header is not covered by the signature, so a replayed body under a
+   * fresh id is a new row (made harmless by payment-level idempotency) and a forged id can never
+   * pre-claim the genuine event. Only the parsed fields and the body hash are stored (audit L1).
    */
   async ingestWebhook(w: IncomingWebhook): Promise<IngestResult> {
     if (w.provider !== this.gateway.routeSlug) {
       throw new NotFoundException({ code: 'UNKNOWN_PROVIDER', message: 'Not found' });
     }
     const receivedAt = this.clock();
-    const bodyHash = sha256(w.rawBody);
-    const { payload, eventType } = parsePayload(w.rawBody);
+    const bodySha256 = sha256(w.rawBody);
     if (!this.gateway.verifyWebhookSignature(w.rawBody, w.signature)) {
-      // Unauthenticated input: keep evidence, not the attacker's payload.
-      const evidence = { sha256: bodyHash, bytes: w.rawBody.length };
-      await this.webhooks.recordInvalid(this.sql, {
+      // Unauthenticated input: a counter and a hash sample, never the attacker's payload.
+      await this.webhooks.countRejected(this.sql, {
         provider: this.gateway.name,
-        eventType,
-        payload: evidence,
+        bucketStart: rejectionBucket(receivedAt),
+        bodySha256,
+        bodyBytes: w.rawBody.length,
         receivedAt,
       });
       this.logger.warn(`Rejected a ${this.gateway.name} webhook with an invalid signature`);
@@ -150,19 +169,31 @@ export class PaymentsService {
         message: 'Invalid webhook signature',
       });
     }
+    let event: GatewayEvent | null;
+    try {
+      event = this.gateway.parseWebhook(w.rawBody);
+    } catch {
+      event = null;
+    }
+    const eventType = event?.eventType ?? eventTypeOf(w.rawBody);
     const eventId = w.eventId?.trim();
     const providerEventId =
-      eventId && eventId.length <= MAX_EVENT_ID_LENGTH ? `${eventId}#${bodyHash}` : bodyHash;
-    const row = { provider: this.gateway.name, eventType, payload, receivedAt, providerEventId };
-    const claim = await this.webhooks.claim(this.sql, row);
+      eventId && eventId.length <= MAX_EVENT_ID_LENGTH ? `${eventId}#${bodySha256}` : bodySha256;
+    const claim = await this.webhooks.claim(this.sql, {
+      provider: this.gateway.name,
+      eventType: eventType.slice(0, 100),
+      payload: webhookRecord(event, eventType),
+      bodySha256,
+      receivedAt,
+      providerEventId,
+    });
     if (claim.alreadyProcessed) return { kind: 'DUPLICATE' };
-    try {
-      return { kind: 'NEW', webhookEventId: claim.id, event: this.gateway.parseWebhook(w.rawBody) };
-    } catch {
+    if (event === null) {
       await this.markWebhookProcessed(claim.id, 'MALFORMED: payload did not match the schema');
       this.logger.warn(`Webhook ${claim.id} is signed but malformed — needs review`);
       return { kind: 'MALFORMED' };
     }
+    return { kind: 'NEW', webhookEventId: claim.id, event };
   }
 
   /**

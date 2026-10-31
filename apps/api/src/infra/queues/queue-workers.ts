@@ -4,22 +4,20 @@ import {
   Logger,
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 import { type Job, Worker } from 'bullmq';
 import { ENV, type Env } from '../../config/env';
 import { BullQueues } from './bull-queues';
 import { JobRegistry } from './job-registry';
-import {
-  QUEUE,
-  QUEUE_OF,
-  type QueueName,
-  REPEATABLE_JOBS,
-  WORKER_CONCURRENCY,
-} from './queue-names';
+import { PROCESS_ROLE, type ProcessRole, queuesFor, repeatablesFor } from './process-role';
+import { QUEUE_OF, type QueueName, WORKER_CONCURRENCY } from './queue-names';
 
 /**
  * Starts one BullMQ worker per queue and upserts the repeatable jobs, unless QUEUE_WORKERS=off
  * (tests, and API instances that should only enqueue). Every job is routed through JobRegistry.
+ * Audit H1: with MEDIA_WORKER_ISOLATED the API skips the media-export queue, which only the
+ * separate media worker (worker.ts, PROCESS_ROLE `media-worker`) consumes.
  */
 @Injectable()
 export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -30,6 +28,7 @@ export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdo
     @Inject(ENV) private readonly env: Env,
     @Inject(BullQueues) private readonly queues: BullQueues,
     @Inject(JobRegistry) private readonly registry: JobRegistry,
+    @Optional() @Inject(PROCESS_ROLE) private readonly role: ProcessRole = 'api',
   ) {}
 
   /**
@@ -38,7 +37,9 @@ export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdo
    */
   onApplicationBootstrap(): void {
     if (this.env.QUEUE_WORKERS === 'off') return;
-    this.workers = Object.values(QUEUE).map((name) => this.startWorker(name));
+    this.workers = queuesFor(this.role, this.env.MEDIA_WORKER_ISOLATED).map((name) =>
+      this.startWorker(name),
+    );
     void this.registerRepeatables().catch((error: unknown) =>
       this.logger.error(
         `Could not register repeatable jobs: ${error instanceof Error ? error.message : String(error)}`,
@@ -47,7 +48,7 @@ export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdo
   }
 
   private async registerRepeatables(): Promise<void> {
-    for (const r of REPEATABLE_JOBS) {
+    for (const r of repeatablesFor(this.role, this.env.MEDIA_WORKER_ISOLATED)) {
       await this.queues
         .get(QUEUE_OF[r.job])
         .upsertJobScheduler(r.job, { every: r.everyMs }, { name: r.job, data: {} });

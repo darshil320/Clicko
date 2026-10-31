@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../common/clock';
 import { ENV, type Env } from '../../config/env';
@@ -19,7 +20,10 @@ import { WebhookEventsRepository } from './repositories/webhook-events.repositor
 /** env.ts guarantees the sandbox never runs in staging/production and that Razorpay has its keys. */
 function gatewayFor(env: Env, clock: Clock): PaymentGatewayPort {
   if (env.PAYMENT_GATEWAY === 'sandbox') {
-    return new SandboxGateway(env.SANDBOX_WEBHOOK_SECRET, clock);
+    // Audit L4: never a public default. env.ts requires an explicit secret outside tests; a test
+    // that sets none gets a random one, so no shared string can ever sign a webhook.
+    const secret = env.SANDBOX_WEBHOOK_SECRET ?? randomBytes(32).toString('hex');
+    return new SandboxGateway(secret, clock);
   }
   const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET } = env;
   if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET || !RAZORPAY_WEBHOOK_SECRET) {

@@ -198,23 +198,40 @@ export class SupplyDeskService {
     };
   }
 
-  /** The 5-minute signed link; audited `kyc.document_view` before it is returned. */
+  /**
+   * Audit M2: a single-use, 5-minute Clickco path (never a provider URL), bound to the caller;
+   * audited `kyc.document_view` before it is returned.
+   */
   async documentLink(
     caller: StaffCaller,
     ctx: AuditContext,
     documentId: string,
   ): Promise<AdminDocumentLink> {
-    const link = await this.kyc.viewLink({
+    const link = await this.kyc.issueViewToken({
       id: documentId,
       scope: caller.scope,
+      staffId: caller.id,
       now: this.clock(),
       audit: this.audit.hook(ctx, 'photographer_document', documentId),
     });
-    return {
-      url: link.url,
-      expiresAt: link.expiresAt.toISOString(),
-      opensInBrowser: link.url.startsWith('https://'),
-    };
+    return { path: link.path, expiresAt: link.expiresAt.toISOString() };
+  }
+
+  /** Consumes the token and opens the bytes; every open writes `kyc.document_opened`. */
+  async openDocument(caller: StaffCaller, ctx: AuditContext, token: string) {
+    const opened = await this.kyc.openWithToken({
+      token,
+      staffId: caller.id,
+      scope: caller.scope,
+      now: this.clock(),
+    });
+    await this.audit.recordAlone(ctx, {
+      action: 'kyc.document_opened',
+      entityKind: 'photographer_document',
+      entityId: opened.document.id,
+      after: { photographer_id: opened.document.photographerId, kind: opened.document.kind },
+    });
+    return opened;
   }
 
   async decideKyc(

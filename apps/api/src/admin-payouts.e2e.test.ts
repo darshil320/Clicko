@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JobRegistry } from './infra/queues/job-registry';
 import { JOB } from './infra/queues/queue-names';
+import { SecretBox } from './modules/admin/auth/secret-box';
+import { base32Decode } from './modules/admin/auth/totp';
 import { checkedOutBooking, fakeFile, SIGNATURES } from './modules/media/__tests__/media-fixtures';
 import { BANK_ACCOUNT_CIPHER, type BankAccountCipher } from './modules/payouts/bank-account-cipher';
 import { PayoutsService } from './modules/payouts/payouts.service';
@@ -10,7 +12,7 @@ import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
 import { setNow } from './test-support/onsite-fixtures';
 import { insertPhotographer } from './test-support/photographer-fixtures';
 import { TEST_DATABASE_URL } from './test-support/scratch-db';
-import { bootstrapStaff, cityIdOf, staffToken } from './test-support/staff-fixtures';
+import { bootstrapStaff, cityIdOf, codeFor, staffToken } from './test-support/staff-fixtures';
 
 /** Monday 7 Dec 2026, 10:00 IST. */
 const NOW = new Date('2026-12-07T04:30:00.000Z');
@@ -20,6 +22,8 @@ const ACCOUNT = '001234567890';
 const PAN = 'ABCPE1234F';
 let keySeq = 0;
 const idem = () => `admin-payouts-${String(++keySeq).padStart(6, '0')}`;
+/** Every test staff member's authenticator secret (base32; the replay guard is per person). */
+const TOTP = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
 /**
  * ADR-0026 D3 end to end: a booking walked to DELIVERED accrues a payout (due +3 days); a
@@ -30,7 +34,7 @@ const idem = () => `admin-payouts-${String(++keySeq).padStart(6, '0')}`;
  */
 describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
   let e2e: E2eApp;
-  const staff = {} as Record<'finance' | 'financeSurat' | 'ops' | 'admin', string>;
+  const staff = {} as Record<'finance' | 'finance2' | 'financeSurat' | 'ops' | 'admin', string>;
   let proId: string;
   let bookingId: string;
   let batchId: string;
@@ -44,6 +48,11 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
       idempotencyKey: idem(),
       ...(body === undefined ? {} : { body }),
     });
+  /** A fresh authenticator code (one step later, so it is never a replay). */
+  const code = () => {
+    e2e.advance(30_000);
+    return codeFor(e2e, TOTP);
+  };
   const audits = (action: string) =>
     e2e.db.sql<{ entity_id: string | null; after_state: Json }[]>`
       SELECT entity_id, after_state FROM audit_logs WHERE action = ${action} ORDER BY id`;
@@ -69,16 +78,22 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
     ).id;
     staff.ops = (await bootstrapStaff(e2e, 'ops@clickco.test', 'OPS_AGENT')).id;
     staff.admin = (await bootstrapStaff(e2e, 'admin@clickco.test', 'SUPER_ADMIN')).id;
+    staff.finance2 = (await bootstrapStaff(e2e, 'finance-2@clickco.test', 'FINANCE')).id;
+    const box = new SecretBox(e2e.env.STAFF_TOTP_KEY);
+    for (const id of Object.values(staff)) {
+      await e2e.db.sql`
+        UPDATE staff_users SET totp_secret = ${box.seal(base32Decode(TOTP), id)} WHERE id = ${id}`;
+    }
 
     proId = await insertPhotographer(e2e.db.sql, {
-      phone: '+919825079401',
+      phone: '+919999179401',
       name: 'Asha Patel',
       km: 3,
       categories: [{ code: 'PORTRAIT', tier: 'EXPERT' }],
     });
-    const proToken = await e2e.proLogin('+919825079401');
+    const proToken = await e2e.proLogin('+919999179401');
     const walked = await checkedOutBooking(e2e, {
-      clientPhone: '+919700079401',
+      clientPhone: '+919999279401',
       proToken,
       declaredFrames: 1,
     });
@@ -214,7 +229,9 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
     });
     const again = await post('finance', '/admin/payouts/batches', { kind: 'OFF_CYCLE' });
     expect([again.status, again.json.error.code]).toEqual([409, 'DRAFT_EXISTS']);
-    const early = await post('finance', `/admin/payouts/batches/${draft.json.data.id}/bank-file`);
+    const early = await post('finance', `/admin/payouts/batches/${draft.json.data.id}/bank-file`, {
+      code: code(),
+    });
     expect([early.status, early.json.error.code]).toEqual([409, 'NOT_EXPORTED']);
 
     const discarded = await post('finance', `/admin/payouts/batches/${draft.json.data.id}/discard`);
@@ -228,7 +245,15 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
   });
 
   it('export: amounts lock, the vendor invoice and the ledger are written, each txn balanced', async () => {
-    const res = await post('finance', `/admin/payouts/batches/${batchId}/export`);
+    // Audit H2: a fresh authenticator code, or nothing happens.
+    const noCode = await post('finance', `/admin/payouts/batches/${batchId}/export`, {});
+    expect(noCode.status).toBe(400);
+    const wrong = await post('finance', `/admin/payouts/batches/${batchId}/export`, {
+      code: '000000',
+    });
+    expect([wrong.status, wrong.json.error.code]).toEqual([422, 'STEP_UP_CODE_INVALID']);
+    expect((await payout()).status).toBe('PENDING');
+    const res = await post('finance', `/admin/payouts/batches/${batchId}/export`, { code: code() });
     expect(res.status).toBe(200);
     expect(res.json.data).toMatchObject({ state: 'EXPORTED', transfersReady: 1 });
     expect(res.json.data.transfers[0]).toMatchObject({
@@ -238,6 +263,7 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
     const p = await payout();
     expect(p.status).toBe('APPROVED');
     const notSent = await post('finance', `/admin/payouts/batches/${batchId}/mark-paid`, {
+      code: code(),
       transfers: [{ photographerId: proId, utr: 'HDFCN26121400001' }],
     });
     expect([notSent.status, notSent.json.error.code]).toEqual([409, 'NOT_IN_BANK_FILE']);
@@ -255,12 +281,18 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
       { txn_kind: 'TDS_WITHHELD', account: 'TDS_PAYABLE', net: '-40000' },
       { txn_kind: 'TDS_WITHHELD', account: 'VENDOR_PAYABLE', net: '40000' },
     ]);
-    const twice = await post('finance', `/admin/payouts/batches/${batchId}/export`);
+    const twice = await post('finance', `/admin/payouts/batches/${batchId}/export`, {
+      code: code(),
+    });
     expect([twice.status, twice.json.error.code]).toEqual([409, 'ALREADY_EXPORTED']);
   });
 
   it('the bank file: full account number in the file only, audited, and never written twice', async () => {
-    const res = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`);
+    const noCode = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`);
+    expect(noCode.status).toBe(400);
+    const res = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`, {
+      code: code(),
+    });
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(res.json.data).toMatchObject({
@@ -280,43 +312,92 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
       },
     ]);
     // A second file would pay everyone again: refused, and the account number is never stored.
-    const again = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`);
+    const again = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`, {
+      code: code(),
+    });
     expect([again.status, again.json.error.code]).toEqual([409, 'NOTHING_NEW']);
     expect((await payout()).status).toBe('PROCESSING');
+    expect(detail.json.data.transfers[0].sentBy).toEqual({
+      id: staff.finance,
+      name: 'Test FINANCE',
+    });
     const stored = await e2e.db.sql`
       SELECT 1 FROM idempotency_keys WHERE response_body::text LIKE ${`%${ACCOUNT}%`}`;
     expect(stored).toHaveLength(0);
   });
 
   it('a returned transfer is marked failed, sent again, then paid with its UTR', async () => {
-    const failed = await post('finance', `/admin/payouts/batches/${batchId}/mark-failed`, {
-      photographerId: proId,
-      reason: 'Account frozen by the bank',
+    const failPath = `/admin/payouts/batches/${batchId}/mark-failed`;
+    const failure = { photographerId: proId, reason: 'Account frozen by the bank' };
+    // Audit H2: the bank's return reference is required …
+    const noRef = await post('finance2', failPath, { ...failure, code: code() });
+    expect(noRef.status).toBe(400);
+    // … and whoever made the bank file cannot declare it failed (maker–checker), checked
+    // before their code is spent.
+    const maker = await post('finance', failPath, {
+      ...failure,
+      bankReference: 'RET2612140001',
+      code: '000000',
     });
+    expect([maker.status, maker.json.error.code]).toEqual([403, 'SECOND_PERSON_REQUIRED']);
+    const failed = await post('finance2', failPath, {
+      ...failure,
+      bankReference: 'ret2612140001',
+      code: code(),
+    });
+    expect(failed.status).toBe(200);
     expect(failed.json.data.transfers[0]).toMatchObject({
       state: 'FAILED',
       failureReason: 'Account frozen by the bank',
+      failureReference: 'RET2612140001',
     });
-    const file = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`);
+    const file = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`, {
+      code: code(),
+    });
     expect([file.status, file.json.error.code]).toEqual([409, 'NOTHING_NEW']);
-    const leaky = await post('finance', `/admin/payouts/batches/${batchId}/mark-failed`, {
+    const leaky = await post('finance2', failPath, {
       photographerId: proId,
       reason: `Bank says account ${ACCOUNT} is closed`,
+      bankReference: 'RET2612140002',
+      code: code(),
     });
     expect(leaky.status).toBe(400);
     const early = await post('finance', `/admin/payouts/batches/${batchId}/mark-paid`, {
+      code: code(),
       transfers: [{ photographerId: proId, utr: 'HDFCN26121412345' }],
     });
     expect([early.status, early.json.error.code]).toEqual([409, 'TRANSFER_FAILED']);
 
-    const retried = await post('finance', `/admin/payouts/batches/${batchId}/retry`, {
-      photographerId: proId,
-    });
+    const retryPath = `/admin/payouts/batches/${batchId}/retry`;
+    const makerRetry = await post('finance', retryPath, { photographerId: proId, code: code() });
+    expect([makerRetry.status, makerRetry.json.error.code]).toEqual([
+      403,
+      'SECOND_PERSON_REQUIRED',
+    ]);
+    const retried = await post('finance2', retryPath, { photographerId: proId, code: code() });
     expect(retried.json.data.transfers[0]).toMatchObject({
       state: 'READY_FOR_BANK_FILE',
       reference: 'PO20261214W001R1',
     });
-    const resend = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`);
+    // Sent again within 7 days of the original file: ops is alerted (the first may still land).
+    const alerts = await e2e.db.sql<{ payload: Json }[]>`
+      SELECT payload FROM domain_events
+      WHERE event_type = 'ops.alert' AND aggregate_id = ${batchId}`;
+    expect(alerts.map((a) => a.payload)).toEqual([
+      expect.objectContaining({
+        severity: 'HIGH',
+        source_event_type: 'payout.early_resend',
+        details: expect.objectContaining({
+          photographer_id: proId,
+          reference: 'PO20261214W001R1',
+          bank_reference: 'RET2612140001',
+          sent_again_by: staff.finance2,
+        }),
+      }),
+    ]);
+    const resend = await post('finance', `/admin/payouts/batches/${batchId}/bank-file`, {
+      code: code(),
+    });
     expect(resend.json.data).toMatchObject({
       filename: 'PO20261214W-bank-file-001R1.csv',
       rowCount: 1,
@@ -324,6 +405,7 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
     expect(resend.json.data.content).toContain(',PO20261214W001R1,');
 
     const paid = await post('finance', `/admin/payouts/batches/${batchId}/mark-paid`, {
+      code: code(),
       transfers: [{ photographerId: proId, utr: 'hdfcn26121412345' }],
     });
     expect(paid.status).toBe(200);
@@ -334,16 +416,31 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
       FROM ledger_entries WHERE payout_id = ${(await payout()).id} AND account = 'VENDOR_PAYABLE'`;
     expect(payable?.n).toBe('0');
     const repeat = await post('finance', `/admin/payouts/batches/${batchId}/mark-paid`, {
+      code: code(),
       transfers: [{ photographerId: proId, utr: 'HDFCN26121412345' }],
     });
     expect(repeat.status).toBe(200);
     const other = await post('finance', `/admin/payouts/batches/${batchId}/mark-paid`, {
+      code: code(),
       transfers: [{ photographerId: proId, utr: 'OTHERUTR999' }],
     });
     expect([other.status, other.json.error.code]).toEqual([409, 'ALREADY_PAID']);
     expect(
       (await e2e.db.sql`SELECT 1 FROM domain_events WHERE event_type = 'payout_batch.paid'`).length,
     ).toBe(1);
+  });
+
+  it('audit L7: a UTR can never be recorded on another transfer, even by SQL', async () => {
+    const otherPro = await insertPhotographer(e2e.db.sql, {
+      phone: '+919825079402',
+      name: 'Ravi Shah',
+      km: 4,
+      categories: [{ code: 'PORTRAIT', tier: 'EXPERT' }],
+    });
+    const reuse = e2e.db.sql`
+      INSERT INTO payouts (booking_id, photographer_id, gross_paise, net_paise, status, utr)
+      VALUES (${bookingId}, ${otherPro}, 100, 100, 'PAID', 'HDFCN26121412345')`;
+    await expect(reuse).rejects.toMatchObject({ code: '23P01' });
   });
 
   it('the self-billed statement and the monthly TDS report', async () => {

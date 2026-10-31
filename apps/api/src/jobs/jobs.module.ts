@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../modules/auth/auth.module';
+import { CheckoutModule } from '../modules/checkout/checkout.module';
 import { DispatchModule } from '../modules/dispatch/dispatch.module';
 import { MediaModule } from '../modules/media/media.module';
 import { OnsiteModule } from '../modules/onsite/onsite.module';
 import { SlaModule } from '../modules/sla/sla.module';
+import { CheckoutSweepProcessor } from './checkout-sweep.processor';
 import { DispatchTimersProcessor } from './dispatch-timers.processor';
 import { IntegrityAuditProcessor } from './integrity-audit.processor';
 import { JpegExportProcessor } from './jpeg-export.processor';
@@ -16,7 +18,7 @@ import { UploadReaperProcessor } from './upload-reaper.processor';
 
 /** Every BullMQ processor. They register with infra/queues' JobRegistry at module init. */
 @Module({
-  imports: [DispatchModule, AuthModule, MediaModule, OnsiteModule, SlaModule],
+  imports: [DispatchModule, AuthModule, MediaModule, OnsiteModule, SlaModule, CheckoutModule],
   providers: [
     OutboxPublishProcessor,
     DispatchTimersProcessor,
@@ -27,6 +29,7 @@ import { UploadReaperProcessor } from './upload-reaper.processor';
     QuotaMonitorProcessor,
     UploadReaperProcessor,
     SlaProcessor,
+    CheckoutSweepProcessor,
   ],
 })
 export class JobsModule {}

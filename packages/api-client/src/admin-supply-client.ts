@@ -24,8 +24,11 @@ import {
   AdminPhotographerStatusBody as StatusSchema,
   AdminWaivePenaltyBody as WaiveSchema,
 } from '@clickco/contracts';
-import { type AdminRequests, checked, idSegment, listParams } from './admin-http.js';
+import { type AdminRequests, checked, idSegment, invalid, listParams } from './admin-http.js';
 import type { Idempotent } from './client.js';
+
+/** Clickco's own KYC view path (audit M2); anything else is refused before it leaves. */
+const KYC_VIEW_PATH = /^\/admin\/supply\/kyc\/view\/[A-Za-z0-9_-]{43}$/;
 
 /**
  * ADR-0026 stream C — `/admin/supply`: the onboarding kanban, the KYC queue, the photographer
@@ -67,9 +70,17 @@ export function adminSupplyRoutes(r: AdminRequests) {
       /** Pending documents, oldest first. */
       list: async (query: AdminListQuery = {}) =>
         r.get('/admin/supply/kyc', AdminKycPage, listParams(query)),
-      /** A 5-minute signed link; every call is an audited view. Never store the URL. */
+      /**
+       * A single-use, 5-minute Clickco path for this staff member (audit M2: never a provider
+       * URL); every call is an audited view. Open it at once with `openDocument`.
+       */
       viewLink: (documentId: string, idem: Idempotent) =>
         r.post(`/admin/supply/kyc/${idSegment(documentId)}/view-link`, AdminDocumentLink, idem),
+      /** The document's bytes through the staff session (consumes the path; audited per open). */
+      openDocument: async (path: string) => {
+        if (!KYC_VIEW_PATH.test(path)) throw invalid('INVALID_INPUT', 'Not a document link');
+        return r.getBytes(path);
+      },
       decide: async (documentId: string, body: AdminKycDecisionBody, idem: Idempotent) =>
         r.post(
           `/admin/supply/kyc/${idSegment(documentId)}/decide`,

@@ -168,7 +168,11 @@ export class PayoutReadsService {
     };
   }
 
-  async detail(batchId: string): Promise<BatchDetailWire> {
+  /** `staffNames` resolves who made each bank file (staff_users belongs to the admin module). */
+  async detail(
+    batchId: string,
+    staffNames?: (ids: ReadonlyArray<string | null>) => Promise<ReadonlyMap<string, string>>,
+  ): Promise<BatchDetailWire> {
     const batch = await this.batches.find(this.sql, batchId);
     if (!batch) {
       throw new NotFoundException({ code: 'BATCH_NOT_FOUND', message: 'Payout batch not found' });
@@ -184,9 +188,9 @@ export class PayoutReadsService {
       this.directory.payees(ids),
       this.payouts.carryIn(this.sql, ids, batch.exportedAt),
     ]);
-    const references = await this.references([
-      ...payouts.map((p) => p.bookingId),
-      ...deductions.map((d) => d.bookingId),
+    const [references, names] = await Promise.all([
+      this.references([...payouts.map((p) => p.bookingId), ...deductions.map((d) => d.bookingId)]),
+      staffNames ? staffNames(payouts.map((p) => p.bankFileBy)) : Promise.resolve(undefined),
     ]);
     return batchDetail({
       batch,
@@ -196,6 +200,7 @@ export class PayoutReadsService {
       payees,
       references,
       broughtForward,
+      ...(names ? { staffNames: names } : {}),
     });
   }
 }

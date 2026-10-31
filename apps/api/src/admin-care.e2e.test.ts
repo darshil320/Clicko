@@ -76,7 +76,7 @@ describe.runIf(TEST_DATABASE_URL)('the customer care desks', () => {
     await make('readOnly', 'READ_ONLY');
 
     const pro = await insertPhotographer(e2e.db.sql, {
-      phone: '+919825089001',
+      phone: '+919999189001',
       km: 3,
       categories: [{ code: 'FOOD', tier: 'EXPERT' }],
     });
@@ -87,7 +87,7 @@ describe.runIf(TEST_DATABASE_URL)('the customer care desks', () => {
       await walkTo(e2e, booking.id as string, assignmentId, 'CHECKED_OUT', 1);
       return booking.id as string;
     };
-    const deliveredId = await walk('+919700089001', 6);
+    const deliveredId = await walk('+919999289001', 6);
     const bookings = e2e.get(BookingsService);
     for (const to of TO_DELIVERED) {
       const now = e2e.now();
@@ -102,7 +102,7 @@ describe.runIf(TEST_DATABASE_URL)('the customer care desks', () => {
         if (to === 'DELIVERED') await bookings.recordDelivered(tx, deliveredId, now);
       });
     }
-    const shotId = await walk('+919700089002', 10);
+    const shotId = await walk('+919999289002', 10);
     delivered = { id: deliveredId, reference: await referenceOf(deliveredId) };
     shot = { id: shotId, reference: await referenceOf(shotId) };
   }, 240_000);
@@ -228,7 +228,7 @@ describe.runIf(TEST_DATABASE_URL)('the customer care desks', () => {
       const res = await post('support', '/admin/care/tickets', {
         raisedBy: 'USER',
         contactName: 'Priya Sharma',
-        contactPhone: '+919700089002',
+        contactPhone: '+919999289002',
         bookingReference: shot.reference,
         category: 'GRIEVANCE',
         subject: 'Photographer arrived late',
@@ -268,7 +268,7 @@ describe.runIf(TEST_DATABASE_URL)('the customer care desks', () => {
       const probe = await post('cmMumbai', '/admin/care/tickets', {
         ...base,
         raisedBy: 'PHOTOGRAPHER',
-        contactPhone: '+919825089001',
+        contactPhone: '+919999189001',
       });
       expect(probe.json.error.code).toBe('TICKET_NEEDS_A_CITY');
       expect((await get('cmMumbai', `/admin/care/tickets/${ticketId}`)).status).toBe(404);

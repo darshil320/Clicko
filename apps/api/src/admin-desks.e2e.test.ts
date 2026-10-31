@@ -79,13 +79,13 @@ describe.runIf(TEST_DATABASE_URL)('the staff desks', () => {
 
     // Q: shot, uploaded, exported — waiting in QA.
     await insertPhotographer(e2e.db.sql, {
-      phone: '+919825079201',
+      phone: '+919999179201',
       km: 3,
       categories: [{ code: 'PORTRAIT', tier: 'EXPERT' }],
     });
-    const proToken = await e2e.proLogin('+919825079201');
+    const proToken = await e2e.proLogin('+919999179201');
     const q = await checkedOutBooking(e2e, {
-      clientPhone: '+919700079201',
+      clientPhone: '+919999279201',
       proToken,
       declaredFrames: 1,
     });
@@ -116,12 +116,12 @@ describe.runIf(TEST_DATABASE_URL)('the staff desks', () => {
 
     // D: paid, still dispatching. V: accepted, shot later (access denied).
     proB = await insertPhotographer(e2e.db.sql, {
-      phone: '+919825079202',
+      phone: '+919999179202',
       km: 3,
       categories: [{ code: 'FOOD', tier: 'EXPERT' }],
     });
-    dBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919700079202'), START_D)).id;
-    vBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919700079203'), START_V)).id;
+    dBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919999279202'), START_D)).id;
+    vBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919999279203'), START_V)).id;
     vAssignment = await acceptOffer(e2e, proB, vBooking);
   }, 180_000);
 
@@ -184,6 +184,7 @@ describe.runIf(TEST_DATABASE_URL)('the staff desks', () => {
         id: qBooking,
         status: 'QA',
         cityName: 'Surat',
+        // The booker comes from test-support/booking-fixtures.ts (shared with module tests).
         client: { phone: '+919876543210' },
         assignment: { status: 'COMPLETED' },
       });

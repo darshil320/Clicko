@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { JobRegistry } from './infra/queues/job-registry';
+import { JOB } from './infra/queues/queue-names';
+import { PAYMENT_GRACE_MS } from './modules/checkout/payment-flow.service';
 import type { E2eApp, Json } from './test-support/e2e-app';
 import { startE2eApp } from './test-support/e2e-app';
 import { TEST_DATABASE_URL } from './test-support/scratch-db';
@@ -13,7 +16,7 @@ const createBody = (start: Date) => ({
   scheduledStart: start.toISOString(),
   hours: 2,
   venueAddress: '4 Athwalines, Surat',
-  booker: { name: 'Rohan Shah', phone: '+919700000123' },
+  booker: { name: 'Rohan Shah', phone: '+919999200123' },
   modelReleaseConsent: true,
   acceptedTermsVersion: '2.0',
 });
@@ -27,7 +30,7 @@ describe.runIf(TEST_DATABASE_URL)(
 
     beforeAll(async () => {
       e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
-      token = await e2e.login('+919700000123');
+      token = await e2e.login('+919999200123');
     }, 60_000);
 
     afterAll(async () => {
@@ -131,6 +134,41 @@ describe.runIf(TEST_DATABASE_URL)(
         amountPaidPaise: booking.advancePaise,
       });
       expect(d.invoices).toHaveLength(1);
+    });
+
+    // Audit L3: an unpaid ADVANCE_PENDING booking is cancelled once its payment window closes,
+    // so its promo redemption is free again; one still inside the window is left alone.
+    it('the stale-advance sweep cancels unpaid bookings past quote expiry + grace', async () => {
+      const { booking: stale } = await bookAndPay(new Date(NOW.getTime() + 6 * 24 * HOUR));
+      const [row] = await e2e.db.sql<{ quote_expires_at: Date }[]>`
+        SELECT quote_expires_at FROM bookings WHERE id = ${stale.id}`;
+      const expires = row?.quote_expires_at.getTime() ?? 0;
+      const sweep = async () =>
+        e2e.get(JobRegistry).processorFor(JOB.CHECKOUT_STALE_SWEEP)?.process({});
+      const statusOf = async () =>
+        (
+          await e2e.db.sql<{ status: string }[]>`SELECT status FROM bookings WHERE id = ${stale.id}`
+        )[0]?.status;
+      e2e.advance(expires + PAYMENT_GRACE_MS - 60_000 - e2e.now().getTime());
+      await sweep();
+      expect(await statusOf()).toBe('ADVANCE_PENDING');
+      e2e.advance(2 * 60_000);
+      await sweep();
+      expect(await statusOf()).toBe('CANCELLED_CLIENT');
+      // The clock moved past the access token's life: sign in again.
+      token = await e2e.login('+919999200123');
+      const events = await e2e.db.sql<{ payload: Json }[]>`
+        SELECT payload FROM domain_events
+        WHERE event_type = 'booking.cancelled_client' AND aggregate_id = ${stale.id}`;
+      expect(events.map((e) => e.payload)).toEqual([
+        expect.objectContaining({ reason: 'PAYMENT_WINDOW_EXPIRED' }),
+      ]);
+      // Paying now is refused: the booking is gone.
+      const late = await e2e.call('POST', `/bookings/${stale.id}/pay`, {
+        token,
+        idempotencyKey: key('pay-late'),
+      });
+      expect(late.status).toBe(409);
     });
 
     it('refuses booking endpoints to callers who are not signed in', async () => {

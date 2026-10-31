@@ -57,6 +57,8 @@ export interface E2eApp {
   readonly env: Env;
   readonly sms: CapturingSms;
   readonly scheduler: RecordingScheduler;
+  /** The listening server's origin, for raw (non-JSON) requests such as file downloads. */
+  readonly baseUrl: string;
   now(): Date;
   advance(ms: number): void;
   call(
@@ -107,6 +109,8 @@ export async function startE2eApp(opts: {
   readonly now: Date;
   readonly nodeEnv: 'test' | 'development';
   readonly gateway?: PaymentGatewayPort;
+  /** Extra environment variables (e.g. TRUST_PROXY_HOPS for the X-Forwarded-For tests). */
+  readonly env?: Readonly<Record<string, string>>;
 }): Promise<E2eApp> {
   Logger.overrideLogger(false);
   const db = await createScratchDb();
@@ -128,6 +132,9 @@ export async function startE2eApp(opts: {
     SMS_ADAPTER: 'console',
     PAYMENT_GATEWAY: 'sandbox',
     SANDBOX_WEBHOOK_SECRET: E2E_SANDBOX_SECRET,
+    // The scratch database is local, so development-mode apps may mount the dev tools (audit L5).
+    ...(opts.nodeEnv === 'development' ? { DEV_TOOLS: 'on' } : {}),
+    ...opts.env,
   });
   let now = opts.now;
   const sms = new CapturingSms();
@@ -183,6 +190,7 @@ export async function startE2eApp(opts: {
     env,
     sms,
     scheduler,
+    baseUrl: base,
     now: () => now,
     advance: (ms) => {
       now = new Date(now.getTime() + ms);

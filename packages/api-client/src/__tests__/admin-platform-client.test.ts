@@ -150,13 +150,14 @@ describe('createAdminApiClient — passwords (ADR-0026 D7)', () => {
       }),
     );
 
-    const res = await api.staff.resetPassword(UUID_2);
-    const bad = await rejection(api.staff.resetPassword('staff-1'));
+    const res = await api.staff.resetPassword(UUID_2, '123456');
+    const bad = await rejection(api.staff.resetPassword('staff-1', '123456'));
 
     expect(res.temporaryPassword).toBe('tmp-Password-1234567');
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe(`${BASE}/admin/staff/${UUID_2}/reset-password`);
     expect(calls[0]?.headers['idempotency-key']).toBeUndefined();
+    expect(calls[0]?.body).toEqual({ code: '123456' });
     expect(bad.code).toBe('INVALID_ID');
   });
 });

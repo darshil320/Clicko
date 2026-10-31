@@ -107,13 +107,33 @@ describe('admin supply routes (ADR-0026 D5)', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('asks for a KYC link and parses it', async () => {
-    const { api, calls } = client(() =>
-      ok({ url: 'https://files.example/signed', expiresAt: AT, opensInBrowser: true }),
+  it('audit M2: a KYC link is a single-use Clickco path, opened as bytes with the session', async () => {
+    const token = 'A'.repeat(43);
+    const pdf = new TextEncoder().encode('%PDF-1.4');
+    const { api, calls } = client((call) =>
+      call.url.includes('/view/')
+        ? { status: 200, body: null, bytes: pdf, contentType: 'application/pdf' }
+        : ok({ path: `/admin/supply/kyc/view/${token}`, expiresAt: AT }),
     );
     const link = await api.supply.kyc.viewLink(UUID, { idempotencyKey: KEY });
-    expect(link.opensInBrowser).toBe(true);
     expect(calls[0]?.url).toBe(`${BASE}/admin/supply/kyc/${UUID}/view-link`);
+    const doc = await api.supply.kyc.openDocument(link.path);
+    expect(doc.contentType).toBe('application/pdf');
+    expect(new TextDecoder().decode(doc.bytes)).toBe('%PDF-1.4');
+    expect(calls[1]?.url).toBe(`${BASE}/admin/supply/kyc/view/${token}`);
+    expect(calls[1]?.headers.authorization).toMatch(/^Bearer /);
+    // A provider URL (or anything else) is refused before it leaves.
+    const bad = await rejection(api.supply.kyc.openDocument('https://files.example/signed'));
+    expect(bad.code).toBe('INVALID_INPUT');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('refuses a link answer that carries a provider URL', async () => {
+    const { api } = client(() =>
+      ok({ url: 'https://files.example/signed', expiresAt: AT, opensInBrowser: true }),
+    );
+    const err = await rejection(api.supply.kyc.viewLink(UUID, { idempotencyKey: KEY }));
+    expect(err.kind).toBe('INVALID_RESPONSE');
   });
 
   it('builds the directory query and never puts a bad id in a path', async () => {

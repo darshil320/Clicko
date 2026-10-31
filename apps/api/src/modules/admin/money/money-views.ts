@@ -44,6 +44,8 @@ export interface RefundExtras {
   readonly canDecide: boolean;
   readonly blockedReason: string | null;
   readonly creditNoteLate: boolean;
+  /** Approving takes the booking above the QM ceiling: a fresh authenticator code is needed. */
+  readonly needsAuthenticatorCode: boolean;
 }
 
 export function toRefundItem(r: RefundRecord, x: RefundExtras): AdminRefundItem {
@@ -72,6 +74,7 @@ export function toRefundItem(r: RefundRecord, x: RefundExtras): AdminRefundItem 
     canDecide: x.canDecide,
     blockedReason: x.blockedReason,
     creditNoteLate: x.creditNoteLate,
+    needsAuthenticatorCode: x.needsAuthenticatorCode,
   };
 }
 

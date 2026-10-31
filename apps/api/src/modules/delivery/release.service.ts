@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { DeliveryLinkKind } from '@clickco/contracts';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type postgres from 'postgres';
@@ -9,9 +9,10 @@ import { BookingsService } from '../bookings/bookings.service';
 import { SYSTEM_ACTOR } from '../bookings/bookings.types';
 import { MediaRetentionService } from '../media/media-retention.service';
 import { SLA_CONFIG } from '../sla/sla.config';
-import { DELIVERY_CONFIG, STORAGE_KIND_OF } from './delivery.config';
+import { STORAGE_KIND_OF } from './delivery.config';
 import type { DeliveryRecord } from './delivery.types';
 import { balanceDue } from './delivery-views';
+import { DeliveryLinkTokens, tokenSha256 } from './link-tokens';
 import { DeliveriesRepository } from './repositories/deliveries.repository';
 import { DeliveryLinksRepository } from './repositories/delivery-links.repository';
 
@@ -47,6 +48,7 @@ export class ReleaseService {
     @Inject(MediaRetentionService) private readonly media: MediaRetentionService,
     @Inject(DeliveriesRepository) private readonly deliveries: DeliveriesRepository,
     @Inject(DeliveryLinksRepository) private readonly links: DeliveryLinksRepository,
+    @Inject(DeliveryLinkTokens) private readonly tokens: DeliveryLinkTokens,
   ) {}
 
   async release(bookingId: string): Promise<ReleaseOutcome> {
@@ -77,12 +79,14 @@ export class ReleaseService {
       if (booking.status !== 'BALANCE_PENDING' || balanceDue(booking) > 0n) return 'NOT_READY';
       const linkIds = existing.map((l) => l.id);
       for (const c of created) {
+        const id = randomUUID();
         linkIds.push(
           await this.links.insert(tx, {
+            id,
             deliveryId: delivery.id,
             bookingId,
             kind: c.kind,
-            publicToken: randomBytes(DELIVERY_CONFIG.tokenBytes).toString('base64url'),
+            tokenSha256: tokenSha256(this.tokens.tokenFor(id)),
             providerLink: c.url,
             providerLinkId: c.linkId,
             expiresAt: c.expiresAt,

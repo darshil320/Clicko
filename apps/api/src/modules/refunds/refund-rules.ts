@@ -70,6 +70,23 @@ export function approvalCheck(
   return withinLimit(i, 'approve it');
 }
 
+/**
+ * Audit: approving this refund takes the booking above the Quality Manager's ceiling (only
+ * finance can), so the approver also enters a fresh authenticator code.
+ */
+export function refundNeedsStepUp(i: {
+  readonly amountPaise: bigint;
+  readonly bookingTotalPaise: bigint;
+  readonly committedPaise: bigint;
+}): boolean {
+  return i.committedPaise + i.amountPaise > qmCeilingPaise(i.bookingTotalPaise);
+}
+
+/** Audit L8: a credit above MONEY_DESK_CONFIG.creditFourEyesPaise needs a second approver. */
+export function creditNeedsFourEyes(amountPaise: bigint): boolean {
+  return amountPaise > MONEY_DESK_CONFIG.creditFourEyesPaise;
+}
+
 /** Credits: the QM within the ceiling, finance any amount (no four-eyes: nothing leaves the bank). */
 export function creditCheck(i: LimitInput): Check {
   return withinLimit(i, 'issue it');

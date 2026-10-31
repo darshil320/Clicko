@@ -21,6 +21,7 @@ export function ConfirmAction({
   pending,
   onConfirm,
   onClose,
+  children,
 }: {
   readonly title: string;
   readonly description: ReactNode;
@@ -28,6 +29,8 @@ export function ConfirmAction({
   readonly pending: boolean;
   readonly onConfirm: () => void;
   readonly onClose: () => void;
+  /** Extra input the action needs (the step-up code field, audit M3). */
+  readonly children?: ReactNode;
 }) {
   return (
     <AlertDialog open onOpenChange={(open) => (!open && !pending ? onClose() : undefined)}>
@@ -36,6 +39,7 @@ export function ConfirmAction({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
           {/* A plain button: the dialog stays open until the server answers. */}

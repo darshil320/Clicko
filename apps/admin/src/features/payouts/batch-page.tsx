@@ -1,6 +1,10 @@
 'use client';
 
-import type { AdminPayoutBatchDetail, AdminPayoutTransfer } from '@clickco/contracts';
+import {
+  type AdminPayoutBatchDetail,
+  type AdminPayoutTransfer,
+  StepUpCode,
+} from '@clickco/contracts';
 import {
   ArrowLeftIcon,
   Badge,
@@ -20,6 +24,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { adminApi } from '../../shared/api';
+import { AuthenticatorCodeField } from '../../shared/authenticator-code-field';
 import { Muted } from '../../shared/cells';
 import { describeError } from '../../shared/errors';
 import { formatDateTime } from '../../shared/format';
@@ -104,6 +109,23 @@ export function BatchPage({ batchId }: { readonly batchId: string }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // Audit H2: export, the bank file and marking paid each need a fresh authenticator code.
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const withCode = (run: (code: string) => void) => {
+    const parsed = StepUpCode.safeParse(code);
+    if (!parsed.success) {
+      setCodeError(parsed.error.issues[0]?.message ?? 'Enter the 6-digit code');
+      return;
+    }
+    setCodeError(null);
+    run(parsed.data);
+  };
+  const closeStep = () => {
+    setStep(null);
+    setCode('');
+    setCodeError(null);
+  };
   const batch = useQuery({
     queryKey: payoutKeys.batch(batchId),
     queryFn: () => adminApi.payouts.batches.get(batchId),
@@ -111,23 +133,32 @@ export function BatchPage({ batchId }: { readonly batchId: string }) {
 
   // The file holds full account numbers: saved, then dropped from memory at once.
   const bankFile = useAdminMutation({
-    run: (_: null, idem) => adminApi.payouts.batches.createBankFile(batchId, idem),
+    run: (vars: { code: string }, idem) =>
+      adminApi.payouts.batches.createBankFile(batchId, vars, idem),
     success: (_, file) =>
       `Bank file saved with ${count(file.rowCount, 'transfer')}. Upload it to your bank.`,
     invalidate: [payoutKeys.all],
     onSuccess: (file) => saveFile(file),
   });
-  const makeFile = () => {
-    setStep(null);
-    bankFile.mutate(null, { onSettled: () => bankFile.reset() });
-  };
+  const makeFile = () =>
+    withCode((c) =>
+      bankFile.mutate(
+        { code: c },
+        {
+          onSuccess: closeStep,
+          onError: () => setCode(''),
+          onSettled: () => bankFile.reset(),
+        },
+      ),
+    );
   const exportBatch = useAdminMutation({
-    run: (_: null, idem) => adminApi.payouts.batches.export(batchId, idem),
+    run: (vars: { code: string }, idem) => adminApi.payouts.batches.export(batchId, vars, idem),
     success: (_, b) => `${b.reference} exported.`,
     invalidate: [payoutKeys.all],
     onSuccess: (b) => {
-      setStep(null);
-      if (b.transfersReady > 0) makeFile();
+      closeStep();
+      // The bank file is its own step with its own fresh code (a code works once).
+      if (b.transfersReady > 0) setStep('file');
     },
   });
   const discard = useAdminMutation({
@@ -246,11 +277,27 @@ export function BatchPage({ batchId }: { readonly batchId: string }) {
       {step === 'export' ? (
         <Confirm
           title={`Export ${toPhotographers(b.netPaise, b.payeeCount)}?`}
-          description={`The amounts lock, TDS of ${rupees(b.tdsPaise)} is booked and the bank file downloads. Upload it to your bank's bulk NEFT; nothing moves until you do.`}
-          confirmLabel="Export bank file"
+          description={
+            <span className="grid gap-3">
+              <span>
+                The amounts lock and TDS of {rupees(b.tdsPaise)} is booked. Next you create the bank
+                file and upload it to your bank's bulk NEFT; nothing moves until you do.
+              </span>
+              <AuthenticatorCodeField
+                id="export-code"
+                hint="Exporting a payout batch needs a fresh code, even though you are signed in."
+                value={code}
+                onChange={setCode}
+                error={codeError}
+              />
+            </span>
+          }
+          confirmLabel="Export"
           pending={exportBatch.isPending}
-          onConfirm={() => exportBatch.mutate(null)}
-          onClose={() => setStep(null)}
+          onConfirm={() =>
+            withCode((c) => exportBatch.mutate({ code: c }, { onError: () => setCode('') }))
+          }
+          onClose={closeStep}
         />
       ) : null}
       {step === 'discard' ? (
@@ -261,20 +308,35 @@ export function BatchPage({ batchId }: { readonly batchId: string }) {
           confirmLabel="Discard draft"
           pending={discard.isPending}
           onConfirm={() => discard.mutate(null)}
-          onClose={() => setStep(null)}
+          onClose={closeStep}
         />
       ) : null}
       {step === 'file' ? (
         <Confirm
           title={`Create a bank file for ${toPhotographers(readyTotal, ready.length)}?`}
-          description="Each transfer goes into one bank file only, so uploading it can never pay anyone twice. If the bank returns one, mark it failed and send it again: it goes into the next file."
+          description={
+            <span className="grid gap-3">
+              <span>
+                Each transfer goes into one bank file only, so uploading it can never pay anyone
+                twice. If the bank returns one, another finance person marks it failed with the
+                bank's return reference and sends it again: it goes into the next file.
+              </span>
+              <AuthenticatorCodeField
+                id="bank-file-code"
+                hint="The bank file holds full account numbers, so it needs a fresh code."
+                value={code}
+                onChange={setCode}
+                error={codeError}
+              />
+            </span>
+          }
           confirmLabel="Create bank file"
           pending={bankFile.isPending}
           onConfirm={makeFile}
-          onClose={() => setStep(null)}
+          onClose={closeStep}
         />
       ) : null}
-      {step === 'paid' ? <MarkPaidSheet batch={b} onClose={() => setStep(null)} /> : null}
+      {step === 'paid' ? <MarkPaidSheet batch={b} onClose={closeStep} /> : null}
       {transfer ? (
         <TransferSheet batchId={b.id} transfer={transfer} onClose={() => setOpen(null)} />
       ) : null}

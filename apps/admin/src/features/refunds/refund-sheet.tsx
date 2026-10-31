@@ -1,6 +1,6 @@
 'use client';
 
-import { type AdminRefundItem, AdminRejectRefundBody } from '@clickco/contracts';
+import { type AdminRefundItem, AdminRejectRefundBody, StepUpCode } from '@clickco/contracts';
 import {
   Alert,
   AlertDescription,
@@ -27,6 +27,7 @@ import {
 } from '@clickco/ui-web';
 import { type FormEvent, useState } from 'react';
 import { adminApi } from '../../shared/api';
+import { AuthenticatorCodeField } from '../../shared/authenticator-code-field';
 import { formatDateTime } from '../../shared/format';
 import { formatRupees, REFUND_REASON_LABEL, REFUND_STATUS } from '../../shared/money-labels';
 import { useAdminMutation } from '../../shared/mutation';
@@ -59,11 +60,16 @@ export function RefundSheet({
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState('');
   const [touched, setTouched] = useState(false);
+  // Above the Quality Manager's ceiling an approval needs a fresh authenticator code (audit).
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const needsCode = refund.needsAuthenticatorCode;
   const rejectCheck = AdminRejectRefundBody.safeParse({ note });
   const amount = formatRupees(refund.amountPaise);
 
   const approve = useAdminMutation({
-    run: (vars: { id: string }, idem) => adminApi.money.refunds.approve(vars.id, {}, idem),
+    run: (vars: { id: string; code: string | null }, idem) =>
+      adminApi.money.refunds.approve(vars.id, vars.code ? { code: vars.code } : {}, idem),
     success: (_v, r) =>
       r.status === 'COMPLETED'
         ? `${amount} is on its way back to ${refund.clientName}`
@@ -88,6 +94,19 @@ export function RefundSheet({
         : 'Sent to the bank again',
     invalidate: INVALIDATE,
   });
+  const submitApprove = () => {
+    if (!needsCode) {
+      approve.mutate({ id: refund.id, code: null });
+      return;
+    }
+    const parsed = StepUpCode.safeParse(code);
+    if (!parsed.success) {
+      setCodeError(parsed.error.issues[0]?.message ?? 'Enter the 6-digit code');
+      return;
+    }
+    setCodeError(null);
+    approve.mutate({ id: refund.id, code: parsed.data }, { onError: () => setCode('') });
+  };
   const busy = approve.isPending || reject.isPending || retry.isPending;
 
   const submitReject = (event: FormEvent) => {
@@ -242,12 +261,19 @@ export function RefundSheet({
                 days. A GST credit note is issued against the invoice. This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {needsCode ? (
+              <AuthenticatorCodeField
+                id="approve-code"
+                hint="This is above the Quality Manager's limit for the booking, so approving it needs a fresh code."
+                value={code}
+                onChange={setCode}
+                error={codeError}
+                disabled={approve.isPending}
+              />
+            ) : null}
             <AlertDialogFooter>
               <AlertDialogCancel disabled={approve.isPending}>Cancel</AlertDialogCancel>
-              <Button
-                onClick={() => approve.mutate({ id: refund.id })}
-                disabled={approve.isPending}
-              >
+              <Button onClick={submitApprove} disabled={approve.isPending}>
                 {approve.isPending ? <Spinner /> : null}
                 Refund {amount}
               </Button>

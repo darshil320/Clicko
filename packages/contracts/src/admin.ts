@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { StepUpCode } from './admin-pricing.js';
 import { TokenPair } from './auth.js';
 import { IsoDateTime, Uuid } from './common.js';
 import { DeliveryView, QaResult, QaStatus, SlaBreachView, SlaClockView } from './delivery.js';
@@ -381,7 +382,9 @@ export const AdminStaffRow = z.object({
 });
 export type AdminStaffRow = z.infer<typeof AdminStaffRow>;
 
+/** POST /admin/staff — a fresh authenticator code of the caller's (step-up, audit M3). */
 export const AdminCreateStaffBody = z.object({
+  code: StepUpCode,
   email: StaffEmail,
   fullName: z.string().trim().min(2).max(120),
   grants: z
@@ -442,9 +445,9 @@ export type AdminAlertPage = z.infer<typeof AdminAlertPage>;
 export const AdminStaffPage = AdminPage(AdminStaffRow);
 export type AdminStaffPage = z.infer<typeof AdminStaffPage>;
 
-/** POST /admin/staff/:staffId/grants */
+/** POST /admin/staff/:staffId/grants — every grant needs a fresh authenticator code (M3). */
 export const AdminGrantBody = z
-  .object({ role: StaffRole, cityId: Uuid.nullable() })
+  .object({ code: StepUpCode, role: StaffRole, cityId: Uuid.nullable() })
   .refine((g) => g.role !== 'CITY_MANAGER' || g.cityId !== null, {
     message: 'A city manager needs a city',
     path: ['cityId'],
@@ -454,6 +457,13 @@ export const AdminGrantBody = z
     path: ['cityId'],
   });
 export type AdminGrantBody = z.infer<typeof AdminGrantBody>;
+
+/**
+ * POST /admin/staff/:staffId/{deactivate,reset-totp,reset-password}: a fresh authenticator code
+ * of the caller's (step-up, audit M3).
+ */
+export const AdminStaffStepUpBody = z.object({ code: StepUpCode });
+export type AdminStaffStepUpBody = z.infer<typeof AdminStaffStepUpBody>;
 
 /** One audit_logs row as the booking page shows it (read-only; the table is append-only). */
 export const AdminAuditEntry = z.object({

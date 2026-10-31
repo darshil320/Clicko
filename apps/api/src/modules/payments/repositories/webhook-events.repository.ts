@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import type { Db } from '../payments.types';
@@ -6,23 +5,42 @@ import type { Db } from '../payments.types';
 export interface WebhookRow {
   readonly provider: string;
   readonly eventType: string;
+  /** What Clickco parsed from the webhook (webhook-record.ts) — never the raw payload (L1). */
   readonly payload: postgres.JSONValue;
+  /** sha256 of the exact signed body: proves what arrived without keeping it. */
+  readonly bodySha256: string;
   readonly receivedAt: Date;
 }
 
-/** payment_webhook_events: every webhook stored raw and deduped (schema §11). */
+export interface RejectedWebhook {
+  readonly provider: string;
+  /** The start of the UTC hour the attempt falls in. */
+  readonly bucketStart: Date;
+  readonly bodySha256: string;
+  readonly bodyBytes: number;
+  readonly receivedAt: Date;
+}
+
+/** payment_webhook_events: every verified webhook, deduped (schema §11, addendum 0012). */
 @Injectable()
 export class WebhookEventsRepository {
   /**
-   * Bad signatures are kept for forensics under a random id, so a forged request can never
-   * pre-claim a real event id and make the genuine webhook look like a duplicate.
+   * Audit M3: a bad signature is counted per provider per hour with a sample of its body hash —
+   * one row per hour, not per attempt, so a flood cannot fill the table. Nothing in this table
+   * can pre-claim a genuine event id.
    */
-  async recordInvalid(db: Db, w: WebhookRow): Promise<void> {
+  async countRejected(db: Db, r: RejectedWebhook): Promise<void> {
     await db`
-      INSERT INTO payment_webhook_events
-        (provider, provider_event_id, event_type, signature_valid, payload, received_at)
-      VALUES (${w.provider}, ${`invalid:${randomUUID()}`}, ${w.eventType}, false,
-              ${db.json(w.payload)}, ${w.receivedAt})`;
+      INSERT INTO payment_webhook_rejections AS w
+        (provider, bucket_start, rejected_count, first_body_sha256, last_body_sha256,
+         last_body_bytes, last_received_at)
+      VALUES (${r.provider}, ${r.bucketStart}, 1, ${r.bodySha256}, ${r.bodySha256},
+              ${r.bodyBytes}, ${r.receivedAt})
+      ON CONFLICT (provider, bucket_start) DO UPDATE
+        SET rejected_count   = w.rejected_count + 1,
+            last_body_sha256 = EXCLUDED.last_body_sha256,
+            last_body_bytes  = EXCLUDED.last_body_bytes,
+            last_received_at = greatest(w.last_received_at, EXCLUDED.last_received_at)`;
   }
 
   /**
@@ -35,9 +53,10 @@ export class WebhookEventsRepository {
   ): Promise<{ id: string; alreadyProcessed: boolean }> {
     const [inserted] = await db<{ id: string }[]>`
       INSERT INTO payment_webhook_events
-        (provider, provider_event_id, event_type, signature_valid, payload, received_at)
+        (provider, provider_event_id, event_type, signature_valid, payload, body_sha256,
+         received_at)
       VALUES (${w.provider}, ${w.providerEventId}, ${w.eventType}, true, ${db.json(w.payload)},
-              ${w.receivedAt})
+              ${w.bodySha256}, ${w.receivedAt})
       ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id`;
     if (inserted) return { id: inserted.id, alreadyProcessed: false };
     const [existing] = await db<{ id: string; processed_at: Date | null }[]>`

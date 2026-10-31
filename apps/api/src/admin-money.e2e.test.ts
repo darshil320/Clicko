@@ -1,6 +1,8 @@
 import type { StaffRole } from '@clickco/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { appendDomainEvent } from './infra/outbox/outbox';
+import { SecretBox } from './modules/admin/auth/secret-box';
+import { base32Decode } from './modules/admin/auth/totp';
 import { RefundDeskService } from './modules/admin/money/refund-desk.service';
 import { ReviewDeskService } from './modules/admin/money/review-desk.service';
 import { PAYMENT_GATEWAY } from './modules/payments/gateways/payment-gateway.port';
@@ -10,12 +12,14 @@ import { drainOutbox } from './test-support/dispatch-fixtures';
 import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
 import { bookAndPay, insertClient } from './test-support/onsite-fixtures';
 import { TEST_DATABASE_URL } from './test-support/scratch-db';
-import { bootstrapStaff, cityIdOf, staffToken } from './test-support/staff-fixtures';
+import { bootstrapStaff, cityIdOf, codeFor, staffToken } from './test-support/staff-fixtures';
 
 const NOW = new Date('2026-12-07T04:30:00.000Z');
 const DAY = 86_400_000;
 let keySeq = 0;
 const idem = () => `admin-money-${String(++keySeq).padStart(6, '0')}`;
+/** Every test staff member's authenticator secret (the replay guard is per person). */
+const TOTP = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
 type Who = 'admin' | 'cmMumbai' | 'ops' | 'qm' | 'support' | 'finance' | 'readOnly';
 
@@ -28,7 +32,7 @@ type Who = 'admin' | 'cmMumbai' | 'ops' | 'qm' | 'support' | 'finance' | 'readOn
 describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
   let e2e: E2eApp;
   const staff = {} as Record<Who, string>;
-  const booking = {} as Record<'a' | 'b' | 'c' | 'd' | 'e', Json>;
+  const booking = {} as Record<'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g', Json>;
 
   const as = async (who: Who) => staffToken(e2e, staff[who]);
   const get = async (who: Who, path: string) => e2e.call('GET', path, { token: await as(who) });
@@ -38,6 +42,11 @@ describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
       idempotencyKey: key,
       ...(body === undefined ? {} : { body }),
     });
+  /** A fresh authenticator code (one step later, so it is never a replay). */
+  const code = () => {
+    e2e.advance(30_000);
+    return codeFor(e2e, TOTP);
+  };
   const money = async (b: Json) =>
     (await get('finance', `/admin/bookings/${b.id}/money`)).json.data;
   const ask = async (who: Who, b: Json, amountPaise: number, reason = 'GOODWILL') =>
@@ -68,12 +77,19 @@ describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
     await make('support', 'SUPPORT');
     await make('finance', 'FINANCE');
     await make('readOnly', 'READ_ONLY');
+    const box = new SecretBox(e2e.env.STAFF_TOTP_KEY);
+    for (const id of Object.values(staff)) {
+      await e2e.db.sql`
+        UPDATE staff_users SET totp_secret = ${box.seal(base32Decode(TOTP), id)} WHERE id = ${id}`;
+    }
     const start = new Date(NOW.getTime() + 6 * DAY);
-    booking.a = await bookAndPay(e2e, await insertClient(e2e, '+919700081001'), start);
-    booking.b = await bookAndPay(e2e, await insertClient(e2e, '+919700081002'), start);
-    booking.c = await bookAndPay(e2e, await insertClient(e2e, '+919700081003'), start);
-    booking.d = await bookAndPay(e2e, await insertClient(e2e, '+919700081004'), start);
-    booking.e = await bookAndPay(e2e, await insertClient(e2e, '+919700081005'), start);
+    booking.a = await bookAndPay(e2e, await insertClient(e2e, '+919999281001'), start);
+    booking.b = await bookAndPay(e2e, await insertClient(e2e, '+919999281002'), start);
+    booking.c = await bookAndPay(e2e, await insertClient(e2e, '+919999281003'), start);
+    booking.d = await bookAndPay(e2e, await insertClient(e2e, '+919999281004'), start);
+    booking.e = await bookAndPay(e2e, await insertClient(e2e, '+919999281005'), start);
+    booking.f = await bookAndPay(e2e, await insertClient(e2e, '+919999281006'), start);
+    booking.g = await bookAndPay(e2e, await insertClient(e2e, '+919999281007'), start);
   }, 180_000);
 
   afterAll(async () => {
@@ -290,6 +306,65 @@ describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
     });
   });
 
+  describe('step-up and four-eyes on large money moves (security audit)', () => {
+    it('a refund above the QM ceiling needs the approver’s fresh authenticator code', async () => {
+      // Within the ceiling: no code asked.
+      const small = (await ask('ops', booking.f, 1_000)).json.data.refunds;
+      expect(small[0].needsAuthenticatorCode).toBe(false);
+      const m = await money(booking.f);
+      const amount = Math.min(m.qmLimitPaise + 1, m.refundablePaise);
+      const req = (await ask('ops', booking.f, amount)).json.data.refunds[0];
+      expect(req.needsAuthenticatorCode).toBe(true);
+      const path = `/admin/refunds/${req.id}/approve`;
+      const bare = await post('finance', path, {});
+      expect([bare.status, bare.json.error.code]).toEqual([422, 'STEP_UP_REQUIRED']);
+      expect(bare.json.error.message).toMatch(/authenticator/);
+      const wrong = await post('finance', path, { code: '000000' });
+      expect([wrong.status, wrong.json.error.code]).toEqual([422, 'STEP_UP_CODE_INVALID']);
+      const ok = await post('finance', path, { code: code() });
+      expect(ok.status).toBe(200);
+      expect(ok.json.data.status).toBe('COMPLETED');
+    });
+
+    it('a credit above ₹5,000 needs the issuer’s code and a second finance person’s', async () => {
+      const path = `/admin/bookings/${booking.g.id}/credits`;
+      const body = { amountPaise: 500_001, reason: 'QUALITY', note: 'Big apology' };
+      const bare = await post('finance', path, body);
+      expect([bare.status, bare.json.error.code]).toEqual([422, 'STEP_UP_REQUIRED']);
+      const alone = await post('finance', path, { ...body, code: code() });
+      expect([alone.status, alone.json.error.code]).toEqual([422, 'STEP_UP_REQUIRED']);
+      const self = await post('finance', path, {
+        ...body,
+        code: code(),
+        coApprover: { email: 'finance@clickco.test', code: code() },
+      });
+      expect([self.status, self.json.error.code]).toEqual([403, 'CO_APPROVER_INVALID']);
+      const qm = await post('finance', path, {
+        ...body,
+        code: code(),
+        coApprover: { email: 'qm@clickco.test', code: code() },
+      });
+      expect([qm.status, qm.json.error.code]).toEqual([403, 'CO_APPROVER_INVALID']);
+      const issuerCode = code();
+      const ok = await post('finance', path, {
+        ...body,
+        code: issuerCode,
+        coApprover: { email: 'ADMIN@clickco.test', code: code() },
+      });
+      expect(ok.status).toBe(201);
+      const [row] = await e2e.db.sql<{ after_state: Json }[]>`
+        SELECT after_state FROM audit_logs WHERE action = 'credit.issue' ORDER BY id DESC LIMIT 1`;
+      expect(row?.after_state).toMatchObject({ co_approved_by: staff.admin, step_up: 'TOTP' });
+      // ₹5,000 exactly: the finance person alone, no code.
+      const small = await post('finance', path, {
+        amountPaise: 500_000,
+        reason: 'QUALITY',
+        note: 'At the line',
+      });
+      expect([small.status, small.json.error?.code]).not.toContain('STEP_UP_REQUIRED');
+    });
+  });
+
   describe('settling review items (D2)', () => {
     let noShow: string;
     let late: string;
@@ -398,7 +473,8 @@ describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
       expect((await post('qm', `/admin/refunds/${refundId}/approve`, {})).json.error.code).toBe(
         'FOUR_EYES',
       );
-      const done = await post('finance', `/admin/refunds/${refundId}/approve`, {});
+      // Above the QM ceiling: finance adds a fresh authenticator code (security audit).
+      const done = await post('finance', `/admin/refunds/${refundId}/approve`, { code: code() });
       expect(done.json.data.status).toBe('COMPLETED');
       const [pay] = await e2e.db.sql<{ status: string }[]>`
         SELECT status FROM payments WHERE id = ${item.paymentId}`;
@@ -524,7 +600,7 @@ describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
       const done = await post(
         'finance',
         `/admin/refunds/${ok.json.data.resolution.refundIds[0]}/approve`,
-        {},
+        { code: code() },
       );
       expect(done.json.data.status).toBe('COMPLETED');
       expect(await applied(breachId)).toBe(true);
@@ -573,9 +649,10 @@ describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
       ).toBe('FAILED');
       const rest = (await money(booking.d)).refundablePaise;
       const all = (await ask('ops', booking.d, rest)).json.data.refunds[0];
-      expect((await post('finance', `/admin/refunds/${all.id}/approve`, {})).json.data.status).toBe(
-        'COMPLETED',
-      );
+      const approveAll = { code: code() };
+      expect(
+        (await post('finance', `/admin/refunds/${all.id}/approve`, approveAll)).json.data.status,
+      ).toBe('COMPLETED');
       const retry = await post('finance', `/admin/refunds/${failed.id}/retry`);
       expect([retry.status, retry.json.error.code]).toEqual([409, 'REFUND_TOO_LARGE']);
     });
@@ -587,6 +664,9 @@ describe.runIf(TEST_DATABASE_URL)('the money desks', () => {
         amountPaise: left + 1,
         reason: 'GOODWILL',
         note: 'Too much',
+        ...(left + 1 > 500_000
+          ? { code: code(), coApprover: { email: 'admin@clickco.test', code: code() } }
+          : {}),
       });
       expect([over.status, over.json.error.code]).toEqual([409, 'CREDIT_TOO_LARGE']);
       expect(await unbalancedTxns()).toHaveLength(0);

@@ -17,6 +17,9 @@ export interface Reply {
   readonly body: unknown;
   /** Raw text instead of JSON (to simulate a proxy's HTML error page). */
   readonly raw?: string;
+  /** A binary answer (a KYC document) and its content type. */
+  readonly bytes?: Uint8Array;
+  readonly contentType?: string;
 }
 
 export const ok = (data: unknown, status = 200): Reply => ({
@@ -44,6 +47,13 @@ export function mockFetch(route: (call: Recorded) => Reply | Promise<Reply>) {
     return {
       status: reply.status,
       text: async () => reply.raw ?? JSON.stringify(reply.body),
+      arrayBuffer: async () => {
+        const b = reply.bytes ?? new Uint8Array();
+        return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+      },
+      headers: {
+        get: (name: string) => (name === 'content-type' ? (reply.contentType ?? null) : null),
+      },
     };
   });
   return { fetch, calls };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AdminListQuery, AdminPage } from './admin.js';
+import { StepUpCode } from './admin-pricing.js';
 import { IsoDateTime, Uuid } from './common.js';
 import { BookingStatus, type StaffRole } from './enums.js';
 import { BasisPoints, MoneyPaise } from './money.js';
@@ -111,6 +112,11 @@ export const AdminRefundItem = z.object({
   blockedReason: z.string().nullable(),
   /** Approving now would issue a credit note after the s.34(2) window (warn first). */
   creditNoteLate: z.boolean(),
+  /**
+   * Audit: approving takes the booking above the Quality Manager's ceiling, so the approver
+   * enters a fresh authenticator code (step-up).
+   */
+  needsAuthenticatorCode: z.boolean(),
 });
 export type AdminRefundItem = z.infer<typeof AdminRefundItem>;
 
@@ -131,8 +137,11 @@ export type AdminRequestRefundBody = z.infer<typeof AdminRequestRefundBody>;
 export const AdminRequestRefundResponse = z.object({ refunds: z.array(AdminRefundItem).min(1) });
 export type AdminRequestRefundResponse = z.infer<typeof AdminRequestRefundResponse>;
 
-/** POST /admin/refunds/:refundId/approve — approve and send to the gateway. */
-export const AdminApproveRefundBody = z.object({ note: OptionalNote });
+/**
+ * POST /admin/refunds/:refundId/approve — approve and send to the gateway. Above the Quality
+ * Manager's ceiling the approver adds a fresh authenticator `code` (422 STEP_UP_REQUIRED without).
+ */
+export const AdminApproveRefundBody = z.object({ note: OptionalNote, code: StepUpCode.optional() });
 export type AdminApproveRefundBody = z.infer<typeof AdminApproveRefundBody>;
 
 /** POST /admin/refunds/:refundId/reject — a rejection always says why. */
@@ -170,10 +179,30 @@ export const AdminCreditItem = z.object({
 export type AdminCreditItem = z.infer<typeof AdminCreditItem>;
 
 /** POST /admin/bookings/:bookingId/credits — QM within the ceiling, finance any amount. */
+/**
+ * Audit L8: a credit above this (₹5,000, in paise) is four-eyes — the issuer's fresh authenticator
+ * code AND a second FINANCE / SUPER_ADMIN co-approving with their own code, in the same request.
+ */
+export const CREDIT_FOUR_EYES_PAISE = 500_000;
+
+/** The second person on a large credit: their sign-in email and their authenticator code. */
+export const CreditCoApprover = z.object({
+  email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
+  code: StepUpCode,
+});
+export type CreditCoApprover = z.infer<typeof CreditCoApprover>;
+
+/** Present when the credit is above CREDIT_FOUR_EYES_PAISE (422 STEP_UP_REQUIRED without). */
+const CreditApproval = {
+  code: StepUpCode.optional(),
+  coApprover: CreditCoApprover.optional(),
+};
+
 export const AdminIssueCreditBody = z.object({
   amountPaise: PositivePaise,
   reason: CreditReason,
   note: Note,
+  ...CreditApproval,
 });
 export type AdminIssueCreditBody = z.infer<typeof AdminIssueCreditBody>;
 
@@ -313,12 +342,14 @@ export const AdminSettleReviewBody = z.discriminatedUnion('outcome', [
     /** Also issue this credit (the ₹500 no-show apology). */
     creditPaise: MoneyPaise.optional(),
     note: Note,
+    ...CreditApproval,
   }),
   z.object({
     outcome: z.literal('CREDIT_ISSUED'),
     amountPaise: PositivePaise,
     creditReason: CreditReason,
     note: Note,
+    ...CreditApproval,
   }),
   z.object({ outcome: z.literal('CHARGE_RAISED'), amountPaise: PositivePaise, note: Note }),
   z.object({ outcome: z.literal('NO_ACTION'), note: Note }),

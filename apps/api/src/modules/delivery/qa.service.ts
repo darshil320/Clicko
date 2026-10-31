@@ -11,6 +11,7 @@ import type { Actor } from '../bookings/bookings.types';
 import { MediaRetentionService } from '../media/media-retention.service';
 import { balanceDue, toDeliveryView } from './delivery-views';
 import { conflict } from './http-errors';
+import { DeliveryLinkTokens } from './link-tokens';
 import { DeliveriesRepository } from './repositories/deliveries.repository';
 import { DeliveryLinksRepository } from './repositories/delivery-links.repository';
 
@@ -28,6 +29,7 @@ export class QaService {
     @Inject(MediaRetentionService) private readonly media: MediaRetentionService,
     @Inject(DeliveriesRepository) private readonly deliveries: DeliveriesRepository,
     @Inject(DeliveryLinksRepository) private readonly links: DeliveryLinksRepository,
+    @Inject(DeliveryLinkTokens) private readonly tokens: DeliveryLinkTokens,
   ) {}
 
   async decide(
@@ -103,6 +105,8 @@ export class QaService {
       this.deliveries.find(this.sql, bookingId),
       this.links.forBooking(this.sql, bookingId),
     ]);
-    return toDeliveryView(facts, delivery, links);
+    return toDeliveryView(facts, delivery, links, (l) =>
+      this.tokens.tokenIfCurrent(l.id, l.tokenSha256),
+    );
   }
 }

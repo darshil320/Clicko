@@ -1,8 +1,10 @@
 import {
   AdminCreatePayoutBatchBody,
+  AdminExportPayoutBatchBody,
   AdminListQuery,
   AdminMarkPayoutFailedBody,
   AdminMarkPayoutsPaidBody,
+  AdminPayoutBankFileBody,
   AdminPayoutBatchDetail,
   AdminPayoutBatchDiscarded,
   AdminPayoutBatchPage,
@@ -38,7 +40,9 @@ import { StaffGuard } from '../../admin/access/staff.guard';
 import type { AuditContext, StaffCaller } from '../../admin/access/staff-context';
 import { AuditService } from '../../admin/audit/audit.service';
 import { AuditLogInterceptor } from '../../admin/audit/audit-log.interceptor';
+import { StepUpService } from '../../admin/auth/step-up.service';
 import { AdminQueryPipe, decodeCursor, encodeCursor, TimeCursor } from '../../admin/desks/paging';
+import { StaffNames } from '../../admin/money/staff-names';
 import { PayoutBatchesService } from '../payout-batches.service';
 import { PayoutFilesService } from '../payout-files.service';
 import { PayoutReadsService } from '../payout-reads.service';
@@ -68,6 +72,9 @@ function allCities(caller: StaffCaller): void {
 /**
  * The payouts desk (ADR-0026 D3). FINANCE and SUPER_ADMIN only, every city. Every mutation is
  * @Audited (the row commits with the change) and idempotent; every file download is audited.
+ * Audit H2: export, bank file, mark paid, mark failed and send again need a fresh authenticator
+ * code (step-up); mark failed and send again are maker–checker (never the bank file's maker),
+ * checked before the code is spent.
  */
 @Controller('admin/payouts')
 @UseGuards(StaffGuard)
@@ -79,10 +86,16 @@ export class AdminPayoutsController {
     @Inject(PayoutReadsService) private readonly reads: PayoutReadsService,
     @Inject(PayoutBatchesService) private readonly batches: PayoutBatchesService,
     @Inject(PayoutFilesService) private readonly files: PayoutFilesService,
+    @Inject(StepUpService) private readonly stepUp: StepUpService,
+    @Inject(StaffNames) private readonly staffNames: StaffNames,
   ) {}
 
   private hook(ctx: AuditContext) {
     return (batchId: string) => this.audit.hook(ctx, 'payout_batch', batchId);
+  }
+
+  private detailOf(batchId: string) {
+    return this.reads.detail(batchId, (ids) => this.staffNames.of(ids));
   }
 
   @Get('due')
@@ -125,14 +138,14 @@ export class AdminPayoutsController {
   ) {
     allCities(caller);
     const id = await this.batches.create(body.kind, this.clock(), this.hook(ctx));
-    return respondWire(AdminPayoutBatchDetail, await this.reads.detail(id));
+    return respondWire(AdminPayoutBatchDetail, await this.detailOf(id));
   }
 
   @Get('batches/:batchId')
   @Roles(...DESK_ROLES.payouts)
   async detail(@CurrentStaff() caller: StaffCaller, @Param('batchId', uuid) batchId: string) {
     allCities(caller);
-    return respondWire(AdminPayoutBatchDetail, await this.reads.detail(batchId));
+    return respondWire(AdminPayoutBatchDetail, await this.detailOf(batchId));
   }
 
   @Post('batches/:batchId/discard')
@@ -163,10 +176,12 @@ export class AdminPayoutsController {
     @CurrentStaff() caller: StaffCaller,
     @AuditCtx() ctx: AuditContext,
     @Param('batchId', uuid) batchId: string,
+    @Body(new ZodValidationPipe(AdminExportPayoutBatchBody)) body: AdminExportPayoutBatchBody,
   ) {
     allCities(caller);
+    await this.stepUp.verify(caller.id, body.code, ctx, 'payout_batch.export');
     await this.batches.export(batchId, caller.id, this.clock(), this.hook(ctx));
-    return respondWire(AdminPayoutBatchDetail, await this.reads.detail(batchId));
+    return respondWire(AdminPayoutBatchDetail, await this.detailOf(batchId));
   }
 
   @Post('batches/:batchId/mark-paid')
@@ -181,8 +196,9 @@ export class AdminPayoutsController {
     @Body(new ZodValidationPipe(AdminMarkPayoutsPaidBody)) body: AdminMarkPayoutsPaidBody,
   ) {
     allCities(caller);
+    await this.stepUp.verify(caller.id, body.code, ctx, 'payout_batch.mark_paid');
     await this.batches.markPaid(batchId, body.transfers, this.clock(), this.hook(ctx));
-    return respondWire(AdminPayoutBatchDetail, await this.reads.detail(batchId));
+    return respondWire(AdminPayoutBatchDetail, await this.detailOf(batchId));
   }
 
   @Post('batches/:batchId/mark-failed')
@@ -197,14 +213,17 @@ export class AdminPayoutsController {
     @Body(new ZodValidationPipe(AdminMarkPayoutFailedBody)) body: AdminMarkPayoutFailedBody,
   ) {
     allCities(caller);
+    await this.batches.assertSecondPerson(batchId, body.photographerId, caller.id);
+    await this.stepUp.verify(caller.id, body.code, ctx, 'payout_batch.mark_failed');
     await this.batches.markFailed(
       batchId,
       body.photographerId,
-      body.reason,
+      { reason: body.reason, bankReference: body.bankReference },
+      caller.id,
       this.clock(),
       this.hook(ctx),
     );
-    return respondWire(AdminPayoutBatchDetail, await this.reads.detail(batchId));
+    return respondWire(AdminPayoutBatchDetail, await this.detailOf(batchId));
   }
 
   @Post('batches/:batchId/retry')
@@ -219,8 +238,10 @@ export class AdminPayoutsController {
     @Body(new ZodValidationPipe(AdminRetryPayoutBody)) body: AdminRetryPayoutBody,
   ) {
     allCities(caller);
-    await this.batches.retry(batchId, body.photographerId, this.clock(), this.hook(ctx));
-    return respondWire(AdminPayoutBatchDetail, await this.reads.detail(batchId));
+    await this.batches.assertSecondPerson(batchId, body.photographerId, caller.id);
+    await this.stepUp.verify(caller.id, body.code, ctx, 'payout_batch.retry');
+    await this.batches.retry(batchId, body.photographerId, caller.id, this.clock(), this.hook(ctx));
+    return respondWire(AdminPayoutBatchDetail, await this.detailOf(batchId));
   }
 
   /**
@@ -237,10 +258,14 @@ export class AdminPayoutsController {
     @CurrentStaff() caller: StaffCaller,
     @AuditCtx() ctx: AuditContext,
     @Param('batchId', uuid) batchId: string,
+    @Body(new ZodValidationPipe(AdminPayoutBankFileBody)) body: AdminPayoutBankFileBody,
   ) {
     allCities(caller);
+    await this.stepUp.verify(caller.id, body.code, ctx, 'payout_batch.bank_file');
     const f = await this.files.createBankFile(
       batchId,
+      caller.id,
+      this.clock(),
       this.audit.hook(ctx, 'payout_batch', batchId),
     );
     return respondWire(AdminPayoutFile, f);

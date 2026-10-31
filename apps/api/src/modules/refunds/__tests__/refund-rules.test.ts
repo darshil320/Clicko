@@ -4,7 +4,9 @@ import {
   approvalCheck,
   creditCheck,
   creditExpiresAt,
+  creditNeedsFourEyes,
   qmCeilingPaise,
+  refundNeedsStepUp,
 } from '../refund-rules';
 
 const A = '00000000-0000-4000-8000-00000000000a';
@@ -134,5 +136,26 @@ describe('creditExpiresAt — credits are valid 12 months (end of that day, IST)
     expect(creditExpiresAt(new Date('2028-02-29T06:30:00Z')).toISOString()).toBe(
       '2029-02-28T18:29:59.999Z',
     );
+  });
+});
+
+describe('step-up and four-eyes thresholds (security audit, L8)', () => {
+  it('a refund approval needs an authenticator code only above the QM ceiling', () => {
+    const big = { bookingTotalPaise: 2_000_000n, committedPaise: 0n };
+    expect(refundNeedsStepUp({ ...big, amountPaise: 500_000n })).toBe(false);
+    expect(refundNeedsStepUp({ ...big, amountPaise: 500_001n })).toBe(true);
+    // Earlier refunds and credits on the booking count towards the ceiling.
+    expect(refundNeedsStepUp({ ...big, committedPaise: 400_000n, amountPaise: 100_001n })).toBe(
+      true,
+    );
+    // A small booking: half its total.
+    expect(
+      refundNeedsStepUp({ bookingTotalPaise: 300_000n, committedPaise: 0n, amountPaise: 150_001n }),
+    ).toBe(true);
+  });
+
+  it('a credit above ₹5,000 is four-eyes', () => {
+    expect(creditNeedsFourEyes(500_000n)).toBe(false);
+    expect(creditNeedsFourEyes(500_001n)).toBe(true);
   });
 });

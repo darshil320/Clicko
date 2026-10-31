@@ -22,6 +22,8 @@ import { adminApi } from '../../shared/api';
 import { formatDateTime } from '../../shared/format';
 import { useAdminMutation } from '../../shared/mutation';
 import { keys } from '../../shared/query';
+import { stepUpCodeIssue, stepUpError } from './rules';
+import { StepUpCodeField } from './step-up-code-field';
 
 /**
  * ADR-0026 D7 (SUPER_ADMIN): a new temporary password for someone locked out. The confirm says
@@ -36,16 +38,26 @@ export function ResetPasswordDialog({
   readonly onClose: () => void;
 }) {
   const [result, setResult] = useState<AdminResetPasswordResponse | null>(null);
+  const [code, setCode] = useState('');
+  const [touched, setTouched] = useState(false);
   const reset = useAdminMutation({
     // No Idempotency-Key: the answer is a secret and must never sit in a replay store.
-    run: (staffId: string) => adminApi.staff.resetPassword(staffId),
+    // A fresh authenticator code is required (step-up, audit M3).
+    run: (vars: { staffId: string; code: string }) =>
+      adminApi.staff.resetPassword(vars.staffId, vars.code),
     success: () => `New temporary password for ${staff.fullName}`,
     invalidate: [keys.staff],
     onSuccess: setResult,
   });
 
+  const submit = () => {
+    setTouched(true);
+    if (stepUpCodeIssue(code) === null) reset.mutate({ staffId: staff.id, code });
+  };
+
   const close = () => {
     setResult(null);
+    setCode('');
     reset.reset();
     onClose();
   };
@@ -88,11 +100,18 @@ export function ResetPasswordDialog({
                 is.
               </DialogDescription>
             </DialogHeader>
+            <StepUpCodeField
+              id="reset-password-code"
+              value={code}
+              onChange={setCode}
+              disabled={reset.isPending}
+              error={(touched ? stepUpCodeIssue(code) : null) ?? stepUpError(reset.error)}
+            />
             <DialogFooter>
               <Button variant="outline" onClick={close} disabled={reset.isPending}>
                 Cancel
               </Button>
-              <Button onClick={() => reset.mutate(staff.id)} disabled={reset.isPending}>
+              <Button onClick={submit} disabled={reset.isPending}>
                 {reset.isPending ? <Spinner /> : null}
                 Reset password
               </Button>

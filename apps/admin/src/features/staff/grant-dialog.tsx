@@ -19,6 +19,8 @@ import { useAdminMutation } from '../../shared/mutation';
 import { fieldError } from '../../shared/note-field';
 import { keys } from '../../shared/query';
 import { EMPTY_GRANT, GrantFields, grantBody } from './grant-fields';
+import { stepUpError } from './rules';
+import { StepUpCodeField } from './step-up-code-field';
 
 /** Add a role to a staff member (city required for a city manager). */
 export function GrantDialog({
@@ -32,7 +34,9 @@ export function GrantDialog({
 }) {
   const [draft, setDraft] = useState(EMPTY_GRANT);
   const [touched, setTouched] = useState(false);
-  const check = AdminGrantBody.safeParse(grantBody(draft));
+  const [code, setCode] = useState('');
+  // Every grant needs a fresh authenticator code (step-up, audit M3).
+  const check = AdminGrantBody.safeParse({ ...grantBody(draft), code });
 
   const grant = useAdminMutation({
     run: (vars: { staffId: string; body: AdminGrantBody }, idem) =>
@@ -64,6 +68,13 @@ export function GrantDialog({
             cities={cities}
             onChange={setDraft}
             cityError={touched ? fieldError(check, 'cityId') : null}
+          />
+          <StepUpCodeField
+            id="grant-code"
+            value={code}
+            onChange={setCode}
+            disabled={grant.isPending}
+            error={(touched ? fieldError(check, 'code') : null) ?? stepUpError(grant.error)}
           />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={grant.isPending}>

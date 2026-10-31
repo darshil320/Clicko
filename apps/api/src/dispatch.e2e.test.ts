@@ -7,8 +7,8 @@ import { TEST_DATABASE_URL } from './test-support/scratch-db';
 
 const NOW = new Date('2026-11-10T06:30:00.000Z'); // Tuesday 12:00 IST
 const DAY = 24 * 60 * 60_000;
-const PRO_PHONE = '+919825099001';
-const CLIENT_PHONE = '+919700000777';
+const PRO_PHONE = '+919999199001';
+const CLIENT_PHONE = '+919999200777';
 
 describe.runIf(TEST_DATABASE_URL)(
   'dispatch end to end: book → pay → dispatch → PRO_LOGIN → offer → accept',
@@ -152,7 +152,7 @@ describe.runIf(TEST_DATABASE_URL)(
     });
 
     it('an unknown number gets the same OTP response shape, but no SMS and no session', async () => {
-      const phone = '+919825099999';
+      const phone = '+919999199999';
       const req = await e2e.call('POST', '/pro/auth/otp/request', { body: { phone } });
       expect(req.status).toBe(200);
       expect(Object.keys(req.json.data).sort()).toEqual([

@@ -55,6 +55,24 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0013 is byte-identical to docs/schema-addenda/0013-waitlist-abuse.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0013_waitlist_abuse.sql')).toBe(
+      read('docs/schema-addenda/0013-waitlist-abuse.sql'),
+    );
+  });
+
+  it('0011 is byte-identical to docs/schema-addenda/0011-append-only-hardening.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0011_append_only_hardening.sql')).toBe(
+      read('docs/schema-addenda/0011-append-only-hardening.sql'),
+    );
+  });
+
+  it('0012 is byte-identical to docs/schema-addenda/0012-money-files-hardening.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0012_money_files_hardening.sql')).toBe(
+      read('docs/schema-addenda/0012-money-files-hardening.sql'),
+    );
+  });
+
   it('lists migrations in numeric order with a sha256 checksum each', () => {
     const migrations = listMigrations();
     expect(migrations.map((m) => m.name)).toEqual([
@@ -67,6 +85,9 @@ describe('migrations mirror the specification (ADR-0006)', () => {
       '0007_staff_passwords.sql',
       '0009_payout_deductions.sql',
       '0010_pricing_drafts.sql',
+      '0011_append_only_hardening.sql',
+      '0012_money_files_hardening.sql',
+      '0013_waitlist_abuse.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

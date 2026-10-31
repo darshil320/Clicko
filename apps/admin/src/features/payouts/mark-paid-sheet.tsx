@@ -1,16 +1,18 @@
 'use client';
 
-import { type AdminPayoutBatchDetail, PayoutUtr } from '@clickco/contracts';
+import { type AdminPayoutBatchDetail, PayoutUtr, StepUpCode } from '@clickco/contracts';
 import { Button, Field, Input, SideSheet, Spinner } from '@clickco/ui-web';
 import { useState } from 'react';
 import { adminApi } from '../../shared/api';
+import { AuthenticatorCodeField } from '../../shared/authenticator-code-field';
 import { useAdminMutation } from '../../shared/mutation';
 import { count, maskedAccount, rupeesExact } from './labels';
 import { payoutKeys } from './shared';
 
 /**
- * Mark transfers paid with the bank's UTR (ADR-0026 D3): one field per transfer, or one reference
- * for all when the bank gave a single batch reference. Blank rows stay waiting.
+ * Mark transfers paid with the bank's UTR (ADR-0026 D3): one field per transfer; blank rows stay
+ * waiting. A UTR identifies exactly one transfer (audit L7), and marking paid needs a fresh
+ * authenticator code (audit H2).
  */
 export function MarkPaidSheet({
   batch,
@@ -22,6 +24,8 @@ export function MarkPaidSheet({
   const waiting = batch.transfers.filter((t) => t.state === 'AWAITING_PAYMENT');
   const [utrs, setUtrs] = useState<Readonly<Record<string, string>>>({});
   const [touched, setTouched] = useState(false);
+  const [code, setCode] = useState('');
+  const codeCheck = StepUpCode.safeParse(code);
 
   const filled = waiting.flatMap((t) => {
     const raw = (utrs[t.photographerId] ?? '').trim();
@@ -33,20 +37,33 @@ export function MarkPaidSheet({
     .reduce((s, t) => s + BigInt(t.netPaise), 0n);
 
   const mark = useAdminMutation({
-    run: (vars: { transfers: ReadonlyArray<{ photographerId: string; utr: string }> }, idem) =>
-      adminApi.payouts.batches.markPaid(batch.id, { transfers: [...vars.transfers] }, idem),
+    run: (
+      vars: {
+        code: string;
+        transfers: ReadonlyArray<{ photographerId: string; utr: string }>;
+      },
+      idem,
+    ) =>
+      adminApi.payouts.batches.markPaid(
+        batch.id,
+        { code: vars.code, transfers: [...vars.transfers] },
+        idem,
+      ),
     success: (vars) => `${count(vars.transfers.length, 'transfer')} marked paid`,
     invalidate: [payoutKeys.all],
     onSuccess: onClose,
   });
 
-  const fillAll = (value: string) =>
-    setUtrs(Object.fromEntries(waiting.map((t) => [t.photographerId, value])));
-
   const submit = () => {
     setTouched(true);
-    if (filled.length === 0 || invalid.length > 0) return;
-    mark.mutate({ transfers: filled.map(({ photographerId, utr }) => ({ photographerId, utr })) });
+    if (filled.length === 0 || invalid.length > 0 || !codeCheck.success) return;
+    mark.mutate(
+      {
+        code: codeCheck.data,
+        transfers: filled.map(({ photographerId, utr }) => ({ photographerId, utr })),
+      },
+      { onError: () => setCode('') },
+    );
   };
 
   return (
@@ -76,13 +93,6 @@ export function MarkPaidSheet({
       }
     >
       <div className="grid gap-6">
-        <Field
-          label="Same reference for all (optional)"
-          htmlFor="utr-all"
-          hint="Fills every row below. Use it only if your bank gave one reference for the whole file."
-        >
-          <Input id="utr-all" autoComplete="off" onChange={(e) => fillAll(e.target.value)} />
-        </Field>
         <ul className="grid gap-4">
           {waiting.map((t) => {
             const id = `utr-${t.photographerId}`;
@@ -110,6 +120,17 @@ export function MarkPaidSheet({
             );
           })}
         </ul>
+        <AuthenticatorCodeField
+          id="mark-paid-code"
+          hint="Each UTR belongs to one transfer only. Marking money paid needs a fresh code."
+          value={code}
+          onChange={setCode}
+          error={
+            touched && !codeCheck.success
+              ? 'Enter the 6-digit code from your authenticator app'
+              : null
+          }
+        />
       </div>
     </SideSheet>
   );

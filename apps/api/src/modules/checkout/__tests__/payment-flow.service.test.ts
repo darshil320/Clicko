@@ -1,6 +1,9 @@
 import { HttpException, Logger } from '@nestjs/common';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import type { BookingRow } from '../../bookings/bookings.types';
 import type { GatewayEvent } from '../../payments/gateways/payment-gateway.port';
+import type { PaymentRecord } from '../../payments/payments.types';
+import { PaymentFlowService } from '../payment-flow.service';
 import { booking, harness, NOW, payment, START, succeeded } from './payment-flow.harness';
 
 describe('PaymentFlowService.handleWebhook', () => {
@@ -226,5 +229,118 @@ describe('PaymentFlowService.pay', () => {
       booking: booking('CONFIRMED'),
     });
     expect(await statusOf(h.flow.pay('u-1', 'bk-1'))).toBe('BOOKING_NOT_PAYABLE');
+  });
+});
+
+describe('PaymentFlowService — refund webhook relay (audit L9)', () => {
+  beforeAll(() => Logger.overrideLogger(false));
+
+  const refundEvent = {
+    kind: 'REFUND_PROCESSED',
+    eventType: 'refund.processed',
+    providerRefundId: 'rfnd_1',
+    providerPaymentId: 'pay_gw_1',
+    amountPaise: 10_000n,
+    receipt: 'r-1',
+  } as unknown as GatewayEvent;
+
+  it('a relay that fails marks the webhook failed (the gateway retry processes it again)', async () => {
+    const h = harness({ event: refundEvent });
+    const relay = vi.fn(async () => {
+      throw new Error('outbox insert failed');
+    });
+    const flow = new PaymentFlowService(
+      h.bookings as never,
+      h.payments as never,
+      { begin: async (fn: (tx: unknown) => unknown) => fn({}) } as never,
+      () => NOW,
+      { relayWebhook: relay } as never,
+    );
+    const run = flow.handleWebhook({
+      provider: 'sandbox',
+      rawBody: Buffer.from('{}'),
+      signature: 'sig',
+      eventId: 'evt',
+    });
+    await expect(run).rejects.toThrow('outbox insert failed');
+    expect(h.payments.markWebhookFailed).toHaveBeenCalledWith('wh-1', 'outbox insert failed');
+  });
+});
+
+describe('PaymentFlowService.pay — the gateway order outside the booking lock (audit L6)', () => {
+  beforeAll(() => Logger.overrideLogger(false));
+
+  function payHarness(states: BookingRow[], openAfter: PaymentRecord | null = null) {
+    let inTx = false;
+    let locks = 0;
+    const log: string[] = [];
+    const bookings = {
+      lock: vi.fn(async () => {
+        const b = states[Math.min(locks, states.length - 1)] as BookingRow;
+        locks += 1;
+        return b;
+      }),
+      transition: vi.fn(async () => {
+        log.push('transition');
+      }),
+    };
+    const payments = {
+      gatewayName: 'SANDBOX',
+      checkoutKeyId: null,
+      findOpenForBooking: vi.fn(async () => (locks > 1 ? openAfter : null)),
+      reserveOrder: vi.fn(async () => {
+        log.push(inTx ? 'gateway-in-tx' : 'gateway');
+        return { id: '00000000-0000-4000-8000-000000000001', providerOrderId: 'order_9' };
+      }),
+      insertOrder: vi.fn(async () => {
+        log.push('insert');
+        return payment({ id: '00000000-0000-4000-8000-000000000001', providerOrderId: 'order_9' });
+      }),
+    };
+    const sql = {
+      begin: async (fn: (tx: unknown) => unknown) => {
+        inTx = true;
+        try {
+          return await fn({});
+        } finally {
+          inTx = false;
+        }
+      },
+    };
+    const flow = new PaymentFlowService(
+      bookings as never,
+      payments as never,
+      sql as never,
+      () => NOW,
+    );
+    return { flow, bookings, payments, log };
+  }
+
+  it('calls the gateway between two transactions, then records the order and transitions', async () => {
+    const h = payHarness([booking('QUOTED')]);
+    const res = await h.flow.pay('u-1', 'bk-1');
+    expect(res).toMatchObject({ providerOrderId: 'order_9' });
+    expect(h.log).toEqual(['gateway', 'insert', 'transition']);
+  });
+
+  it('a concurrent pay that won meanwhile: its open order is returned, ours is never recorded', async () => {
+    const h = payHarness(
+      [booking('QUOTED'), booking('ADVANCE_PENDING')],
+      payment({ id: '00000000-0000-4000-8000-000000000002', providerOrderId: 'order_first' }),
+    );
+    const res = await h.flow.pay('u-1', 'bk-1');
+    expect(res).toMatchObject({ providerOrderId: 'order_first' });
+    expect(h.log).toEqual(['gateway']);
+  });
+
+  it('a booking whose amount changed meanwhile is refused, nothing recorded', async () => {
+    const h = payHarness([
+      booking('BALANCE_PENDING', { amountPaidPaise: 500_000n }),
+      booking('BALANCE_PENDING', { amountPaidPaise: 500_000n, totalPaise: 1_200_000n }),
+    ]);
+    await expect(h.flow.pay('u-1', 'bk-1')).rejects.toMatchObject({
+      response: { code: 'BOOKING_CHANGED' },
+    });
+    expect(h.log).toEqual(['gateway']);
   });
 });

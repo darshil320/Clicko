@@ -56,7 +56,7 @@ const actorOf = (s: StaffRecord): AuditActor => ({ kind: 'STAFF', id: s.id, emai
 /**
  * ADR-0026 D7 — a signed-in staff member changes their own password: the current password, a
  * new one within the policy, and a fresh authenticator code. The same lockouts as sign-in apply
- * (5 wrong passwords per email or 20 per IP in 15 min; 10 wrong codes per account; a code works
+ * (5 wrong passwords per email and IP, or 20 per IP, in 15 min; 10 wrong codes per account; a code works
  * once). Every session of the person ends — this one included — and a new one is returned.
  */
 @Injectable()
@@ -123,7 +123,7 @@ export class StaffPasswordService {
     return this.tokens.issue({ kind: 'STAFF', id: staff.id }, null);
   }
 
-  /** Counted against the email and IP before the check, released when right (as sign-in). */
+  /** Counted against (email, IP) and IP before the check, released when right (as sign-in). */
   private async checkCurrentPassword(
     staff: StaffRecord,
     password: string,
@@ -131,7 +131,7 @@ export class StaffPasswordService {
   ): Promise<void> {
     const counts = await this.guarded(() => this.store.reserve(staff.email, ctx.ip));
     if (
-      counts.email > STAFF_LOGIN_POLICY.maxFailuresPerEmail ||
+      counts.emailIp > STAFF_LOGIN_POLICY.maxFailuresPerEmailIp ||
       counts.ip > STAFF_LOGIN_POLICY.maxFailuresPerIp
     ) {
       await this.failed(staff, ctx, 'LOCKED');
@@ -144,20 +144,25 @@ export class StaffPasswordService {
     await this.guarded(() => this.store.release(staff.email, ctx.ip));
   }
 
-  /** A fresh code from the enrolled authenticator, used once (the sign-in replay guard). */
+  /**
+   * A fresh code from the enrolled authenticator, used once (the sign-in replay guard). Audit L6:
+   * the attempt is counted BEFORE the code is checked (atomic INCR), so parallel guesses cannot
+   * all slip under the limit; a right code clears the count.
+   */
   private async checkCode(staff: StaffRecord, code: string, ctx: AuditContext): Promise<void> {
     if (!staff.totpSecret) throw new UnprocessableEntityException(NO_AUTHENTICATOR);
-    const failures = await this.guarded(() => this.store.totpFailures(staff.id));
-    if (failures >= STAFF_LOGIN_POLICY.maxTotpFailuresPerStaff) {
+    const attempts = await this.guarded(() => this.store.recordTotpFailure(staff.id));
+    if (attempts > STAFF_LOGIN_POLICY.maxTotpFailuresPerStaff) {
       await this.failed(staff, ctx, 'LOCKED_TOTP');
       throw tooMany();
     }
     const step = verifyTotp(this.box.open(staff.totpSecret, staff.id), code, this.clock());
     if (step === null || !(await this.guarded(() => this.store.claimStep(staff.id, step)))) {
-      await this.guarded(() => this.store.recordTotpFailure(staff.id));
+      // The reserved attempt stays counted: it was a failure.
       await this.failed(staff, ctx, step === null ? 'BAD_TOTP' : 'TOTP_REUSED');
       throw new UnprocessableEntityException(WRONG_CODE);
     }
+    await this.guarded(() => this.store.clearTotpFailures(staff.id));
   }
 
   private async failed(staff: StaffRecord, ctx: AuditContext, reason: string): Promise<void> {

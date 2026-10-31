@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AdminListQuery, AdminPage } from './admin.js';
+import { StepUpCode } from './admin-pricing.js';
 import { IsoDateTime, Uuid } from './common.js';
 import { BasisPoints, MoneyPaise, MoneyPaiseString } from './money.js';
 
@@ -11,6 +12,11 @@ import { BasisPoints, MoneyPaise, MoneyPaiseString } from './money.js';
  * `MoneyPaiseString` (ADR-0007: aggregates never travel as JS numbers). Full bank account numbers
  * and PANs never appear in these JSON views — only in the downloaded files, and every download is
  * audited.
+ *
+ * Audit H2 (31 Oct 2026): every action that can send money — export, bank file, mark paid, mark
+ * failed, send again — carries a fresh authenticator `code` (step-up). Marking a transfer failed
+ * needs the bank's return reference, and marking failed / sending again is maker–checker: never
+ * the person who created the bank file the transfer went out in.
  */
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
@@ -195,6 +201,11 @@ export const AdminPayoutTransfer = z.object({
   utr: z.string().nullable(),
   paidAt: IsoDateTime.nullable(),
   failureReason: z.string().nullable(),
+  /** The bank's return / rejection reference given when the transfer was marked failed. */
+  failureReference: z.string().nullable(),
+  /** Who created the bank file this transfer last went out in (maker); null before any file. */
+  sentBy: z.object({ id: Uuid, name: z.string() }).nullable(),
+  sentAt: IsoDateTime.nullable(),
   lines: z.array(AdminPayoutLine),
   deductions: z.array(AdminPayoutDeduction),
 });
@@ -223,8 +234,17 @@ export const PayoutUtr = z
   .regex(/^[A-Z0-9]{6,30}$/, 'Enter the bank reference (UTR): 6 to 30 letters and digits');
 export type PayoutUtr = z.infer<typeof PayoutUtr>;
 
+/** POST /admin/payouts/batches/:batchId/export — amounts lock and the ledger is credited. */
+export const AdminExportPayoutBatchBody = z.object({ code: StepUpCode });
+export type AdminExportPayoutBatchBody = z.infer<typeof AdminExportPayoutBatchBody>;
+
+/** POST /admin/payouts/batches/:batchId/bank-file — the next bank file (full account numbers). */
+export const AdminPayoutBankFileBody = z.object({ code: StepUpCode });
+export type AdminPayoutBankFileBody = z.infer<typeof AdminPayoutBankFileBody>;
+
 /** POST /admin/payouts/batches/:batchId/mark-paid — one UTR per transfer. */
 export const AdminMarkPayoutsPaidBody = z.object({
+  code: StepUpCode,
   transfers: z
     .array(z.object({ photographerId: Uuid, utr: PayoutUtr }))
     .min(1)
@@ -238,9 +258,29 @@ export const AdminMarkPayoutsPaidBody = z.object({
 });
 export type AdminMarkPayoutsPaidBody = z.infer<typeof AdminMarkPayoutsPaidBody>;
 
-/** POST /admin/payouts/batches/:batchId/mark-failed — the bank returned the transfer. */
+/**
+ * The bank's reference for a returned / rejected transfer (NEFT return UTR, the bank's rejection
+ * or complaint number). Required to mark a transfer failed (audit H2): "the bank says so" must be
+ * something finance can quote back to the bank.
+ */
+export const PayoutBankReturnReference = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(
+    /^[A-Z0-9][A-Z0-9/-]{5,39}$/,
+    "Enter the bank's return or rejection reference: 6 to 40 letters, digits, / or -",
+  );
+export type PayoutBankReturnReference = z.infer<typeof PayoutBankReturnReference>;
+
+/**
+ * POST /admin/payouts/batches/:batchId/mark-failed — the bank returned the transfer. Maker–checker:
+ * a second FINANCE / SUPER_ADMIN, never whoever created the bank file (403 SECOND_PERSON_REQUIRED).
+ */
 export const AdminMarkPayoutFailedBody = z.object({
+  code: StepUpCode,
   photographerId: Uuid,
+  bankReference: PayoutBankReturnReference,
   reason: z
     .string()
     .trim()
@@ -253,8 +293,11 @@ export const AdminMarkPayoutFailedBody = z.object({
 });
 export type AdminMarkPayoutFailedBody = z.infer<typeof AdminMarkPayoutFailedBody>;
 
-/** POST /admin/payouts/batches/:batchId/retry — send a failed transfer again (next bank file). */
-export const AdminRetryPayoutBody = z.object({ photographerId: Uuid });
+/**
+ * POST /admin/payouts/batches/:batchId/retry — send a failed transfer again (next bank file).
+ * Maker–checker like mark-failed; a resend within 7 days of the original file raises an ops alert.
+ */
+export const AdminRetryPayoutBody = z.object({ code: StepUpCode, photographerId: Uuid });
 export type AdminRetryPayoutBody = z.infer<typeof AdminRetryPayoutBody>;
 
 /** POST /admin/payouts/batches/:batchId/discard — a draft only; its payouts go back to Due. */
@@ -264,6 +307,9 @@ export const AdminPayoutBatchDiscarded = z.object({
   discarded: z.literal(true),
 });
 export type AdminPayoutBatchDiscarded = z.infer<typeof AdminPayoutBatchDiscarded>;
+
+/** How many days after the original bank file a resend still raises an ops alert (audit H2). */
+export const PAYOUT_EARLY_RESEND_DAYS = 7;
 
 // ── Files (bank file, statement, TDS report) ────────────────────────────────
 

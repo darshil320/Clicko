@@ -1,4 +1,4 @@
-import type { BookingStatus } from '@clickco/contracts';
+import { type BookingStatus, MEDIA_LIMITS } from '@clickco/contracts';
 
 /** Sprint 7 media numbers (ADR-0014). One object so ops can tune them. */
 export const MEDIA_CONFIG = {
@@ -22,6 +22,13 @@ export const MEDIA_CONFIG = {
   auditDetailLimit: 20,
   /** One darktable-cli run per file may take this long before it is killed. */
   darktableTimeoutMs: 120_000,
+  /**
+   * Audit H1: darktable's address-space cap (`ulimit -v`, Linux). Generous for a 100 MP RAW; the
+   * worker container's cgroup limit (ADR-0027 D6) is the authoritative one.
+   */
+  darktableMemoryLimitMb: 6_144,
+  /** Audit H1: no RAW above the largest photo an upload accepts ever reaches darktable. */
+  maxExportRawBytes: MEDIA_LIMITS.maxPhotoBytes,
   /** An open session idle this long has its staged parts reclaimed (security review M5). */
   idleSessionReclaimHours: 24,
   /** Sessions looked at per reaper run. */

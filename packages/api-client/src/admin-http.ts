@@ -1,8 +1,8 @@
 import { type AdminListQuery, AdminListQuery as ListQuerySchema, Uuid } from '@clickco/contracts';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { Idempotent } from './client.js';
 import { ApiError } from './errors.js';
-import type { Http } from './http.js';
+import type { BinaryBody, Http } from './http.js';
 
 /**
  * Shared building blocks for the `/admin/*` clients (ADR-0025, ADR-0026 D9). Each desk area has
@@ -53,7 +53,14 @@ export interface AdminRequests {
   get<T>(path: string, schema: z.ZodType<T>, params?: URLSearchParams): Promise<T>;
   /** Authenticated POST with an Idempotency-Key (one key per intent, reused on retry). */
   post<T>(path: string, schema: z.ZodType<T>, idem: Idempotent, body?: unknown): Promise<T>;
+  /** Authenticated GET of a binary answer (bytes + content type). */
+  getBytes(path: string): Promise<BinaryBody>;
 }
+
+const BinaryBodySchema = z.object({
+  bytes: z.instanceof(Uint8Array),
+  contentType: z.string(),
+});
 
 export function adminRequests(http: Http): AdminRequests {
   return {
@@ -73,5 +80,7 @@ export function adminRequests(http: Http): AdminRequests {
         idempotencyKey,
         ...(body === undefined ? {} : { body }),
       }),
+    getBytes: (path) =>
+      http.request({ method: 'GET', path, schema: BinaryBodySchema, auth: true, binary: true }),
   };
 }

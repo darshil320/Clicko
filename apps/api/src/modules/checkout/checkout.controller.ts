@@ -2,7 +2,7 @@ import { CreateBookingBody, type CreateBookingRequest, Uuid } from '@clickco/con
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import { CurrentSubject } from '../../common/decorators/current-subject.decorator';
 import { ok } from '../../common/envelope';
-import { AuthGuard } from '../../common/guards/auth.guard';
+import { UserGuard } from '../../common/guards/user.guard';
 import { Idempotent } from '../../common/idempotency/idempotent.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import type { Subject } from '../auth/token.service';
@@ -14,7 +14,8 @@ const BookingId = new ZodValidationPipe(Uuid);
 
 /** The client booking flow (ADR-0009). Every money-mutating route is @Idempotent. */
 @Controller('bookings')
-@UseGuards(AuthGuard)
+// Audit L1: USER sessions of accounts that are not blocked, checked on every request.
+@UseGuards(UserGuard)
 export class CheckoutController {
   constructor(
     @Inject(CheckoutService) private readonly checkout: CheckoutService,

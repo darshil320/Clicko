@@ -1,7 +1,9 @@
 import {
   type AdminCreatePayoutBatchBody,
+  type AdminExportPayoutBatchBody,
   type AdminMarkPayoutFailedBody,
   type AdminMarkPayoutsPaidBody,
+  type AdminPayoutBankFileBody,
   AdminPayoutBatchDetail,
   AdminPayoutBatchDiscarded,
   AdminPayoutBatchPage,
@@ -11,7 +13,9 @@ import {
   type AdminRetryPayoutBody,
   type AdminTdsQuery,
   AdminTdsSummary,
+  AdminPayoutBankFileBody as BankFileSchema,
   AdminCreatePayoutBatchBody as CreateBatchSchema,
+  AdminExportPayoutBatchBody as ExportSchema,
   AdminMarkPayoutFailedBody as MarkFailedSchema,
   AdminMarkPayoutsPaidBody as MarkPaidSchema,
   AdminRetryPayoutBody as RetrySchema,
@@ -25,6 +29,8 @@ import type { Idempotent } from './client.js';
  * ADR-0026 stream B — `/admin/payouts`: Due, batches (draft → export → paid), the bank file,
  * statements and the TDS report. Files come back as CSV text inside the JSON envelope
  * (`AdminPayoutFile`); the panel turns them into a download. FINANCE / SUPER_ADMIN only.
+ * Audit H2: export, bank file, mark paid, mark failed and send again carry a fresh authenticator
+ * `code`; mark failed / send again must come from someone other than the bank file's maker.
  */
 export function adminPayoutsRoutes(r: AdminRequests) {
   const batch = (batchId: string) => `/admin/payouts/batches/${idSegment(batchId)}`;
@@ -46,8 +52,13 @@ export function adminPayoutsRoutes(r: AdminRequests) {
       discard: async (batchId: string, idem: Idempotent) =>
         r.post(`${batch(batchId)}/discard`, AdminPayoutBatchDiscarded, idem),
       /** Locks the amounts and books them; the bank file can then be downloaded. */
-      export: async (batchId: string, idem: Idempotent) =>
-        r.post(`${batch(batchId)}/export`, AdminPayoutBatchDetail, idem),
+      export: async (batchId: string, body: AdminExportPayoutBatchBody, idem: Idempotent) =>
+        r.post(
+          `${batch(batchId)}/export`,
+          AdminPayoutBatchDetail,
+          idem,
+          checked(ExportSchema, body),
+        ),
       markPaid: async (batchId: string, body: AdminMarkPayoutsPaidBody, idem: Idempotent) =>
         r.post(
           `${batch(batchId)}/mark-paid`,
@@ -69,8 +80,8 @@ export function adminPayoutsRoutes(r: AdminRequests) {
        * exactly one file; a repeat answers 409 NOTHING_NEW, never a second file. The server does
        * not store this answer (it holds account numbers), so the key only labels the attempt.
        */
-      createBankFile: async (batchId: string, idem: Idempotent) =>
-        r.post(`${batch(batchId)}/bank-file`, AdminPayoutFile, idem),
+      createBankFile: async (batchId: string, body: AdminPayoutBankFileBody, idem: Idempotent) =>
+        r.post(`${batch(batchId)}/bank-file`, AdminPayoutFile, idem, checked(BankFileSchema, body)),
       /** Self-billed payout statement, one photographer (audited). */
       statement: async (batchId: string, photographerId: string) =>
         r.get(`${batch(batchId)}/statements/${idSegment(photographerId)}`, AdminPayoutFile),

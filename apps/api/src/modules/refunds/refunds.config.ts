@@ -1,3 +1,5 @@
+import { CREDIT_FOUR_EYES_PAISE } from '@clickco/contracts';
+
 /**
  * ADR-0026 D1/D2 numbers in one place (ADR-0005 OD-12 for the Quality Manager ceiling). A CA or
  * owner ruling changes these constants, not the code.
@@ -7,6 +9,11 @@ export const MONEY_DESK_CONFIG = {
   qmCeilingPaise: 500_000n,
   /** … or 50 % of the booking total (rounded down, so the ceiling never exceeds half). */
   qmCeilingBps: 5_000n,
+  /**
+   * Audit L8: a credit above this is four-eyes (the issuer's authenticator code plus a second
+   * finance person's). ₹5,000 — the same figure as the QM ceiling, so only finance-sized credits.
+   */
+  creditFourEyesPaise: BigInt(CREDIT_FOUR_EYES_PAISE),
   /** A client credit is valid this many months, to the end of that IST day. */
   creditValidityMonths: 12,
   /** T&C §3.6(c): a photographer no-show with no replacement adds a ₹500 service credit. */

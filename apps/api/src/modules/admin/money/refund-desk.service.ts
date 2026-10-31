@@ -18,7 +18,12 @@ import type { AdminBookingFacts } from '../../bookings/bookings.types';
 import { PaymentRefundsService } from '../../payments/payment-refunds.service';
 import { paidWithLabel } from '../../payments/refunds.types';
 import { BookingMoneyReader } from '../../refunds/booking-money.reader';
-import { approvalCheck, qmCeilingPaise } from '../../refunds/refund-rules';
+import {
+  approvalCheck,
+  qmCeilingPaise,
+  refundNeedsStepUp,
+  rupees,
+} from '../../refunds/refund-rules';
 import { RefundsService } from '../../refunds/refunds.service';
 import type { RefundRecord } from '../../refunds/refunds.types';
 import { ServiceabilityService } from '../../serviceability/serviceability.service';
@@ -29,6 +34,7 @@ import { decodeCursor, pageOf, TimeCursor } from '../desks/paging';
 import { OverviewRegistry } from '../overview/overview.registry';
 import { isAre, plural } from '../overview/overview-source';
 import { assertInScope, rolesIn } from './money-access';
+import { MoneyStepUp } from './money-step-up';
 import { toBookingPayment, toCreditItem, toRefundItem } from './money-views';
 import { StaffNames } from './staff-names';
 
@@ -62,6 +68,7 @@ export class RefundDeskService {
     @Inject(PaymentRefundsService) private readonly payments: PaymentRefundsService,
     @Inject(StaffNames) private readonly staffNames: StaffNames,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(MoneyStepUp) private readonly stepUp: MoneyStepUp,
     @Inject(OverviewRegistry) overview: OverviewRegistry,
   ) {
     overview.register({
@@ -152,6 +159,7 @@ export class RefundDeskService {
     body: AdminApproveRefundBody,
   ): Promise<AdminRefundItem> {
     const cityId = await this.cityOf(caller, refundId);
+    await this.stepUpIfAboveCeiling(caller, ctx, refundId, body.code);
     const after = await this.refunds.approve(
       refundId,
       { staffId: caller.id, roles: rolesIn(caller, cityId) },
@@ -185,6 +193,41 @@ export class RefundDeskService {
       this.audit.hook(ctx, 'refund', refundId),
     );
     return this.item(caller, after);
+  }
+
+  /**
+   * Audit: an approval above the Quality Manager's ceiling (finance territory) needs a fresh
+   * authenticator code. Skipped for the requester (four-eyes refuses them anyway, without
+   * spending a code), for a QM (refused as above their limit) and for anything no longer
+   * awaiting approval (the service answers that).
+   */
+  private async stepUpIfAboveCeiling(
+    caller: StaffCaller,
+    ctx: AuditContext,
+    refundId: string,
+    code: string | undefined,
+  ): Promise<void> {
+    const refund = await this.refunds.find(refundId);
+    if (refund?.status !== 'REQUESTED' || refund.requestedById === caller.id) return;
+    const [booking] = await this.bookings.adminFacts([refund.bookingId]);
+    if (!booking) return;
+    // Only finance can approve above the ceiling; anyone else gets the service's own refusal.
+    const roles = rolesIn(caller, booking.cityId);
+    if (!roles.some((r) => r === 'FINANCE' || r === 'SUPER_ADMIN')) return;
+    const committedPaise = await this.refunds.committedOnBooking(refund.bookingId);
+    const facts = {
+      amountPaise: refund.amountPaise,
+      bookingTotalPaise: booking.totalPaise,
+      committedPaise,
+    };
+    if (!refundNeedsStepUp(facts)) return;
+    await this.stepUp.requireCode(
+      caller,
+      code,
+      ctx,
+      'refund.approve',
+      `This refund takes the booking above the Quality Manager's limit of ${rupees(qmCeilingPaise(booking.totalPaise))}. Enter a fresh code from your authenticator app to approve it.`,
+    );
   }
 
   /** The refund's booking city, in the caller's scope (else 404, like a missing refund). */
@@ -229,7 +272,8 @@ export class RefundDeskService {
         const payment = byPayment.get(r.paymentId);
         return [
           (async () => {
-            const decision = this.decision(caller, r, booking, committed.get(r.bookingId) ?? 0n);
+            const committedPaise = committed.get(r.bookingId) ?? 0n;
+            const decision = this.decision(caller, r, booking, committedPaise);
             return toRefundItem(r, {
               booking,
               cityName: cities.get(booking.cityId) ?? '',
@@ -237,6 +281,13 @@ export class RefundDeskService {
               names,
               notes: notes.filter((n) => n.refundId === r.id),
               ...decision,
+              needsAuthenticatorCode:
+                r.status === 'REQUESTED' &&
+                refundNeedsStepUp({
+                  amountPaise: r.amountPaise,
+                  bookingTotalPaise: booking.totalPaise,
+                  committedPaise,
+                }),
               creditNoteLate:
                 r.status === 'REQUESTED'
                   ? await this.payments.creditNoteLate(payment?.invoiceId ?? null, now)

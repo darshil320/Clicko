@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   StaffLoginBody,
   StaffLoginChallenge,
@@ -27,6 +28,7 @@ import type { AuditActor, AuditContext } from '../access/staff-context';
 import { AuditService } from '../audit/audit.service';
 import { type StaffRecord, StaffRepository, type Tx } from '../staff/staff.repository';
 import { StaffService } from '../staff/staff.service';
+import { devAccountRefused } from './dev-accounts';
 import { LoginStore, passwordFingerprint, STAFF_LOGIN_POLICY } from './login-store';
 import { hashPassword, verifyPassword } from './password';
 import {
@@ -64,8 +66,8 @@ const locked = () =>
 /**
  * Staff sign-in (ADR-0025 D2): email + password → a 5-minute challenge in Redis bound to the
  * staff id → TOTP (enrolled at first sign-in) → a STAFF session (12 h refresh, fixed). Lockout:
- * 5 failed passwords per email / 20 per IP (IPv6 per /64) per 15 min, then 429, counted before
- * the password is checked; 5 wrong codes burn the challenge, and 10 per account per 15 min stop
+ * 5 failed passwords per email and network / 20 per network (IPv6 per /64) per 15 min, then 429,
+ * counted before the password is checked; per email alone only slows and alerts (audit M2); 5 wrong codes burn the challenge, and 10 per account per 15 min stop
  * new challenges (so a known password cannot brute-force the code); a code works once.
  * Sign-ins, failures and enrolment go to the audit log.
  *
@@ -77,6 +79,7 @@ const locked = () =>
 export class StaffAuthService implements OnModuleInit {
   private readonly logger = new Logger(StaffAuthService.name);
   private readonly box: SecretBox;
+  private readonly nodeEnv: Env['NODE_ENV'];
   /** Verified against when the email is unknown, so timing does not reveal accounts. */
   private decoy: Promise<string> | null = null;
 
@@ -91,6 +94,7 @@ export class StaffAuthService implements OnModuleInit {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {
     this.box = new SecretBox(env.STAFF_TOTP_KEY);
+    this.nodeEnv = env.NODE_ENV;
   }
 
   /** The decoy hash exists before the first request, so no request pays for building it. */
@@ -101,8 +105,12 @@ export class StaffAuthService implements OnModuleInit {
 
   async login(body: StaffLoginBody, ctx: AuditContext): Promise<StaffLoginChallenge> {
     const counts = await this.guarded(() => this.store.reserve(body.email, ctx.ip));
+    // First, so the crossing attempt is alerted even when it is also hard-locked.
+    await this.emailSignal(body.email, counts.email, ctx);
+    // Audit M2: the hard lock is per (email, network) and per network — never per email alone,
+    // which let anyone lock the real owner out from anywhere.
     if (
-      counts.email > STAFF_LOGIN_POLICY.maxFailuresPerEmail ||
+      counts.emailIp > STAFF_LOGIN_POLICY.maxFailuresPerEmailIp ||
       counts.ip > STAFF_LOGIN_POLICY.maxFailuresPerIp
     ) {
       await this.failed(ctx, body.email, null, 'LOCKED');
@@ -116,6 +124,20 @@ export class StaffAuthService implements OnModuleInit {
     if (!staff || !passwordOk || !staff.isActive) {
       // The reserved attempt stays counted: it was a failure.
       await this.failed(ctx, body.email, staff?.id ?? null, 'BAD_CREDENTIALS');
+      throw new UnauthorizedException(BAD_CREDENTIALS);
+    }
+    // Clients audit L3: a development account (public password) never signs in when deployed —
+    // the same answer as a wrong password.
+    if (
+      devAccountRefused(
+        this.nodeEnv,
+        staff.email,
+        this.nodeEnv === 'development' || this.nodeEnv === 'test'
+          ? false
+          : await this.repo.createdByDevSeed(this.sql, staff.id),
+      )
+    ) {
+      await this.failed(ctx, body.email, staff.id, 'DEV_ACCOUNT');
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
     if (temporaryPasswordExpired(staff, this.clock())) {
@@ -354,6 +376,39 @@ export class StaffAuthService implements OnModuleInit {
     }
     throw new UnauthorizedException(BAD_CODE);
   }
+
+  /**
+   * Audit M2: many failures for one email across networks are a signal — each further attempt
+   * waits a little longer (250 ms doubling, at most 4 s; the password still works, and the code
+   * step stays limited per account), and the first crossing in a window is audited and alerted.
+   */
+  private async emailSignal(email: string, failures: number, ctx: AuditContext): Promise<void> {
+    const over = failures - STAFF_LOGIN_POLICY.emailSignalThreshold;
+    if (over <= 0) return;
+    if (over === 1) {
+      this.logger.warn('[OPS-ALERT staff-login] many failed sign-ins for one staff email');
+      await this.audit.recordAlone(ctx, {
+        action: 'staff.login_suspicious',
+        actor: { kind: 'STAFF', id: null, email },
+        entityKind: 'staff_user',
+        entityId: null,
+        after: {
+          signal: 'MANY_FAILURES_FOR_EMAIL',
+          failures_in_window: failures,
+          window_minutes: STAFF_LOGIN_POLICY.failureWindowMs / 60_000,
+        },
+      });
+    }
+    await this.delay(
+      Math.min(
+        STAFF_LOGIN_POLICY.emailDelayBaseMs * 2 ** (over - 1),
+        STAFF_LOGIN_POLICY.emailDelayMaxMs,
+      ),
+    );
+  }
+
+  /** A request-path pause (not scheduled work); a field so tests can replace it. */
+  private delay: (ms: number) => Promise<unknown> = (ms) => sleep(ms);
 
   /** `staff.login_failed`, with the typed email even when no account matched. */
   private async failed(

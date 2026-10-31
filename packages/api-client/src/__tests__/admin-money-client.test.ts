@@ -32,6 +32,7 @@ const refund = (overrides: Record<string, unknown> = {}) => ({
   canDecide: true,
   blockedReason: null,
   creditNoteLate: false,
+  needsAuthenticatorCode: false,
   ...overrides,
 });
 const review = {
@@ -178,9 +179,40 @@ describe('adminMoneyRoutes (ADR-0026 D1/D2)', () => {
       { amountPaise: 50_000, reason: 'GOODWILL', note: 'Sorry for the wait' },
       { idempotencyKey: KEY },
     );
+    // Audit L8: a large credit carries the issuer's code and a co-approver's.
+    await api.money.credits.issue(
+      UUID_2,
+      {
+        amountPaise: 600_000,
+        reason: 'QUALITY',
+        note: 'Big apology',
+        code: '123456',
+        coApprover: { email: ' Admin@Clickco.test ', code: '654321' },
+      },
+      { idempotencyKey: KEY },
+    );
+    expect(calls[2]?.body).toMatchObject({
+      code: '123456',
+      coApprover: { email: 'admin@clickco.test', code: '654321' },
+    });
+    const badCo = await rejection(() =>
+      api.money.credits.issue(
+        UUID_2,
+        {
+          amountPaise: 600_000,
+          reason: 'QUALITY',
+          note: 'Big apology',
+          code: '123456',
+          coApprover: { email: 'not-an-email', code: '654321' },
+        },
+        { idempotencyKey: KEY },
+      ),
+    );
+    expect(badCo.code).toBe('INVALID_INPUT');
     await api.money.credits.list({ bookingId: UUID_2 });
     expect(calls.map((c) => c.url)).toEqual([
       `${BASE}/admin/bookings/${UUID_2}/money`,
+      `${BASE}/admin/bookings/${UUID_2}/credits`,
       `${BASE}/admin/bookings/${UUID_2}/credits`,
       `${BASE}/admin/credits?limit=50&bookingId=${UUID_2}`,
     ]);

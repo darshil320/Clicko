@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import {
   AdminApplicationBoard,
   AdminApplicationCard,
@@ -28,10 +29,13 @@ import {
   Param,
   Post,
   Query,
+  Res,
+  StreamableFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 import { Idempotent } from '../../../common/idempotency/idempotent.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { AuditCtx, Audited, CurrentStaff, Roles } from '../access/decorators';
@@ -47,6 +51,14 @@ const uuid = new ZodValidationPipe(Uuid);
 
 /** A KYC document link per staff member per minute: enough to work, too few to bulk-scrape. */
 const KYC_LINKS_PER_MINUTE = 20;
+
+/** Types a browser may render inline from a KYC open; anything else is sent as a download. */
+const INLINE_TYPES: ReadonlySet<string> = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
 
 /**
  * The photographers desk (ADR-0026 D5): onboarding kanban, KYC queue, directory, penalty waivers
@@ -123,6 +135,34 @@ export class AdminSupplyController {
     @Param('documentId', uuid) documentId: string,
   ) {
     return respond(AdminDocumentLink, await this.desk.documentLink(caller, ctx, documentId));
+  }
+
+  /**
+   * Audit M2: opens a document with a single-use token from `view-link` (same staff member, within
+   * 5 minutes). Streams the bytes from StoragePort with no-store; every open is audited
+   * (`kyc.document_opened`). A GET that changes nothing but the token, so not @Audited itself.
+   */
+  @Get('kyc/view/:token')
+  @Roles(...SUPPLY_ACTION_ROLES.viewKycDocument)
+  @Throttle({ default: { limit: KYC_LINKS_PER_MINUTE, ttl: 60_000 } })
+  async openDocument(
+    @CurrentStaff() caller: StaffCaller,
+    @AuditCtx() ctx: AuditContext,
+    @Param('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { document, body } = await this.desk.openDocument(caller, ctx, token);
+    const type =
+      document.mimeType && INLINE_TYPES.has(document.mimeType) ? document.mimeType : null;
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    return new StreamableFile(Readable.from(body), {
+      type: type ?? 'application/octet-stream',
+      disposition: type ? 'inline' : 'attachment',
+    });
   }
 
   @Post('kyc/:documentId/decide')

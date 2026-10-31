@@ -5,6 +5,7 @@ import { BookingsModule } from '../bookings/bookings.module';
 import { MediaModule } from '../media/media.module';
 import { ClientDeliveryController } from './client-delivery.controller';
 import { DeliverySubscribers } from './delivery.subscribers';
+import { DeliveryLinkTokens } from './link-tokens';
 import { PublicDeliveryController } from './public-delivery.controller';
 import { QaService } from './qa.service';
 import { ReleaseService } from './release.service';
@@ -23,6 +24,7 @@ import { RetentionService } from './retention.service';
   providers: [
     DeliveriesRepository,
     DeliveryLinksRepository,
+    DeliveryLinkTokens,
     QaService,
     ReleaseService,
     RetentionService,

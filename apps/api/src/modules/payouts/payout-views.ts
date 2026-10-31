@@ -99,6 +99,8 @@ export interface DetailFacts {
   readonly references: ReadonlyMap<string, string>;
   /** Owed per photographer from batches credited before this one. */
   readonly broughtForward: ReadonlyMap<string, bigint>;
+  /** Display names of the staff who made bank files (the admin module resolves them). */
+  readonly staffNames?: ReadonlyMap<string, string>;
 }
 
 const line = (p: PayoutRecord, refs: ReadonlyMap<string, string>): LineWire => ({
@@ -122,6 +124,9 @@ const deduction = (d: DeductionRecord, refs: ReadonlyMap<string, string>): Deduc
   basisPaise: n(d.basisPaise),
   amountPaise: n(d.amountPaise),
 });
+
+const sentBy = (id: string | null, names: ReadonlyMap<string, string> | undefined) =>
+  id === null ? null : { id, name: names?.get(id) ?? 'A finance team member' };
 
 /** One transfer per photographer; ordered by reference (export order), then name. */
 export function transfers(f: DetailFacts): TransferWire[] {
@@ -152,6 +157,9 @@ export function transfers(f: DetailFacts): TransferWire[] {
       utr: settled?.utr ?? null,
       paidAt: settled?.paidAt?.toISOString() ?? null,
       failureReason: mine[0]?.failureReason ?? null,
+      failureReference: mine[0]?.failureReference ?? null,
+      sentBy: sentBy(mine[0]?.bankFileBy ?? null, f.staffNames),
+      sentAt: mine[0]?.bankFileAt?.toISOString() ?? null,
       lines: mine.map((p) => line(p, f.references)),
       deductions: recognised.map((d) => deduction(d, f.references)),
     };

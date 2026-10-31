@@ -15,8 +15,12 @@ import { PaymentsService } from './payments.service';
 import type { Db, InvoiceBasis, PaymentRecord, Tx } from './payments.types';
 import { PaymentsRepository } from './repositories/payments.repository';
 
-/** Long enough for one gateway round-trip with its 10 s timeout and the status re-check. */
-const HOLD_LOCK_MS = 30_000;
+/**
+ * Audit L5: a release checks the status at the gateway, releases, and may re-check — up to three
+ * round-trips with a 10 s timeout each — then writes to the database. 30 s could lapse mid-way and
+ * let a capture start; 90 s covers the worst case with slack.
+ */
+export const HOLD_LOCK_MS = 90_000;
 
 /** Another capture/release of this payment is in flight, or Redis is down: retry later. */
 export class HoldBusyError extends Error {

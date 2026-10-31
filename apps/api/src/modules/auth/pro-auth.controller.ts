@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ok } from '../../common/envelope';
+import { clientIp } from '../../common/http/client-ip';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PhotographersService } from '../photographers/photographers.service';
 import { OtpService } from './otp.service';
@@ -45,7 +46,7 @@ export class ProAuthController {
     @Ip() ip: string,
   ) {
     const active = await this.photographers.findActiveByPhone(body.phone);
-    return ok(await this.otp.request(body.phone, 'PRO_LOGIN', ip || null, active !== null));
+    return ok(await this.otp.request(body.phone, 'PRO_LOGIN', clientIp(ip), active !== null));
   }
 
   @Post('otp/verify')

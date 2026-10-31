@@ -4,7 +4,8 @@ import type { Env } from '../../../config/env';
 import { DevOtpController } from '../dev-otp.controller';
 import { ConsoleSmsAdapter } from '../sms/console-sms.adapter';
 
-const env = (NODE_ENV: Env['NODE_ENV']) => ({ NODE_ENV }) as Env;
+const env = (NODE_ENV: Env['NODE_ENV'], DEV_TOOLS: Env['DEV_TOOLS'] = 'on') =>
+  ({ NODE_ENV, DEV_TOOLS }) as Env;
 const statusOf = (fn: () => unknown) => {
   try {
     fn();
@@ -30,6 +31,14 @@ describe('DevOtpController', () => {
     for (const e of ['test', 'staging', 'production'] as const) {
       expect(statusOf(() => new DevOtpController(env(e), sms).latest('+919876543210'))).toBe(404);
     }
+  });
+
+  it('L5: is a 404 in development unless DEV_TOOLS=on', async () => {
+    const sms = new ConsoleSmsAdapter();
+    await sms.sendOtp('+919876543210', '111111');
+    expect(
+      statusOf(() => new DevOtpController(env('development', 'off'), sms).latest('+919876543210')),
+    ).toBe(404);
   });
 
   it('is a 404 with any real SMS adapter', () => {

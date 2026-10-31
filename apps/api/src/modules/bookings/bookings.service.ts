@@ -236,6 +236,20 @@ export class BookingsService {
     return facts;
   }
 
+  /**
+   * Audit L3: ADVANCE_PENDING bookings whose payment window closed — the quote expired before
+   * `expiredBefore` (expiry + grace), or the shoot start passed — for the checkout sweep.
+   */
+  async staleAdvancePending(expiredBefore: Date, now: Date, limit: number): Promise<string[]> {
+    const rows = await this.sql<{ id: string }[]>`
+      SELECT id FROM bookings
+      WHERE status = 'ADVANCE_PENDING'
+        AND (quote_expires_at IS NULL OR quote_expires_at < ${expiredBefore}
+             OR scheduled_start <= ${now})
+      ORDER BY quote_expires_at NULLS FIRST, id LIMIT ${limit}`;
+    return rows.map((r) => r.id);
+  }
+
   /** DISPATCHING bookings starting before `cutoff` (the dispatch deadline sweeper). */
   dispatchingStartingBefore(cutoff: Date, limit: number): Promise<string[]> {
     return this.dispatchReads.dispatchingStartingBefore(this.sql, cutoff, limit);

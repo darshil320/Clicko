@@ -300,13 +300,14 @@ export type AdminKycDecisionResponse = z.infer<typeof AdminKycDecisionResponse>;
 export const KYC_LINK_TTL_SECONDS = 300;
 
 /**
- * POST /admin/supply/kyc/:documentId/view-link — audited `kyc.document_view`. `opensInBrowser`
- * is false for local (development) storage, whose links cannot be followed.
+ * POST /admin/supply/kyc/:documentId/view-link — audited `kyc.document_view` (audit M2). Never a
+ * storage-provider URL: `path` is Clickco's own `GET /admin/supply/kyc/view/<token>`, opened with
+ * the staff session, good ONCE and for 5 minutes, for the staff member who asked only. Each open is
+ * audited (`kyc.document_opened`) and streamed with `no-store`.
  */
 export const AdminDocumentLink = z.object({
-  url: z.string().min(1),
+  path: z.string().regex(/^\/admin\/supply\/kyc\/view\/[A-Za-z0-9_-]{43}$/),
   expiresAt: IsoDateTime,
-  opensInBrowser: z.boolean(),
 });
 export type AdminDocumentLink = z.infer<typeof AdminDocumentLink>;
 

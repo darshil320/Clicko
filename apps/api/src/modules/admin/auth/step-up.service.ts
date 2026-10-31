@@ -61,8 +61,7 @@ export class StepUpService {
   async verify(staffId: string, code: string, ctx: AuditContext, purpose: string): Promise<void> {
     // Counted BEFORE the code is checked (atomic INCR), so parallel guesses cannot all slip
     // under the limit; a correct code clears the count, as a successful sign-in does.
-    await this.guarded(() => this.store.recordTotpFailure(staffId));
-    const attempts = await this.guarded(() => this.store.totpFailures(staffId));
+    const attempts = await this.guarded(() => this.store.recordTotpFailure(staffId));
     if (attempts > STAFF_LOGIN_POLICY.maxTotpFailuresPerStaff) {
       await this.failed(ctx, staffId, purpose, 'LOCKED');
       throw new HttpException(

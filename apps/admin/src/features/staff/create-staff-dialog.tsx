@@ -29,6 +29,8 @@ import { useAdminMutation } from '../../shared/mutation';
 import { fieldError } from '../../shared/note-field';
 import { keys } from '../../shared/query';
 import { EMPTY_GRANT, type GrantDraft, GrantFields, grantBody } from './grant-fields';
+import { stepUpError } from './rules';
+import { StepUpCodeField } from './step-up-code-field';
 
 const MAX_GRANTS = 6;
 
@@ -81,7 +83,14 @@ export function CreateStaffDialog({
   const [grants, setGrants] = useState<ReadonlyArray<GrantDraft>>([EMPTY_GRANT]);
   const [touched, setTouched] = useState(false);
   const [created, setCreated] = useState<AdminCreateStaffResponse | null>(null);
-  const check = AdminCreateStaffBody.safeParse({ email, fullName, grants: grants.map(grantBody) });
+  const [code, setCode] = useState('');
+  // A fresh authenticator code of the caller's (step-up, audit M3).
+  const check = AdminCreateStaffBody.safeParse({
+    code,
+    email,
+    fullName,
+    grants: grants.map(grantBody),
+  });
 
   const create = useAdminMutation({
     run: (body: AdminCreateStaffBody, idem) => adminApi.staff.create(body, idem),
@@ -99,6 +108,7 @@ export function CreateStaffDialog({
   /** Drop the temporary password from memory as the dialog closes (security review L1). */
   const close = () => {
     setCreated(null);
+    setCode('');
     create.reset();
     onClose();
   };
@@ -193,6 +203,14 @@ export function CreateStaffDialog({
                 </Button>
               ) : null}
             </div>
+            <Separator />
+            <StepUpCodeField
+              id="staff-create-code"
+              value={code}
+              onChange={setCode}
+              disabled={create.isPending}
+              error={(touched ? fieldError(check, 'code') : null) ?? stepUpError(create.error)}
+            />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={close} disabled={create.isPending}>
                 Cancel

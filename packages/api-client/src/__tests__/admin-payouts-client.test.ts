@@ -51,6 +51,9 @@ const detail = {
       utr: null,
       paidAt: null,
       failureReason: null,
+      failureReference: null,
+      sentBy: null,
+      sentAt: null,
       lines: [],
       deductions: [],
     },
@@ -109,17 +112,18 @@ describe('createAdminApiClient().payouts (ADR-0026 D3)', () => {
     const { api, calls } = client(() => ok(detail));
     await api.payouts.batches.markPaid(
       UUID,
-      { transfers: [{ photographerId: UUID_2, utr: ' hdfcn26121412345 ' }] },
+      { code: '123456', transfers: [{ photographerId: UUID_2, utr: ' hdfcn26121412345 ' }] },
       KEY,
     );
     expect(calls[0]?.url).toBe(`${BASE}/admin/payouts/batches/${UUID}/mark-paid`);
     expect(calls[0]?.body).toEqual({
+      code: '123456',
       transfers: [{ photographerId: UUID_2, utr: 'HDFCN26121412345' }],
     });
     const bad = await rejection(
       api.payouts.batches.markPaid(
         UUID,
-        { transfers: [{ photographerId: UUID_2, utr: 'x-1' }] },
+        { code: '123456', transfers: [{ photographerId: UUID_2, utr: 'x-1' }] },
         KEY,
       ),
     );
@@ -128,6 +132,7 @@ describe('createAdminApiClient().payouts (ADR-0026 D3)', () => {
       api.payouts.batches.markPaid(
         UUID,
         {
+          code: '123456',
           transfers: [
             { photographerId: UUID_2, utr: 'AAAAAA1' },
             { photographerId: UUID_2, utr: 'AAAAAA2' },
@@ -145,25 +150,48 @@ describe('createAdminApiClient().payouts (ADR-0026 D3)', () => {
         ? ok({ id: UUID, reference: 'PO20261214W', discarded: true })
         : ok(detail),
     );
-    await api.payouts.batches.export(UUID, KEY);
+    await api.payouts.batches.export(UUID, { code: '123456' }, KEY);
     await api.payouts.batches.discard(UUID, KEY);
     await api.payouts.batches.markFailed(
       UUID,
-      { photographerId: UUID_2, reason: 'Account frozen' },
+      {
+        code: '234567',
+        photographerId: UUID_2,
+        reason: 'Account frozen',
+        bankReference: ' ret2612140001 ',
+      },
       KEY,
     );
-    await api.payouts.batches.retry(UUID, { photographerId: UUID_2 }, KEY);
+    await api.payouts.batches.retry(UUID, { code: '345678', photographerId: UUID_2 }, KEY);
     expect(calls.map((c) => c.url.replace(`${BASE}/admin/payouts/batches/${UUID}`, ''))).toEqual([
       '/export',
       '/discard',
       '/mark-failed',
       '/retry',
     ]);
+    expect(calls[2]?.body).toMatchObject({ bankReference: 'RET2612140001', code: '234567' });
+  });
+
+  it('audit H2: no authenticator code or no bank return reference never leaves the browser', async () => {
+    const { api, calls } = client(() => ok(detail));
+    const noCode = await rejection(api.payouts.batches.export(UUID, { code: '12' }, KEY));
+    expect(noCode.code).toBe('INVALID_INPUT');
+    const noRef = await rejection(
+      api.payouts.batches.markFailed(
+        UUID,
+        { code: '123456', photographerId: UUID_2, reason: 'Frozen', bankReference: '' },
+        KEY,
+      ),
+    );
+    expect(noRef.message).toMatch(/return or rejection reference/);
+    const noFileCode = await rejection(api.payouts.batches.createBankFile(UUID, { code: '' }, KEY));
+    expect(noFileCode.code).toBe('INVALID_INPUT');
+    expect(calls).toHaveLength(0);
   });
 
   it('files come back as CSV text in the envelope', async () => {
     const { api, calls } = client(() => ok(csvFile));
-    const file = await api.payouts.batches.createBankFile(UUID, KEY);
+    const file = await api.payouts.batches.createBankFile(UUID, { code: '123456' }, KEY);
     expect(file).toMatchObject({ contentType: 'text/csv', totalPaise: 3_560_000n });
     await api.payouts.batches.statement(UUID, UUID_2);
     await api.payouts.tds.report('2026-12');

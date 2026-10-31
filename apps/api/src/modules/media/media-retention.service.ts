@@ -3,8 +3,9 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
+import type { ByteSource } from '../../infra/storage/storage.port';
 import { STORAGE_PORT, type StoragePort } from '../../infra/storage/storage.port';
-import type { DeliveryInventory, Tx } from './media.types';
+import type { DeliveryInventory, MediaAssetRecord, Tx } from './media.types';
 import { MediaAssetsRepository } from './repositories/media-assets.repository';
 
 /**
@@ -22,6 +23,25 @@ export class MediaRetentionService {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     @Inject(MediaAssetsRepository) private readonly assets: MediaAssetsRepository,
   ) {}
+
+  /**
+   * Audit M5: the delivered files of one kind (unpurged), for Clickco's own download page — the
+   * bytes are then streamed through `openDeliverable`, never from a provider link.
+   */
+  deliverable(bookingId: string, kind: AssetKind): Promise<MediaAssetRecord[]> {
+    return this.assets.unpurgedOfKinds(this.sql, bookingId, [kind]);
+  }
+
+  /** One delivered file's bytes, only if it belongs to this booking and kind and is not purged. */
+  async openDeliverable(
+    bookingId: string,
+    kind: AssetKind,
+    assetId: string,
+  ): Promise<{ readonly asset: MediaAssetRecord; readonly body: ByteSource } | null> {
+    const asset = (await this.deliverable(bookingId, kind)).find((a) => a.id === assetId);
+    if (!asset) return null;
+    return { asset, body: await this.storage.openObject(asset.storageObjectId) };
+  }
 
   inventory(bookingId: string): Promise<DeliveryInventory> {
     return this.assets.inventory(this.sql, bookingId);

@@ -49,12 +49,12 @@ describe.runIf(TEST_DATABASE_URL)(
     beforeAll(async () => {
       e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
       proId = await insertPhotographer(e2e.db.sql, {
-        phone: '+919825099101',
+        phone: '+919999199101',
         name: 'Meera Joshi',
         km: 3,
         categories: [{ code: 'FOOD', tier: 'EXPERT' }],
       });
-      userId = await insertClient(e2e, '+919700000801');
+      userId = await insertClient(e2e, '+919999200801');
       booking = await bookAndPay(e2e, userId, START);
       assignmentId = await acceptOffer(e2e, proId, booking.id);
       const [b] = await e2e.db.sql<{ total_paise: string; advance_paise: string }[]>`
@@ -364,17 +364,17 @@ describe.runIf(TEST_DATABASE_URL)(
     beforeAll(async () => {
       e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
       lateId = await insertPhotographer(e2e.db.sql, {
-        phone: '+919825099201',
+        phone: '+919999199201',
         name: 'Late Photographer',
         km: 2,
         categories: [{ code: 'FOOD', tier: 'EXPERT' }],
       });
-      userId = await insertClient(e2e, '+919700000802');
+      userId = await insertClient(e2e, '+919999200802');
       booking = await bookAndPay(e2e, userId, START);
       assignmentId = await acceptOffer(e2e, lateId, booking.id);
       // The backup joins after the first search (so the re-broadcast is the first offer they see).
       backupId = await insertPhotographer(e2e.db.sql, {
-        phone: '+919825099202',
+        phone: '+919999199202',
         name: 'Backup Photographer',
         km: 4,
         bearing: 180,

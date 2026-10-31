@@ -85,6 +85,14 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
   };
   const login = (email: string, password: string) =>
     e2e.call('POST', '/admin/auth/login', { body: { email, password } });
+  /** The SUPER_ADMIN's authenticator code one step on (staff step-up, M3); enrols it once. */
+  const adminCode = async () => {
+    if (!secrets.has('admin@clickco.test')) {
+      await signIn(e2e, secrets, 'admin@clickco.test', staff.admin.password);
+    }
+    e2e.advance(31_000);
+    return codeFor(e2e, secrets.get('admin@clickco.test') as string);
+  };
 
   beforeAll(async () => {
     e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
@@ -103,9 +111,9 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
     // Three Surat bookings: one still dispatching (in two days), and two of today's shoots —
     // one on site, one waiting in QA — set directly (the flows are covered by their own suites).
     const start = new Date(NOW.getTime() + 2 * DAY);
-    await bookAndPay(e2e, await insertClient(e2e, '+919700089101'), start);
-    qaBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919700089102'), start)).id;
-    onSiteBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919700089103'), start)).id;
+    await bookAndPay(e2e, await insertClient(e2e, '+919999289101'), start);
+    qaBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919999289102'), start)).id;
+    onSiteBooking = (await bookAndPay(e2e, await insertClient(e2e, '+919999289103'), start)).id;
     await e2e.db.sql`
       UPDATE bookings SET status = 'QA', scheduled_start = ${TODAY_NOON} WHERE id = ${qaBooking}`;
     await e2e.db.sql`
@@ -217,7 +225,7 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
 
     it('is for staff only', async () => {
       const [user] = await e2e.db.sql<{ id: string }[]>`
-        INSERT INTO users (phone_e164) VALUES ('+919700089199') RETURNING id`;
+        INSERT INTO users (phone_e164) VALUES ('+919999289199') RETURNING id`;
       const t = await e2e.get(TokenService).issue({ kind: 'USER', id: user?.id as string }, null);
       expect((await e2e.call('GET', '/admin/overview', { token: t.accessToken })).status).toBe(403);
       expect((await e2e.call('GET', '/admin/overview')).status).toBe(401);
@@ -322,8 +330,10 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
       e2e.advance(31_000);
       const pending = await login('forgetful@clickco.test', target.password);
 
+      const code = await adminCode();
       const res = await e2e.call('POST', `/admin/staff/${target.id}/reset-password`, {
         token: await as('admin'),
+        body: { code },
       });
       expect(res.status, JSON.stringify(res.json)).toBe(200);
       const { temporaryPassword, expiresAt } = res.json.data;
@@ -372,14 +382,19 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
     it('is SUPER_ADMIN only, never one’s own, and never a deactivated account', async () => {
       const someone = await bootstrapStaff(e2e, 'someone@clickco.test', 'SUPPORT');
       const reset = async (who: keyof typeof staff, id: string) =>
-        e2e.call('POST', `/admin/staff/${id}/reset-password`, { token: await as(who) });
+        e2e.call('POST', `/admin/staff/${id}/reset-password`, {
+          token: await as(who),
+          body: { code: await adminCode() },
+        });
       expect((await reset('ops', someone.id)).status).toBe(403);
       const own = await reset('admin', staff.admin.id);
       expect([own.status, own.json.error.code]).toEqual([409, 'CANNOT_RESET_OWN_PASSWORD']);
-      await e2e.call('POST', `/admin/staff/${someone.id}/deactivate`, {
+      const off = await e2e.call('POST', `/admin/staff/${someone.id}/deactivate`, {
         token: await as('admin'),
         idempotencyKey: 'platform-deactivate-someone-0001',
+        body: { code: await adminCode() },
       });
+      expect(off.status, JSON.stringify(off.json)).toBe(200);
       const inactive = await reset('admin', someone.id);
       expect([inactive.status, inactive.json.error.code]).toEqual([409, 'STAFF_INACTIVE']);
     });
@@ -483,6 +498,7 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
       // A reset brings the account back.
       const reset = await e2e.call('POST', `/admin/staff/${late.id}/reset-password`, {
         token: await as('admin'),
+        body: { code: await adminCode() },
       });
       const back = await login('late.starter@clickco.test', reset.json.data.temporaryPassword);
       expect(back.json.data?.mustChangePassword).toBe(true);

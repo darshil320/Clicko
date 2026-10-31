@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { WEBHOOK_SIGNATURE_LIMIT } from './modules/checkout/webhook-signature-limiter';
 import { SandboxGateway } from './modules/payments/gateways/sandbox.gateway';
 import { E2E_SANDBOX_SECRET, type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
 import { TEST_DATABASE_URL } from './test-support/scratch-db';
@@ -14,7 +15,7 @@ const createBody = (start: Date, overrides: Json = {}) => ({
   scheduledStart: start.toISOString(),
   hours: 2,
   venueAddress: '12 Ghod Dod Road, Surat',
-  booker: { name: 'Ananya Iyer', phone: '+919876543210' },
+  booker: { name: 'Ananya Iyer', phone: '+919999443210' },
   modelReleaseConsent: false,
   acceptedTermsVersion: '2.0',
   ...overrides,
@@ -30,8 +31,8 @@ describe.runIf(TEST_DATABASE_URL)('checkout end to end (booking → pay → webh
 
   beforeAll(async () => {
     e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
-    token = await e2e.login('+919876543210');
-    otherToken = await e2e.login('+919812345678');
+    token = await e2e.login('+919999443210');
+    otherToken = await e2e.login('+919999345678');
   }, 60_000);
 
   afterAll(async () => {
@@ -204,16 +205,55 @@ describe.runIf(TEST_DATABASE_URL)('checkout end to end (booking → pay → webh
     expect(stored).toHaveLength(1);
   });
 
-  it('rejects a webhook with an invalid signature (400) and records it', async () => {
+  it('rejects a webhook with an invalid signature (400) and counts it', async () => {
     const res = await e2e.call('POST', '/payments/webhooks/sandbox', {
       body: { event: 'payment.captured', payload: {} },
       headers: { 'x-sandbox-signature': 'a'.repeat(64), 'x-sandbox-event-id': 'evt_forged_1' },
     });
     expect(res.status).toBe(400);
     expect(res.json.error.code).toBe('WEBHOOK_SIGNATURE_INVALID');
+    // Audit M3: a counter per hour, never a row per forged request.
+    const [bucket] = await e2e.db.sql<{ n: number }[]>`
+      SELECT sum(rejected_count)::int AS n FROM payment_webhook_rejections`;
+    expect(bucket?.n).toBe(1);
     const rows = await e2e.db.sql`SELECT 1 FROM payment_webhook_events WHERE NOT signature_valid`;
-    expect(rows.length).toBeGreaterThan(0);
+    expect(rows).toHaveLength(0);
     expect((await e2e.call('POST', '/payments/webhooks/razorpay', { body: {} })).status).toBe(404);
+  });
+
+  // Audit M3: the global throttle never drops the gateway's retries; bad signatures are limited
+  // per IP (then 429, nothing stored), valid ones never are.
+  it('limits bad signatures per IP while valid webhooks keep flowing', async () => {
+    const forged = () =>
+      e2e.call('POST', '/payments/webhooks/sandbox', {
+        body: { event: 'payment.captured', payload: {} },
+        headers: { 'x-sandbox-signature': 'b'.repeat(64) },
+      });
+    const statuses: number[] = [];
+    for (let i = 0; i < WEBHOOK_SIGNATURE_LIMIT.maxInvalidPerIp + 2; i++) {
+      statuses.push((await forged()).status);
+    }
+    // One forged request was already counted by the test above.
+    expect(statuses.filter((s) => s === 400)).toHaveLength(
+      WEBHOOK_SIGNATURE_LIMIT.maxInvalidPerIp - 1,
+    );
+    expect(statuses.slice(-3)).toEqual([429, 429, 429]);
+    const [bucket] = await e2e.db.sql<{ n: number }[]>`
+      SELECT sum(rejected_count)::int AS n FROM payment_webhook_rejections`;
+    expect(bucket?.n).toBe(WEBHOOK_SIGNATURE_LIMIT.maxInvalidPerIp);
+    const gateway = new SandboxGateway(E2E_SANDBOX_SECRET, () => e2e.now());
+    for (let i = 0; i < 3; i++) {
+      const hook = gateway.buildWebhook({
+        providerOrderId: `order_unknown_${i}`,
+        amountPaise: 100n,
+        event: 'payment.captured',
+      });
+      const res = await e2e.call('POST', '/payments/webhooks/sandbox', {
+        rawBody: hook.rawBody,
+        headers: { 'x-sandbox-signature': hook.signature, 'x-sandbox-event-id': hook.eventId },
+      });
+      expect(res.status).toBe(200);
+    }
   });
 
   it('lists the booking for its owner', async () => {
@@ -229,7 +269,7 @@ describe.runIf(TEST_DATABASE_URL)('checkout end to end (booking → pay → webh
     });
     expect(created.status).toBe(201);
     e2e.advance(16 * MINUTE);
-    const fresh = await e2e.login('+919876543210'); // the 15-minute access token lapsed too
+    const fresh = await e2e.login('+919999443210'); // the 15-minute access token lapsed too
     const res = await e2e.call('POST', `/bookings/${created.json.data.booking.id}/pay`, {
       token: fresh,
       idempotencyKey: 'pay-expired-0001',

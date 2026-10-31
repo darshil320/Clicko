@@ -7,6 +7,7 @@ import {
 import { Body, Controller, ForbiddenException, HttpCode, Inject, Ip, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ok } from '../../common/envelope';
+import { clientIp } from '../../common/http/client-ip';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
@@ -27,7 +28,7 @@ export class AuthController {
     @Body(new ZodValidationPipe(RequestOtpBody)) body: RequestOtpBody,
     @Ip() ip: string,
   ) {
-    return ok(await this.otp.request(body.phone, body.purpose, ip || null));
+    return ok(await this.otp.request(body.phone, body.purpose, clientIp(ip)));
   }
 
   @Post('otp/verify')

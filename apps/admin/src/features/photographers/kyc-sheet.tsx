@@ -1,16 +1,12 @@
 'use client';
 
 import {
-  type AdminDocumentLink,
   AdminKycDecisionBody,
   type AdminKycItem,
   type KycDecision,
   SUPPLY_ACTION_ROLES,
 } from '@clickco/contracts';
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Button,
   DescriptionItem,
   DescriptionList,
@@ -19,14 +15,18 @@ import {
   SideSheet,
   Spinner,
 } from '@clickco/ui-web';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { adminApi } from '../../shared/api';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
-import { formatDateTime, formatDay, formatTime } from '../../shared/format';
+import { formatDateTime, formatDay } from '../../shared/format';
 import { useAdminMutation } from '../../shared/mutation';
 import { fieldError, NoteField } from '../../shared/note-field';
 import { useCan } from '../../shared/use-can';
+import { documentHref } from './document-href';
 import { DOC_LABEL, documentConsequence } from './labels';
+
+/** An object URL is dropped after this long (the link it came from was good for 5 minutes). */
+const OBJECT_URL_MS = 5 * 60_000;
 
 /** "2.4 MB" / "640 KB". */
 function size(bytes: number | null): string {
@@ -37,8 +37,9 @@ function size(bytes: number | null): string {
 }
 
 /**
- * Check one document (ADR-0026 D5). It opens only through a 5-minute signed link, and every
- * opening is recorded in the audit log. The panel never stores the link.
+ * Check one document (ADR-0026 D5, audit M2). The API hands out a single-use, 5-minute Clickco
+ * path (never a storage-provider URL); the panel fetches the bytes with the staff session at once
+ * and shows them from an object URL that lives in this tab only. Every opening is audited.
  */
 export function KycSheet({
   doc,
@@ -49,22 +50,45 @@ export function KycSheet({
 }) {
   const canView = useCan(SUPPLY_ACTION_ROLES.viewKycDocument)();
   const canDecide = useCan(SUPPLY_ACTION_ROLES.decideKyc)();
-  const [link, setLink] = useState<AdminDocumentLink | null>(null);
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [decision, setDecision] = useState<KycDecision | null>(null);
   const [note, setNote] = useState('');
   const [touched, setTouched] = useState(false);
   const label = DOC_LABEL[doc.kind];
 
   const view = useAdminMutation({
-    run: (_: null, idem) => adminApi.supply.kyc.viewLink(doc.id, idem),
-    success: (_, l) =>
-      l.opensInBrowser ? `${label} opened — the link works for 5 minutes` : 'Link created',
+    run: async (_: null, idem) => {
+      const link = await adminApi.supply.kyc.viewLink(doc.id, idem);
+      const file = await adminApi.supply.kyc.openDocument(link.path);
+      return URL.createObjectURL(
+        new Blob([new Uint8Array(file.bytes)], { type: file.contentType }),
+      );
+    },
+    success: () => `${label} is ready to view`,
     invalidate: [],
-    onSuccess: (l) => {
-      if (l.opensInBrowser) window.open(l.url, '_blank', 'noopener,noreferrer');
-      setLink(l);
+    onSuccess: (url) => {
+      setObjectUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return url;
+      });
+      const href = documentHref(url, window.location.origin);
+      if (href) window.open(href, '_blank', 'noopener,noreferrer');
     },
   });
+  // The bytes never outlive the sheet, nor five minutes.
+  useEffect(() => {
+    if (!objectUrl) return;
+    const timer = window.setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+      setObjectUrl(null);
+    }, OBJECT_URL_MS);
+    return () => {
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [objectUrl]);
+  const href =
+    typeof window === 'undefined' ? null : documentHref(objectUrl, window.location.origin);
 
   const check = AdminKycDecisionBody.safeParse({
     decision: decision ?? 'APPROVE',
@@ -121,8 +145,8 @@ export function KycSheet({
             Private document
           </p>
           <p className="text-muted-foreground text-sm">
-            Opens in a new tab through a link that stops working after 5 minutes. Each opening is
-            recorded with your name.
+            Opens in a new tab straight from Clickco, through a one-time link that stops working
+            after 5 minutes. Each opening is recorded with your name.
           </p>
           <div>
             <Button variant="outline" disabled={view.isPending} onClick={() => view.mutate(null)}>
@@ -130,27 +154,18 @@ export function KycSheet({
               Open document
             </Button>
           </div>
-          {link && !link.opensInBrowser ? (
-            <Alert>
-              <AlertTitle>Local storage</AlertTitle>
-              <AlertDescription>
-                This development setup keeps files on the server's disk, so there is nothing to
-                open. In production the document opens here until {formatTime(link.expiresAt)}.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {link?.opensInBrowser ? (
+          {href ? (
             <p className="text-muted-foreground text-sm">
               Didn't open?{' '}
               <a
-                href={link.url}
+                href={href}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-foreground underline-offset-4 hover:underline"
               >
-                Open it here
+                View it here
               </a>{' '}
-              — works until {formatTime(link.expiresAt)}.
+              — available while this sheet is open, for 5 minutes.
             </p>
           ) : null}
         </div>
