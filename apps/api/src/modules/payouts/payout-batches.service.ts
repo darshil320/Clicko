@@ -296,6 +296,7 @@ export class PayoutBatchesService {
       const batch = await this.exportedBatch(tx, batchId);
       const rows = await this.payouts.forBatch(tx, batchId);
       const done: Array<{ photographer_id: string; utr: string; net_paise: number }> = [];
+      const usedElsewhere = await this.payouts.utrsUsedElsewhere(tx, batchId, transfers);
       for (const t of transfers) {
         const mine = this.transfer(rows, t.photographerId);
         const status = mine[0]?.status;
@@ -315,7 +316,7 @@ export class PayoutBatchesService {
         if (status !== 'PROCESSING') {
           throw conflict('NOT_IN_BANK_FILE', 'Create the bank file with this transfer first.');
         }
-        if (await this.payouts.utrUsedElsewhere(tx, t.utr, batchId, t.photographerId)) {
+        if (usedElsewhere.has(t.utr)) {
           throw conflict('UTR_IN_USE', `UTR ${t.utr} is already recorded for another transfer.`);
         }
         const ids = mine.map((p) => p.id);

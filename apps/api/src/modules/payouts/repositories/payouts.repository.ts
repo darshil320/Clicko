@@ -320,20 +320,26 @@ export class PayoutsRepository {
   }
 
   /**
-   * A UTR already recorded for any other transfer — another photographer, or the same
-   * photographer in another batch (audit L7; the exclusion constraints are the backstop).
+   * The UTRs, of these transfers, already recorded for any other transfer — another photographer,
+   * or the same photographer in another batch (audit L7; the exclusion constraints are the
+   * backstop). One query for the whole request (performance audit, ADR-0027 D6; payouts_utr_idx).
    */
-  async utrUsedElsewhere(
+  async utrsUsedElsewhere(
     db: Db,
-    utr: string,
     batchId: string,
-    photographerId: string,
-  ): Promise<boolean> {
-    const [row] = await db`
-      SELECT 1 FROM payouts
-      WHERE utr = ${utr} AND (photographer_id <> ${photographerId} OR batch_id <> ${batchId})
-      LIMIT 1`;
-    return row !== undefined;
+    transfers: ReadonlyArray<{ readonly photographerId: string; readonly utr: string }>,
+  ): Promise<ReadonlySet<string>> {
+    if (transfers.length === 0) return new Set();
+    const utrs = transfers.map((t) => t.utr);
+    const rows = await db<{ utr: string; photographer_id: string; batch_id: string }[]>`
+      SELECT utr, photographer_id, batch_id FROM payouts
+      WHERE utr = ANY(${db.array(utrs)}::text[])`;
+    const owner = new Map(transfers.map((t) => [t.utr, t.photographerId]));
+    return new Set(
+      rows
+        .filter((r) => r.photographer_id !== owner.get(r.utr) || r.batch_id !== batchId)
+        .map((r) => r.utr),
+    );
   }
 
   async markFailed(

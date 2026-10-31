@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { StaffRole } from '@clickco/contracts';
+import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ENV, type Env } from './config/env';
+import { REDIS } from './infra/queues/redis';
 import { OverviewRegistry } from './modules/admin/overview/overview.registry';
 import { TokenService } from './modules/auth/token.service';
 import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
@@ -45,6 +48,11 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
     const res = await e2e.call('GET', '/admin/overview', { token: await as(who) });
     expect(res.status, JSON.stringify(res.json)).toBe(200);
     return res.json.data as Json;
+  };
+  const clearOverviewCache = async () => {
+    const redis = e2e.get<Redis>(REDIS);
+    const keys = await redis.keys(`${e2e.get<Env>(ENV).QUEUE_PREFIX}:admin-overview:*`);
+    if (keys.length > 0) await redis.del(...keys);
   };
   /** Sprint 9's sources (other streams register their own; they are not asserted here). */
   const S9 = new Set([
@@ -255,6 +263,8 @@ describe.runIf(TEST_DATABASE_URL)('the staff platform (Today, passwords)', () =>
           tile: { label: 'Again', hint: '', order: 1 },
         }),
       ).toThrow(/registered twice/);
+      // Earlier tests cached finance's answer (20 s); new sources show from the next computation.
+      await clearOverviewCache();
       const finance = await overview('finance');
       expect(Object.keys(tiles(finance)).slice(0, 2)).toEqual([
         'bookings.today',

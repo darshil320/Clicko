@@ -1,4 +1,5 @@
 import { randomBytes, type ScryptOptions, scrypt, timingSafeEqual } from 'node:crypto';
+import { ServiceUnavailableException } from '@nestjs/common';
 
 /**
  * Staff passwords (ADR-0025 D2): Node's scrypt, N=2^15 r=8 p=1, 16-byte salt, stored as
@@ -16,12 +17,49 @@ export const SCRYPT_PARAMS = {
 
 const TEMPORARY_PASSWORD_BYTES = 18; // 24 base64url characters
 
+/**
+ * Performance audit (ADR-0027 D6): at most this many scrypt runs at once. Each takes 32 MiB and a
+ * libuv thread for ~100 ms; a burst of sign-ins would otherwise fill the 4-thread pool that file,
+ * DNS and other crypto work share, and stall the whole API. The rest wait their turn in order.
+ */
+export const SCRYPT_MAX_CONCURRENT = 2;
+/** Beyond this many waiting, a request is turned away at once (503) instead of queueing. */
+export const SCRYPT_MAX_WAITING = 32;
+
+let running = 0;
+const waiting: Array<() => void> = [];
+
+async function withScryptSlot<T>(run: () => Promise<T>): Promise<T> {
+  if (running >= SCRYPT_MAX_CONCURRENT) {
+    if (waiting.length >= SCRYPT_MAX_WAITING) {
+      throw new ServiceUnavailableException('Sign-in is busy. Try again in a moment.');
+    }
+    await new Promise<void>((resolve) => waiting.push(resolve));
+  } else {
+    running += 1;
+  }
+  try {
+    return await run();
+  } finally {
+    // Hand the slot straight to the next waiter (running stays the same), or free it.
+    const next = waiting.shift();
+    if (next) next();
+    else running -= 1;
+  }
+}
+
+/** Runs in progress now (tests). */
+export const scryptRunning = (): number => running;
+
 function derive(password: string, salt: Buffer, opts: ScryptOptions, keyBytes: number) {
-  return new Promise<Buffer>((resolve, reject) => {
-    scrypt(password.normalize('NFKC'), salt, keyBytes, opts, (error, key) =>
-      error ? reject(error) : resolve(key),
-    );
-  });
+  return withScryptSlot(
+    () =>
+      new Promise<Buffer>((resolve, reject) => {
+        scrypt(password.normalize('NFKC'), salt, keyBytes, opts, (error, key) =>
+          error ? reject(error) : resolve(key),
+        );
+      }),
+  );
 }
 
 export async function hashPassword(password: string): Promise<string> {

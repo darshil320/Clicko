@@ -162,12 +162,11 @@ export class OpsOverviewSources {
   }
 
   /** What the incident desk lists: on-site reports and client-absent reports not yet decided. */
-  private async openIncidents(scope: CityScope): Promise<number> {
-    const reports = await this.incidents.openReports(
+  private openIncidents(scope: CityScope): Promise<number> {
+    return this.incidents.countOpenReports(
       this.bookings.idsInScope(scope, ['CHECKED_IN', 'IN_PROGRESS']),
       this.bookings.idsInScope(scope, ['CHECKED_OUT']),
     );
-    return reports.length;
   }
 
   private async openBreaches(scope: CityScope): Promise<number> {
@@ -181,11 +180,11 @@ export class OpsOverviewSources {
 
   /** As the alert feed shows them: city-scoped callers see their bookings' alerts only. */
   private async recentAlerts(scope: CityScope, now: Date): Promise<number> {
-    const since = now.getTime() - DAY_MS;
     const rows = await this.alerts.page({
       bookings: scope === 'ALL' ? null : this.bookings.idsInScope(scope),
+      since: new Date(now.getTime() - DAY_MS),
       limit: OVERVIEW_PAGE_CAP,
     });
-    return rows.filter((a) => a.occurredAt.getTime() >= since).length;
+    return rows.length;
   }
 }

@@ -31,6 +31,8 @@ export interface AlertPageQuery {
   /** Only alerts on these bookings (the caller's cities); null = every alert, incl. system ones. */
   readonly bookings: IdSubquery | null;
   readonly after?: { readonly occurredAt: Date; readonly seq: string };
+  /** Only alerts at or after this instant (the overview's last-24-hours count). */
+  readonly since?: Date;
   readonly limit: number;
 }
 
@@ -44,7 +46,15 @@ export interface ReviewPageQuery {
   readonly limit: number;
 }
 
-const UUID = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+/**
+ * The alert's booking: the aggregate, or a payment event's `booking_id` when it is a UUID. This
+ * text must match migration 0014's `domain_events_alert_booking_idx` expression exactly — the UUID
+ * pattern is an inlined constant, never a bind parameter, or the planner cannot use the index
+ * (ops-alerts.reader.test.ts checks the two stay in step).
+ */
+export const ALERT_BOOKING_ID_SQL = `CASE WHEN e.aggregate_kind = 'booking' THEN e.aggregate_id
+                  WHEN e.payload->>'booking_id' ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN (e.payload->>'booking_id')::uuid
+             END`;
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
@@ -77,9 +87,10 @@ export class OpsAlertsReader {
     const after = q.after
       ? db`(a.occurred_at, a.seq) < (${q.after.occurredAt}, ${q.after.seq}::bigint)`
       : db`TRUE`;
+    const since = q.since ? db`a.occurred_at >= ${q.since}` : db`TRUE`;
     const rows = await db<Row[]>`
       SELECT a.* FROM (${this.alerts()}) a
-      WHERE ${scope} AND ${after}
+      WHERE ${scope} AND ${after} AND ${since}
       ORDER BY a.occurred_at DESC, a.seq DESC
       LIMIT ${q.limit}`;
     return rows.map(toRecord);
@@ -145,9 +156,7 @@ export class OpsAlertsReader {
   private reviews() {
     return this.sql`
       SELECT e.id AS seq, e.event_id::text AS event_id, e.event_type, e.payload, e.occurred_at,
-             CASE WHEN e.aggregate_kind = 'booking' THEN e.aggregate_id
-                  WHEN e.payload->>'booking_id' ~ ${UUID} THEN (e.payload->>'booking_id')::uuid
-             END AS booking_id
+             ${this.sql.unsafe(ALERT_BOOKING_ID_SQL)} AS booking_id
       FROM domain_events e
       WHERE e.event_type LIKE '%.needs_review'`;
   }
@@ -160,9 +169,7 @@ export class OpsAlertsReader {
   private alerts() {
     return this.sql`
       SELECT e.id AS seq, e.event_id::text AS event_id, e.event_type, e.payload, e.occurred_at,
-             CASE WHEN e.aggregate_kind = 'booking' THEN e.aggregate_id
-                  WHEN e.payload->>'booking_id' ~ ${UUID} THEN (e.payload->>'booking_id')::uuid
-             END AS booking_id
+             ${this.sql.unsafe(ALERT_BOOKING_ID_SQL)} AS booking_id
       FROM domain_events e
       WHERE (e.event_type = 'ops.alert'
              AND coalesce(e.payload->>'source_event_type', '') NOT LIKE '%.needs_review')

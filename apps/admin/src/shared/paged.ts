@@ -3,6 +3,9 @@
 import { type QueryKey, useInfiniteQuery } from '@tanstack/react-query';
 import { describeError } from './errors';
 
+/** Pages kept in the cache (and refetched) per list. */
+const MAX_PAGES = 3;
+
 interface Page<T> {
   readonly items: ReadonlyArray<T>;
   readonly nextCursor: string | null;
@@ -22,6 +25,9 @@ export function usePagedList<T>(
     queryFn: ({ pageParam }) => fetchPage(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    // Keep at most 3 pages cached: a refetch (and every refetchInterval) re-requests each cached
+    // page in turn, so a long "Load more" session would otherwise grow every poll without bound.
+    maxPages: MAX_PAGES,
     enabled: options.enabled ?? true,
     ...(options.refetchInterval ? { refetchInterval: options.refetchInterval } : {}),
   });

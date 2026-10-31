@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatCountdown, isUrgent, secondsLeft, spokenCountdown } from './countdown';
+import {
+  formatCountdown,
+  isUrgent,
+  MAX_EXPIRY_WAIT_MS,
+  nextExpiryDelayMs,
+  secondsLeft,
+  spokenCountdown,
+} from './countdown';
 
 const NOW = new Date('2026-10-28T10:00:00.000Z');
 
@@ -62,5 +69,28 @@ describe('isUrgent', () => {
     expect(isUrgent(30)).toBe(true);
     expect(isUrgent(1)).toBe(true);
     expect(isUrgent(0)).toBe(false);
+  });
+});
+
+describe('nextExpiryDelayMs', () => {
+  it('waits for the soonest offer still open', () => {
+    expect(nextExpiryDelayMs(['2026-10-28T10:00:40.000Z', '2026-10-28T10:00:05.500Z'], NOW)).toBe(
+      5_500,
+    );
+  });
+
+  it('ignores closed and unreadable offers', () => {
+    expect(
+      nextExpiryDelayMs(['2026-10-28T09:59:00.000Z', 'nope', '2026-10-28T10:00:20.000Z'], NOW),
+    ).toBe(20_000);
+  });
+
+  it('is null when nothing is still open', () => {
+    expect(nextExpiryDelayMs([], NOW)).toBeNull();
+    expect(nextExpiryDelayMs(['2026-10-28T10:00:00.000Z'], NOW)).toBeNull();
+  });
+
+  it('never sleeps longer than the cap', () => {
+    expect(nextExpiryDelayMs(['2026-10-29T10:00:00.000Z'], NOW)).toBe(MAX_EXPIRY_WAIT_MS);
   });
 });

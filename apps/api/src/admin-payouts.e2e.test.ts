@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JobRegistry } from './infra/queues/job-registry';
 import { JOB } from './infra/queues/queue-names';
@@ -6,6 +7,7 @@ import { base32Decode } from './modules/admin/auth/totp';
 import { checkedOutBooking, fakeFile, SIGNATURES } from './modules/media/__tests__/media-fixtures';
 import { BANK_ACCOUNT_CIPHER, type BankAccountCipher } from './modules/payouts/bank-account-cipher';
 import { PayoutsService } from './modules/payouts/payouts.service';
+import { PayoutsRepository } from './modules/payouts/repositories/payouts.repository';
 import { payWhatIsDue, uploadAll } from './test-support/delivery-fixtures';
 import { drainOutbox } from './test-support/dispatch-fixtures';
 import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
@@ -441,6 +443,23 @@ describe.runIf(TEST_DATABASE_URL)('payouts desk', () => {
       INSERT INTO payouts (booking_id, photographer_id, gross_paise, net_paise, status, utr)
       VALUES (${bookingId}, ${otherPro}, 100, 100, 'PAID', 'HDFCN26121412345')`;
     await expect(reuse).rejects.toMatchObject({ code: '23P01' });
+  });
+
+  it('performance audit: one query finds every UTR of a request recorded on another transfer', async () => {
+    const repo = e2e.get(PayoutsRepository);
+    const utr = 'HDFCN26121412345';
+    const usedBy = (batch: string, transfers: { photographerId: string; utr: string }[]) =>
+      repo.utrsUsedElsewhere(e2e.db.sql, batch, transfers);
+    // Its own transfer, and a UTR nobody has: nothing in use.
+    expect(
+      await usedBy(batchId, [
+        { photographerId: proId, utr },
+        { photographerId: randomUUID(), utr: 'NEVERRECORDED1' },
+      ]),
+    ).toEqual(new Set());
+    // Another photographer, or the same photographer in another batch: in use.
+    expect(await usedBy(batchId, [{ photographerId: randomUUID(), utr }])).toEqual(new Set([utr]));
+    expect(await usedBy(randomUUID(), [{ photographerId: proId, utr }])).toEqual(new Set([utr]));
   });
 
   it('the self-billed statement and the monthly TDS report', async () => {

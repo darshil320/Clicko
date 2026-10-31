@@ -11,13 +11,30 @@ import { checkRuntimeRole, readRuntimeRole } from './runtime-role-check';
 
 export const SQL = Symbol('SQL');
 
+/**
+ * Performance audit (ADR-0027 D6): pool size and idle close from env, and server-side limits on
+ * every connection — a runaway statement and a transaction left open by a hung request are ended
+ * by Postgres instead of holding a pool slot (and row locks) indefinitely.
+ */
+export function poolOptions(env: Env) {
+  return {
+    max: env.DB_POOL_MAX,
+    idle_timeout: env.DB_IDLE_TIMEOUT_S,
+    onnotice: () => {},
+    connection: {
+      statement_timeout: env.DB_STATEMENT_TIMEOUT_MS,
+      idle_in_transaction_session_timeout: env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+    },
+  } as const;
+}
+
 @Global()
 @Module({
   providers: [
     {
       provide: SQL,
       inject: [ENV],
-      useFactory: (env: Env) => postgres(env.DATABASE_URL, { max: 10, onnotice: () => {} }),
+      useFactory: (env: Env) => postgres(env.DATABASE_URL, poolOptions(env)),
     },
   ],
   exports: [SQL],

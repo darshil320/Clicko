@@ -2,25 +2,29 @@ import type { ProOffer } from '@clickco/contracts';
 import { Card, Icon, Text, TIER_LABEL, TierBadge } from '@clickco/ui';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
 import MapPin from 'lucide-react-native/icons/map-pin';
-import Timer from 'lucide-react-native/icons/timer';
 import { View } from 'react-native';
 import { categoryLabel, emergencyLabel, isEmergency } from '@/shared/catalogue';
 import { categoryIcon } from '@/shared/category-icons';
-import { formatShootWindow } from '@/shared/format/datetime';
+import { formatShootWindow, formatTime, istParts } from '@/shared/format/datetime';
 import { rupees } from '@/shared/format/money';
-import { formatCountdown, isUrgent, spokenCountdown } from '../lib/countdown';
 import { areaText, distanceText } from '../lib/offers';
 import { OfferBadges } from './OfferBadges';
+import { OfferCountdown } from './OfferCountdown';
 
 export interface OfferCardProps {
   readonly offer: ProOffer;
-  /** Seconds left to accept (from the feed's one clock). */
-  readonly seconds: number;
   readonly onPress: () => void;
 }
 
-/** One sentence for screen readers: the card is a single button. */
-function spokenOffer(offer: ProOffer, seconds: number): string {
+/** "4:32 pm": when the offer closes (IST). Stable, unlike the ticking countdown. */
+const closesAt = (expiresAt: string): string =>
+  formatTime(istParts(new Date(expiresAt)).minuteOfDay);
+
+/**
+ * One sentence for screen readers: the card is a single button. It names the closing time
+ * rather than the seconds left, so it never goes stale between the card's renders.
+ */
+function spokenOffer(offer: ProOffer): string {
   return [
     rupees(offer.payoutPaise),
     emergencyLabel(offer.emergencyBand),
@@ -30,20 +34,19 @@ function spokenOffer(offer: ProOffer, seconds: number): string {
     distanceText(offer.distanceKm),
     offer.isBroadcast ? 'Open to all nearby' : null,
     `Client ${offer.clientDisplayName}`,
-    `Accept within ${spokenCountdown(seconds)}`,
+    `Accept by ${closesAt(offer.expiresAt)}`,
   ]
     .filter((part): part is string => Boolean(part))
     .join(', ');
 }
 
 /** Doc 01 screen 11: payout first and big, then what, when, where, and the live countdown. */
-export function OfferCard({ offer, seconds, onPress }: OfferCardProps) {
-  const urgent = isUrgent(seconds);
+export function OfferCard({ offer, onPress }: OfferCardProps) {
   return (
     <Card
       onPress={onPress}
       edge={isEmergency(offer.emergencyBand) ? 'emergency' : undefined}
-      accessibilityLabel={spokenOffer(offer, seconds)}
+      accessibilityLabel={spokenOffer(offer)}
       accessibilityHint="Opens the job details"
       className="gap-3"
       testID={`offer-${offer.bookingReference}`}
@@ -74,12 +77,7 @@ export function OfferCard({ offer, seconds, onPress }: OfferCardProps) {
         </Text>
       </View>
       <View className="flex-row items-center justify-between gap-2 border-t border-border-subtle pt-3">
-        <View className="flex-row items-center gap-2">
-          <Icon icon={Timer} size="small" tone={urgent ? 'warning' : 'primary'} />
-          <Text variant="bodyStrong" tone={urgent ? 'warning' : 'primary'} tabular>
-            Accept in {formatCountdown(seconds)}
-          </Text>
-        </View>
+        <OfferCountdown expiresAt={offer.expiresAt} />
         <Icon icon={ChevronRight} tone="tertiary" />
       </View>
     </Card>

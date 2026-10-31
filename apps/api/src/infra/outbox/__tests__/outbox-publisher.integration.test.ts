@@ -7,7 +7,13 @@ import {
   TEST_DATABASE_URL,
 } from '../../../test-support/scratch-db';
 import { appendDomainEvent } from '../outbox';
-import { backoffMs, MAX_PUBLISH_ATTEMPTS, OutboxPublisher } from '../outbox-publisher';
+import {
+  backoffMs,
+  CLAIM_LEASE_MS,
+  MAX_PUBLISH_ATTEMPTS,
+  OutboxPublisher,
+  TICK_DEADLINE_MS,
+} from '../outbox-publisher';
 import { OutboxSubscribers, type PublishedEvent } from '../outbox-subscribers';
 
 const NOW = new Date('2026-11-10T06:30:00.000Z');
@@ -170,6 +176,106 @@ describe.runIf(TEST_DATABASE_URL)('OutboxPublisher in Postgres', () => {
     expect(ra.published + rb.published).toBe(6);
     expect(new Set(delivered).size).toBe(delivered.length);
     expect(delivered).toHaveLength(6);
+  });
+
+  /** A promise plus its resolver: lets a test hold a subscriber mid-delivery. */
+  function gate(): { readonly wait: Promise<void>; readonly open: () => void } {
+    let open = () => {};
+    const wait = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { wait, open };
+  }
+
+  it('a slow subscriber holds no row lock and does not block other ticks', async () => {
+    const subs = new OutboxSubscribers();
+    const held = gate();
+    const entered = gate();
+    const delivered: string[] = [];
+    subs.subscribe('test.slow', 'slow', async (e) => {
+      entered.open();
+      await held.wait;
+      delivered.push(e.eventType);
+    });
+    subs.subscribe('test.fast', 'fast', async (e) => {
+      delivered.push(e.eventType);
+    });
+    await append('test.slow');
+    const slowTick = new OutboxPublisher(db.sql, subs, () => NOW).tick();
+    await entered.wait;
+
+    // While the slow subscriber runs: no open transaction locks the claimed row …
+    const locked = await db.sql.begin(async (tx) => {
+      await tx`SET LOCAL lock_timeout = '500ms'`;
+      return tx`SELECT id FROM domain_events WHERE event_type = 'test.slow' FOR UPDATE NOWAIT`;
+    });
+    expect(locked).toHaveLength(1);
+    // … and another tick delivers a newer event without re-delivering the claimed one.
+    await append('test.fast');
+    expect(await new OutboxPublisher(db.sql, subs, () => NOW).tick()).toEqual({
+      published: 1,
+      failed: 0,
+    });
+    expect(delivered).toEqual(['test.fast']);
+
+    held.open();
+    expect(await slowTick).toEqual({ published: 1, failed: 0 });
+    expect(delivered).toEqual(['test.fast', 'test.slow']);
+    expect((await rows()).every((r) => r.published_at !== null)).toBe(true);
+  });
+
+  it('redelivers a claim whose tick died once the lease runs out (at-least-once)', async () => {
+    const subs = new OutboxSubscribers();
+    const held = gate();
+    const entered = gate();
+    let calls = 0;
+    subs.subscribe('test.crash', 'crash', async () => {
+      calls += 1;
+      if (calls === 1) {
+        entered.open();
+        await held.wait; // the "crashed" tick never gets past here during the test
+      }
+    });
+    await append('test.crash');
+    const dying = new OutboxPublisher(db.sql, subs, () => NOW).tick();
+    await entered.wait;
+
+    const justBefore = new Date(NOW.getTime() + CLAIM_LEASE_MS - 1);
+    expect(await new OutboxPublisher(db.sql, subs, () => justBefore).tick()).toEqual({
+      published: 0,
+      failed: 0,
+    });
+    const afterLease = new Date(NOW.getTime() + CLAIM_LEASE_MS);
+    expect(await new OutboxPublisher(db.sql, subs, () => afterLease).tick()).toEqual({
+      published: 1,
+      failed: 0,
+    });
+    expect(calls).toBe(2);
+
+    held.open();
+    await dying; // the late tick's mark is a no-op on an already-published event
+    expect((await rows())[0]?.published_at).not.toBeNull();
+  });
+
+  it('hands unstarted claims back once a tick passes its deadline', async () => {
+    const subs = new OutboxSubscribers();
+    let now = NOW;
+    const seen: string[] = [];
+    subs.subscribe('test.long', 'long', async (e) => {
+      seen.push(String(e.payload.n));
+      now = new Date(now.getTime() + TICK_DEADLINE_MS); // each delivery eats the whole budget
+    });
+    for (const n of ['1', '2', '3']) await append('test.long', { n });
+    const publisher = new OutboxPublisher(db.sql, subs, () => now);
+
+    expect(await publisher.tick()).toEqual({ published: 1, failed: 0 });
+    const left = await db.sql<{ next_attempt_at: Date | null }[]>`
+      SELECT next_attempt_at FROM domain_events WHERE published_at IS NULL ORDER BY id`;
+    expect(left.map((r) => r.next_attempt_at)).toEqual([null, null]);
+
+    expect(await publisher.tick()).toEqual({ published: 1, failed: 0 });
+    expect(await publisher.tick()).toEqual({ published: 1, failed: 0 });
+    expect(seen).toEqual(['1', '2', '3']);
   });
 
   it('refuses a second subscriber with the same name for one event type', () => {

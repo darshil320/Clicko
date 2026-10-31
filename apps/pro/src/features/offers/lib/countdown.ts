@@ -48,3 +48,19 @@ export function spokenCountdown(seconds: number): string {
 }
 
 export const isUrgent = (seconds: number): boolean => seconds > 0 && seconds <= URGENT_SECONDS;
+
+/** The longest the expiry clock sleeps in one go (keeps setTimeout well inside its range). */
+export const MAX_EXPIRY_WAIT_MS = 60_000;
+
+/**
+ * Milliseconds until the soonest of `expiresAts` still ahead of `now` closes (at least 0, at most
+ * MAX_EXPIRY_WAIT_MS), or null when none is ahead. Lets a list re-render when an offer drops out
+ * instead of every second.
+ */
+export function nextExpiryDelayMs(expiresAts: readonly string[], now: Date): number | null {
+  const ahead = expiresAts
+    .map((iso) => Date.parse(iso) - now.getTime())
+    .filter((ms) => Number.isFinite(ms) && ms > 0);
+  if (ahead.length === 0) return null;
+  return Math.min(MAX_EXPIRY_WAIT_MS, ...ahead);
+}

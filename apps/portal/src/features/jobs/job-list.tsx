@@ -1,13 +1,16 @@
 'use client';
 
 import { MEDIA_LIMITS, type ProUploadJob } from '@clickco/contracts';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { errorMessage } from '../../shared/api';
-import { formatBytes, formatCode, formatCountdown, formatDateTime } from '../../shared/format';
-import { useNow } from '../../shared/hooks';
+import { DeadlineCountdown } from '../../shared/countdown';
+import { formatBytes, formatCode, formatDateTime } from '../../shared/format';
 import { Icon } from '../../shared/icons';
 import { listUploadJobs } from '../../shared/jobs-api';
 import { Callout, StatusPill, type Tone } from '../../shared/ui';
+import { usePoll } from '../../shared/use-poll';
+
+const POLL_MS = 30_000;
 
 const AWAITING: ReadonlySet<string> = new Set(['CHECKED_OUT', 'UPLOADING']);
 
@@ -18,13 +21,12 @@ const STATUS_LABEL: Readonly<Record<string, { label: string; tone: Tone; live?: 
   QA: { label: 'In QA', tone: 'ok' },
 };
 
-function Deadline({ job, now }: { readonly job: ProUploadJob; readonly now: number }) {
+function Deadline({ job }: { readonly job: ProUploadJob }) {
   if (!job.uploadDeadlineAt)
     return <span className="muted small">Deadline unknown — contact ops</span>;
-  const { text, overdue } = formatCountdown(Date.parse(job.uploadDeadlineAt), now);
   return (
     <>
-      <span className={overdue ? 'countdown overdue' : 'countdown'}>{text}</span>
+      <DeadlineCountdown deadlineAt={job.uploadDeadlineAt} />
       <span className="muted small">Due {formatDateTime(job.uploadDeadlineAt)}</span>
     </>
   );
@@ -57,11 +59,9 @@ function SessionProgress({ job }: { readonly job: ProUploadJob }) {
 
 function JobCard({
   job,
-  now,
   primary,
 }: {
   readonly job: ProUploadJob;
-  readonly now: number;
   /** Only the most urgent job gets the amber button (one accent element in view). */
   readonly primary: boolean;
 }) {
@@ -92,7 +92,7 @@ function JobCard({
         <div className="job-foot">
           <div>
             <span className="micro faint">Upload deadline</span>
-            <Deadline job={job} now={now} />
+            <Deadline job={job} />
             <SessionProgress job={job} />
           </div>
           <a
@@ -159,13 +159,11 @@ function Empty({ onRetry }: { readonly onRetry: () => void }) {
 function Group({
   title,
   jobs,
-  now,
   primaryId,
   children,
 }: {
   readonly title: string;
   readonly jobs: readonly ProUploadJob[];
-  readonly now: number;
   readonly primaryId: string | null;
   readonly children?: ReactNode;
 }) {
@@ -178,7 +176,7 @@ function Group({
       {children}
       <div className="group reveal-list">
         {jobs.map((job) => (
-          <JobCard key={job.bookingId} job={job} now={now} primary={job.bookingId === primaryId} />
+          <JobCard key={job.bookingId} job={job} primary={job.bookingId === primaryId} />
         ))}
       </div>
     </section>
@@ -192,30 +190,18 @@ export function JobList() {
   return <Jobs key={attempt} onRetry={() => setAttempt((n) => n + 1)} />;
 }
 
+/**
+ * Polls every 30 s while the tab is visible, backing off while the API fails. A failed refresh
+ * keeps the list on screen with a notice; the countdowns tick inside DeadlineCountdown alone.
+ */
 function Jobs({ onRetry }: { readonly onRetry: () => void }) {
-  const now = useNow(1_000);
-  const [jobs, setJobs] = useState<readonly ProUploadJob[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: jobs, error } = usePoll(listUploadJobs, { everyMs: POLL_MS });
 
-  useEffect(() => {
-    let live = true;
-    const load = () =>
-      listUploadJobs()
-        .then((j) => live && setJobs(j))
-        .catch((e: unknown) => live && setError(errorMessage(e)));
-    void load();
-    const id = setInterval(load, 30_000);
-    return () => {
-      live = false;
-      clearInterval(id);
-    };
-  }, []);
-
-  if (error) {
+  if (error && jobs === undefined) {
     return (
       <div className="stack loose">
         <Callout tone="bad" title="Could not load your shoots" alert>
-          {error}
+          {errorMessage(error)}
         </Callout>
         <div>
           <button type="button" className="secondary" onClick={onRetry}>
@@ -226,7 +212,7 @@ function Jobs({ onRetry }: { readonly onRetry: () => void }) {
       </div>
     );
   }
-  if (jobs === null) {
+  if (jobs === undefined) {
     return (
       <div className="group" role="status">
         <span className="visually-hidden">Loading your shoots…</span>
@@ -242,13 +228,18 @@ function Jobs({ onRetry }: { readonly onRetry: () => void }) {
   const primaryId = awaiting[0]?.bookingId ?? null;
   return (
     <div className="groups">
-      <Group title="To upload" jobs={awaiting} now={now} primaryId={primaryId}>
+      {error ? (
+        <Callout tone="bad" title="Could not refresh your shoots" alert>
+          {errorMessage(error)} Showing the last list; retrying automatically.
+        </Callout>
+      ) : null}
+      <Group title="To upload" jobs={awaiting} primaryId={primaryId}>
         <Callout tone="accent" title={`${MEDIA_LIMITS.uploadDeadlineHours}-hour upload window`}>
           The clock starts when you check out. A late upload counts against your on-time rate (it
           affects the offers you get) and Clickco ops will call you.
         </Callout>
       </Group>
-      <Group title="Uploaded" jobs={uploaded} now={now} primaryId={null} />
+      <Group title="Uploaded" jobs={uploaded} primaryId={null} />
     </div>
   );
 }

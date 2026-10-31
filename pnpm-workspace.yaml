@@ -29,6 +29,13 @@ minimumReleaseAgeExclude:
   - lucide-react@1.63.0
 # Security overrides (pnpm audit, 30 Oct 2026): patched transitive versions. body-parser and multer
 # sit inside @nestjs/platform-express (the API's HTTP layer); the rest are Expo build tooling.
+# Accepted advisories (ADR-0027 D6). GHSA-mrhx-c7xc-m3w5 (zod <4.6.6, memory on oversized
+# collections): only zod 3.25.x inside @expo/cli (Expo's build tooling, never in an app bundle and
+# never fed untrusted input). No patched 3.x exists and @expo/cli needs the v3 API. Clickco's own
+# zod is 4.6.7. Drop this when Expo moves to zod 4.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-mrhx-c7xc-m3w5
 overrides:
   "body-parser@>=2.0.0 <2.4.0": 2.4.0
   "multer@>=2.0.0 <2.5.0": 2.5.0

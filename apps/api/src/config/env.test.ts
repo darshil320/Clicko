@@ -40,6 +40,10 @@ describe('loadEnv', () => {
       STAFF_TOTP_KEY: DEV_STAFF_TOTP_KEY,
       BANK_ACCOUNT_KEY_VERSION: 2,
       DEV_TOOLS: 'off',
+      DB_POOL_MAX: 20,
+      DB_IDLE_TIMEOUT_S: 30,
+      DB_STATEMENT_TIMEOUT_MS: 5_000,
+      DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: 30_000,
     });
   });
 

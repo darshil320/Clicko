@@ -2,11 +2,15 @@ import { newIdempotencyKey } from '@clickco/api-client';
 import type { ProOffer } from '@clickco/contracts';
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIsFocused } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { acceptOffer, declineOffer, listOffers } from './api';
+import { INITIAL_BASELINE, nextBaseline, OFFER_POLL_MS, offerPollDelay } from './lib/poll';
 
 /** No push for new offers until S11, so the feed polls (ADR-0024 D3). */
-export const OFFER_POLL_MS = 10_000;
+export { OFFER_POLL_MS };
+
+/** One quick retry per poll; after that the cadence itself backs off. */
+const OFFER_RETRIES = 1;
 
 export const offerKeys = {
   all: ['offers'] as const,
@@ -16,14 +20,22 @@ export const offerKeys = {
 /**
  * Polls every 10 s while the screen showing it is focused and the app is in the foreground
  * (the root layout feeds AppState into TanStack's focusManager). Never in the background.
+ * While the API keeps failing the wait doubles per failure in a row (with jitter, capped at
+ * 120 s), so a fleet of phones does not hammer a struggling server in lockstep.
  */
 function useOffersQuery<T>(select: (offers: ProOffer[]) => T) {
   const focused = useIsFocused();
+  const baseline = useRef(INITIAL_BASELINE);
   return useQuery({
     queryKey: offerKeys.list(),
     queryFn: listOffers,
     select,
-    refetchInterval: focused ? OFFER_POLL_MS : false,
+    retry: OFFER_RETRIES,
+    refetchInterval: (query) => {
+      if (!focused) return false;
+      baseline.current = nextBaseline(query.state, baseline.current);
+      return offerPollDelay(query.state, baseline.current);
+    },
     refetchIntervalInBackground: false,
   });
 }

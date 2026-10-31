@@ -6,18 +6,17 @@ import TimerOff from 'lucide-react-native/icons/timer-off';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { userMessage } from '@/shared/errors';
-import { useNow } from '@/shared/hooks/useNow';
+import { useExpiryClock } from '../clock';
 import { useAcceptOffer, useDeclineOffer, useOffer } from '../hooks';
-import { formatCountdown, secondsLeft, spokenCountdown } from '../lib/countdown';
+import { secondsLeft } from '../lib/countdown';
 import { DeclineSheet } from './DeclineSheet';
+import { AcceptButton } from './OfferCountdown';
 import {
   PayoutHeader,
   RequirementsSection,
   ShootSection,
   VenueSection,
 } from './OfferDetailSections';
-
-const TICK_MS = 1000;
 
 export interface OfferDetailViewProps {
   readonly attemptId: string;
@@ -41,8 +40,9 @@ export function OfferDetailView({ attemptId }: OfferDetailViewProps) {
 
 function OfferDetail({ attemptId }: OfferDetailViewProps) {
   const router = useRouter();
-  const now = useNow(TICK_MS);
   const offer = useOffer(attemptId);
+  // Moves only when the offer closes; the button's countdown ticks on its own (AcceptButton).
+  const now = useExpiryClock(offer.data ? [offer.data.expiresAt] : []);
   const [declining, setDeclining] = useState(false);
   const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const accept = useAcceptOffer((assignmentId) =>
@@ -94,7 +94,6 @@ function OfferDetail({ attemptId }: OfferDetailViewProps) {
     );
   }
 
-  const seconds = secondsLeft(shown.expiresAt, now);
   const accepting = accept.isPending || accept.isSuccess;
 
   return (
@@ -107,13 +106,11 @@ function OfferDetail({ attemptId }: OfferDetailViewProps) {
               {userMessage(accept.error)}
             </Text>
           ) : null}
-          <Button
-            label={`Accept · ${formatCountdown(seconds)}`}
-            accessibilityLabel={`Accept job, ${spokenCountdown(seconds)} left`}
+          <AcceptButton
+            expiresAt={shown.expiresAt}
             loading={accepting}
             disabled={decline.isPending}
             onPress={() => accept.mutate(shown)}
-            testID="accept-offer"
           />
           <Button
             label="Decline"

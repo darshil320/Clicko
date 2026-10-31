@@ -1,13 +1,16 @@
 'use client';
 
 import type { ProUploadJob } from '@clickco/contracts';
-import { useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { errorMessage } from '../../shared/api';
 import { formatBytes, formatCode, formatDateTime } from '../../shared/format';
 import { useRequireSession } from '../../shared/hooks';
 import { Icon, type IconName } from '../../shared/icons';
 import { findUploadJob } from '../../shared/jobs-api';
 import { BackLink, Callout, Loading, StatusPill } from '../../shared/ui';
+import { usePoll } from '../../shared/use-poll';
+
+const POLL_MS = 10_000;
 
 const STEPS = [
   {
@@ -36,6 +39,13 @@ const STEPS = [
 }>;
 
 const ORDER = ['CHECKED_OUT', 'UPLOADING', 'PROCESSING', 'QA'];
+
+/** Statuses this page still watches; anything else (or leaving the list) is final. */
+const WATCHED: ReadonlySet<string> = new Set(ORDER);
+
+/** Delivered, cancelled or gone from the upload list: nothing left to poll for. */
+const isFinalJob = (job: ProUploadJob | null): boolean =>
+  job === null || !WATCHED.has(job.bookingStatus);
 
 type StepState = 'done' | 'current' | 'later';
 
@@ -99,33 +109,25 @@ function Stats({ job }: { readonly job: ProUploadJob }) {
   );
 }
 
-/** Processing + verification status after an upload (doc 02 §7 status page). */
+/**
+ * Processing + verification status after an upload (doc 02 §7 status page). Polls every 10 s
+ * while the tab is visible, stops once the shoot reaches a final status, backs off on errors.
+ */
 export function StatusView({ bookingId }: { readonly bookingId: string }) {
   const session = useRequireSession();
-  const [job, setJob] = useState<ProUploadJob | null | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => findUploadJob(bookingId), [bookingId]);
+  const { data: job, error } = usePoll(load, {
+    everyMs: POLL_MS,
+    enabled: session !== null,
+    isFinal: isFinalJob,
+  });
 
-  useEffect(() => {
-    if (!session) return;
-    let live = true;
-    const load = () =>
-      findUploadJob(bookingId)
-        .then((j) => live && setJob(j))
-        .catch((e: unknown) => live && setError(errorMessage(e)));
-    void load();
-    const id = setInterval(load, 10_000);
-    return () => {
-      live = false;
-      clearInterval(id);
-    };
-  }, [bookingId, session]);
-
-  if (error) {
+  if (error && job === undefined) {
     return (
       <div className="page">
         <BackLink href="/jobs">Your shoots</BackLink>
         <Callout tone="bad" title="Could not load this shoot" alert>
-          {error}
+          {errorMessage(error)}
         </Callout>
       </div>
     );
@@ -174,6 +176,11 @@ export function StatusView({ bookingId }: { readonly bookingId: string }) {
           </a>
         ) : null}
       </header>
+      {error ? (
+        <Callout tone="bad" title="Could not refresh this shoot" alert>
+          {errorMessage(error)} Showing the last status; retrying automatically.
+        </Callout>
+      ) : null}
       <section className="card white">
         <Timeline job={job} />
       </section>

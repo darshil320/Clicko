@@ -19,7 +19,10 @@ export function ReelVideo({
   readonly reel: SiteReel;
   readonly caption?: string;
   readonly className?: string;
-  /** Above the fold: fetch at once rather than on first play. */
+  /**
+   * Above the fold: fetch the metadata (duration, first frame) at once rather than on first
+   * play; the bytes stream when it starts playing, so the poster wins the LCP race.
+   */
   readonly priority?: boolean;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -63,7 +66,7 @@ export function ReelVideo({
         muted
         loop
         playsInline
-        preload={priority ? 'auto' : 'none'}
+        preload={priority ? 'metadata' : 'none'}
         aria-hidden="true"
         tabIndex={-1}
         onPlay={() => setPlaying(true)}

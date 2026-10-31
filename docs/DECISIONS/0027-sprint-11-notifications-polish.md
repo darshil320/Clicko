@@ -150,3 +150,30 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
   batch and same photographer) plus the service check.
 - **L9.** A refund webhook whose relay fails is marked failed like any other webhook, so the
   gateway's retry processes it again.
+
+### D6b — Performance audit (31 Oct 2026): what was done
+- **Database:** migration/addendum **0014** adds seven indexes, each for a named read (alert feed,
+  booking board, payout UTRs, incident reports, board search, open dispatch rounds). The pool size,
+  idle close, `statement_timeout` (5 s) and `idle_in_transaction_session_timeout` (30 s) come from
+  env (`DB_POOL_MAX`, `DB_IDLE_TIMEOUT_S`, `DB_STATEMENT_TIMEOUT_MS`,
+  `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`). A job that needs longer sets `SET LOCAL statement_timeout`
+  in its own transaction.
+- **Outbox:** a tick claims up to 100 events with a 10-minute lease and commits, delivers outside any
+  transaction, then settles each event on its own. Delivery stays at-least-once.
+- **API:** the Today overview is cached per grant set in Redis for 20 s (an incomplete answer is
+  never cached). The UTR check reads a whole mark-paid request in one query. At most 2 scrypt runs
+  at once; 32 more may wait, and the rest get 503.
+- **Apps:** polling backs off (Pro offers, portal). Per-second clocks are their own components. The
+  client draft is debounced. Admin lists fetch at most 3 pages. Pro polls only while focused. Web
+  photos and reels are cached for a day (their names carry no content hash).
+- **CI** (`.github/workflows/ci.yml`): biome, typecheck, every test suite (the API with
+  `--maxWorkers=2`), `pnpm audit --prod --audit-level high`, and gitleaks on each push or PR.
+  Actions are pinned to commit SHAs, and checkouts don't keep the token.
+- **Accepted advisory:** GHSA-mrhx-c7xc-m3w5 (zod < 4.6.6) affects only the zod 3.25.x inside
+  `@expo/cli`, which is build tooling and is never fed untrusted input. No patched 3.x exists, and
+  Clickco's own zod is 4.6.7. It is ignored in `pnpm-workspace.yaml`. Review at each Expo SDK bump.
+- **Recorded LOWs (owner: API, before S12 launch):**
+  - Give each outbox delivery a time limit under the lease, plus a claim token that the settle
+    updates must match.
+  - Replace `script-src 'unsafe-inline'` on the web CSP with build hashes.
+  - Run one full-history gitleaks scan of the public repo.

@@ -13,7 +13,8 @@
       "!**/.expo",
       "!**/coverage",
       "!docs",
-      "!.claude/scripts"
+      "!.claude/scripts",
+      "!pnpm-lock.yaml"
     ]
   },
   "formatter": {

@@ -152,6 +152,11 @@ export class IncidentsService {
     return this.events.openReports(this.sql, onSite, absent);
   }
 
+  /** The number of `openReports`, counted in SQL. */
+  countOpenReports(onSite: IdSubquery, absent: IdSubquery): Promise<number> {
+    return this.events.countOpenReports(this.sql, onSite, absent);
+  }
+
   /** Report kinds per booking, for the board's INCIDENT_REPORTED flag. */
   reportKinds(bookingIds: readonly string[]): Promise<Map<string, ReadonlySet<string>>> {
     return this.events.reportKinds(this.sql, bookingIds);

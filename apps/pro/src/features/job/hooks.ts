@@ -1,5 +1,6 @@
 import { newIdempotencyKey } from '@clickco/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFocused } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { currentFix, fixForReport } from '@/shared/location/current-fix';
 import type { DeviceFix } from '@/shared/location/fix';
@@ -23,29 +24,44 @@ export const jobKeys = {
   detail: (assignmentId: string) => ['job', 'detail', assignmentId] as const,
 };
 
+/**
+ * Job queries poll only while the screen showing them is focused (a screen under another in the
+ * stack, or a tab in the background, stays mounted). Refocusing refetches a stale query anyway.
+ * The app being backgrounded is handled by the root layout's focusManager.
+ */
 export function useActiveJobs() {
+  const focused = useIsFocused();
   return useQuery({
     queryKey: jobKeys.active,
     queryFn: fetchActiveJobs,
-    refetchInterval: LIST_POLL_MS,
+    refetchInterval: focused ? LIST_POLL_MS : false,
   });
 }
 
 export function useUploadJobs() {
+  const focused = useIsFocused();
   return useQuery({
     queryKey: jobKeys.uploads,
     queryFn: fetchUploadJobs,
-    refetchInterval: LIST_POLL_MS,
+    refetchInterval: focused ? LIST_POLL_MS : false,
   });
 }
 
-/** The job, polled every 15 s while an extension awaits the client, otherwise every 60 s. */
+/**
+ * The job, polled while its screen is focused: every 15 s while an extension awaits the client,
+ * otherwise every 60 s.
+ */
 export function useJob(assignmentId: string) {
+  const focused = useIsFocused();
   return useQuery({
     queryKey: jobKeys.detail(assignmentId),
     queryFn: () => fetchJob(assignmentId),
-    refetchInterval: (query) =>
-      query.state.data?.pendingExtension?.status === 'PENDING' ? DECISION_POLL_MS : DETAIL_POLL_MS,
+    refetchInterval: (query) => {
+      if (!focused) return false;
+      return query.state.data?.pendingExtension?.status === 'PENDING'
+        ? DECISION_POLL_MS
+        : DETAIL_POLL_MS;
+    },
   });
 }
 

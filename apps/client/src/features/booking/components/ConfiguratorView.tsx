@@ -11,8 +11,8 @@ import {
 } from '@clickco/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import CalendarDays from 'lucide-react-native/icons/calendar-days';
-import { type ReactNode, useEffect, useMemo } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
+import { type Control, Controller, useForm, useWatch } from 'react-hook-form';
 import { View } from 'react-native';
 import { userMessage } from '@/shared/errors';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
@@ -34,6 +34,35 @@ import {
 
 const QUOTE_DEBOUNCE_MS = 350;
 const CLOCK_TICK_MS = 60_000;
+/** Typing in the venue fields saves to the persisted draft once it pauses this long (or on blur). */
+const VENUE_SAVE_DEBOUNCE_MS = 500;
+
+/**
+ * Saves the typed venue into the persisted draft once typing pauses, and on unmount — not on
+ * every keystroke (each save re-renders the configurator and writes the draft to MMKV).
+ * useWatch keeps the per-keystroke re-render inside this null component.
+ */
+function VenueDraftSync({
+  control,
+  onSave,
+}: {
+  control: Control<VenueForm>;
+  onSave: (venue: VenueForm) => void;
+}) {
+  const [venueAddress, venueLandmark] = useWatch({
+    control,
+    name: ['venueAddress', 'venueLandmark'],
+  });
+  const typed = useMemo(() => ({ venueAddress, venueLandmark }), [venueAddress, venueLandmark]);
+  const settled = useDebouncedValue(typed, VENUE_SAVE_DEBOUNCE_MS);
+  const latest = useRef(typed);
+  useEffect(() => {
+    latest.current = typed;
+  }, [typed]);
+  useEffect(() => onSave(settled), [settled, onSave]);
+  useEffect(() => () => onSave(latest.current), [onSave]);
+  return null;
+}
 
 function PriceFooter({ draft, onReview }: { draft: BookingDraft; onReview: () => void }) {
   const request = useDebouncedValue(
@@ -117,6 +146,20 @@ export function ConfiguratorView({
     },
   });
 
+  // Writes the venue only when it differs from the saved draft (no-op saves skip MMKV).
+  const saveVenue = useCallback(
+    (venue: VenueForm) => {
+      const saved = useBookingDraft.getState().draft;
+      if (
+        saved &&
+        (saved.venueAddress !== venue.venueAddress || saved.venueLandmark !== venue.venueLandmark)
+      ) {
+        update({ venueAddress: venue.venueAddress, venueLandmark: venue.venueLandmark });
+      }
+    },
+    [update],
+  );
+
   useEffect(() => {
     if (draft && draft.pincode !== pincode) update({ pincode });
   }, [draft, pincode, update]);
@@ -150,7 +193,11 @@ export function ConfiguratorView({
 
   const pills = datePills(now);
   const slots = timeSlots(draft.dateKey, now);
-  const review = form.handleSubmit(onReview);
+  // Flush the venue first: the review screen reads it from the draft.
+  const review = form.handleSubmit((venue) => {
+    saveVenue(venue);
+    onReview();
+  });
 
   return (
     <Screen
@@ -161,6 +208,7 @@ export function ConfiguratorView({
       footer={<PriceFooter draft={draft} onReview={() => void review()} />}
     >
       <Card className="gap-5">
+        <VenueDraftSync control={form.control} onSave={saveVenue} />
         <View className="flex-row items-center justify-between gap-3">
           <View className="flex-1 gap-1">
             <Text variant="micro" tone="tertiary">
@@ -179,11 +227,11 @@ export function ConfiguratorView({
               placeholder="14, Rajhans Platinum, Vesu"
               autoComplete="street-address"
               value={field.value}
-              onChangeText={(text) => {
-                field.onChange(text);
-                update({ venueAddress: text });
+              onChangeText={field.onChange}
+              onBlur={() => {
+                field.onBlur();
+                saveVenue(form.getValues());
               }}
-              onBlur={field.onBlur}
               error={fieldState.error?.message}
               testID="venue-address"
             />
@@ -197,11 +245,11 @@ export function ConfiguratorView({
               label="Landmark (optional)"
               placeholder="Opposite VR Mall"
               value={field.value}
-              onChangeText={(text) => {
-                field.onChange(text);
-                update({ venueLandmark: text });
+              onChangeText={field.onChange}
+              onBlur={() => {
+                field.onBlur();
+                saveVenue(form.getValues());
               }}
-              onBlur={field.onBlur}
               error={fieldState.error?.message}
             />
           )}

@@ -102,6 +102,16 @@ export class AssignmentEventsRepository {
     return row ? toRecord(row) : null;
   }
 
+  /** How many rows `openReports` would return, counted in SQL (the overview tile). */
+  async countOpenReports(db: Db, onSite: IdSubquery, absent: IdSubquery): Promise<number> {
+    const [row] = await db<{ n: number }[]>`
+      SELECT count(DISTINCT (assignment_id, kind))::int AS n
+      FROM assignment_events
+      WHERE (kind IN ('ACCESS_DENIED_REPORTED', 'UNSAFE_REPORTED') AND booking_id IN (${onSite}))
+         OR (kind = 'CLIENT_ABSENT_REPORTED' AND booking_id IN (${absent}))`;
+    return row?.n ?? 0;
+  }
+
   /**
    * The first report of each kind per assignment, for bookings still awaiting the decision:
    * access denied / unsafe in `onSite`, client absent in `absent`. Oldest first.

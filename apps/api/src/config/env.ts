@@ -43,6 +43,19 @@ export const EnvSchema = z
     // Security audit M4: the table OWNER, used only by migrate.ts. When set, DATABASE_URL is the
     // least-privilege runtime role (clickco_app: no UPDATE/DELETE/TRUNCATE on append-only tables).
     MIGRATION_DATABASE_URL: unsetIfEmpty(z.url({ protocol: /^postgres(ql)?$/ }).optional()),
+    // Performance audit (ADR-0027 D6): the API's pool. Size it so (instances × DB_POOL_MAX) stays
+    // under the server's max_connections. Idle connections close after DB_IDLE_TIMEOUT_S.
+    DB_POOL_MAX: unsetIfEmpty(z.coerce.number().int().min(1).max(200).default(20)),
+    DB_IDLE_TIMEOUT_S: unsetIfEmpty(z.coerce.number().int().min(0).max(3600).default(30)),
+    // A runaway statement is cancelled after this; a job that needs longer raises it inside its
+    // own transaction (SET LOCAL statement_timeout). Migrations use their own connection.
+    DB_STATEMENT_TIMEOUT_MS: unsetIfEmpty(
+      z.coerce.number().int().min(100).max(600_000).default(5_000),
+    ),
+    // A transaction left open (a request that hung mid-transaction) is ended after this.
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: unsetIfEmpty(
+      z.coerce.number().int().min(1_000).max(600_000).default(30_000),
+    ),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     // Namespaces every BullMQ queue and Redis lock key. Tests use a unique value per run.
     // Required in staging/production (no shared default between environments on one Redis).

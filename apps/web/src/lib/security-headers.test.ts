@@ -50,3 +50,31 @@ describe('cspApiProblem', () => {
     expect(cspApiProblem(vercelJson, 'https://api.other.in/waitlist')).toMatch(/connect-src/);
   });
 });
+
+describe('vercel.json static media caching', () => {
+  const rules = (
+    JSON.parse(vercelJson) as {
+      headers: ReadonlyArray<{
+        source: string;
+        headers: ReadonlyArray<{ key: string; value: string }>;
+      }>;
+    }
+  ).headers;
+
+  it.each(['/photos/(.*)', '/reels/(.*)'])(
+    'caches %s for a day (names carry no content hash)',
+    (source) => {
+      const rule = rules.find((r) => r.source === source);
+      expect(rule?.headers).toEqual([
+        { key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' },
+      ]);
+    },
+  );
+
+  it('still sends the security headers on every path, first', () => {
+    expect(rules[0]?.source).toBe('/(.*)');
+    expect(
+      rules.filter((r) => r.source !== '/(.*)').flatMap((r) => r.headers.map((h) => h.key)),
+    ).toEqual(['Cache-Control', 'Cache-Control']);
+  });
+});

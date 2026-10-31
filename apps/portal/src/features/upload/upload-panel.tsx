@@ -2,8 +2,9 @@
 
 import { MEDIA_LIMITS, type ProUploadJob } from '@clickco/contracts';
 import { useEffect } from 'react';
-import { formatBytes, formatCode, formatCountdown, formatDateTime } from '../../shared/format';
-import { useNow, useRequireSession } from '../../shared/hooks';
+import { DeadlineCountdown } from '../../shared/countdown';
+import { formatBytes, formatCode, formatDateTime } from '../../shared/format';
+import { useRequireSession } from '../../shared/hooks';
 import { Icon } from '../../shared/icons';
 import { BackLink, Callout, Loading } from '../../shared/ui';
 import { DropZone, Rejections } from './drop-zone';
@@ -13,10 +14,7 @@ import { type UploadStage, useUpload } from './use-upload';
 
 type Upload = ReturnType<typeof useUpload>;
 
-function Head({ job, now }: { readonly job: ProUploadJob | null; readonly now: number }) {
-  const deadline = job?.uploadDeadlineAt
-    ? formatCountdown(Date.parse(job.uploadDeadlineAt), now)
-    : null;
+function Head({ job }: { readonly job: ProUploadJob | null }) {
   return (
     <header className="page-head reveal">
       <div>
@@ -35,15 +33,10 @@ function Head({ job, now }: { readonly job: ProUploadJob | null; readonly now: n
           </div>
         ) : null}
       </div>
-      {deadline && job?.uploadDeadlineAt ? (
+      {job?.uploadDeadlineAt ? (
         <div className="deadline-box">
           <span className="micro faint">Upload deadline</span>
-          <span
-            className={deadline.overdue ? 'countdown overdue' : 'countdown'}
-            data-testid="deadline"
-          >
-            {deadline.text}
-          </span>
+          <DeadlineCountdown deadlineAt={job.uploadDeadlineAt} testId="deadline" />
           <span className="muted small">
             Due {formatDateTime(job.uploadDeadlineAt)} · {MEDIA_LIMITS.uploadDeadlineHours} h after
             check-out
@@ -218,7 +211,6 @@ function Done({
 /** The uploader screen (doc 02 §7): drop, review, upload with honest progress, resume. */
 export function UploadPanel({ bookingId }: { readonly bookingId: string }) {
   const session = useRequireSession();
-  const now = useNow(1_000);
   const upload = useUpload(bookingId, session?.photographer.id ?? null);
   const { stage, job } = upload;
 
@@ -244,7 +236,7 @@ export function UploadPanel({ bookingId }: { readonly bookingId: string }) {
   return (
     <div className="page">
       <BackLink href="/jobs">Your shoots</BackLink>
-      <Head job={job} now={now} />
+      <Head job={job} />
       {upload.error ? (
         <Callout tone="bad" alert>
           {upload.error}
