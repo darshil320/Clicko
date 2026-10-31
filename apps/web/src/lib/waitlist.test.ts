@@ -3,7 +3,7 @@ import {
   interpretWaitlistResponse,
   normaliseIndianMobile,
   outcomeMessage,
-  productionApiProblem,
+  resolveWaitlist,
   validateWaitlist,
   waitlistEndpoint,
 } from './waitlist';
@@ -23,19 +23,57 @@ describe('waitlistEndpoint', () => {
   });
 });
 
-describe('productionApiProblem', () => {
-  it('ignores development builds', () => {
-    expect(productionApiProblem({})).toBeNull();
+describe('resolveWaitlist (audit M1)', () => {
+  const live = (endpoint: string) => ({ kind: 'live', endpoint });
+  const api = 'https://api.clickco.in';
+
+  it('uses the local API for a local build', () => {
+    expect(resolveWaitlist({})).toEqual(live('http://localhost:4000/waitlist'));
+    expect(resolveWaitlist({ NEXT_PUBLIC_API_URL: 'http://localhost:4100' })).toEqual(
+      live('http://localhost:4100/waitlist'),
+    );
   });
 
-  it('requires an https API URL for build:production', () => {
-    expect(productionApiProblem({ LEGAL_STRICT: '1' })).toMatch(/must be set/);
-    expect(productionApiProblem({ LEGAL_STRICT: '1', NEXT_PUBLIC_API_URL: 'http://x' })).toMatch(
+  it('never posts to localhost from a deployed site: no API URL means "opens soon"', () => {
+    expect(resolveWaitlist({ VERCEL: '1', VERCEL_ENV: 'production' })).toEqual({
+      kind: 'unavailable',
+    });
+    expect(resolveWaitlist({ VERCEL: '1', VERCEL_ENV: 'preview' })).toEqual({
+      kind: 'unavailable',
+    });
+    expect(resolveWaitlist({ CLICKCO_DEPLOY: '1' })).toEqual({ kind: 'unavailable' });
+  });
+
+  it('fails a production build with a non-https API URL', () => {
+    for (const env of [{ VERCEL: '1', VERCEL_ENV: 'production' }, { CLICKCO_DEPLOY: '1' }]) {
+      expect(() => resolveWaitlist({ ...env, NEXT_PUBLIC_API_URL: 'http://api.x.in' })).toThrow(
+        /https/,
+      );
+    }
+  });
+
+  it('switches the form off on a preview deploy with a non-https API URL', () => {
+    expect(
+      resolveWaitlist({ VERCEL: '1', VERCEL_ENV: 'preview', NEXT_PUBLIC_API_URL: 'http://x.in' }),
+    ).toEqual({ kind: 'unavailable' });
+  });
+
+  it('posts to the configured https API in production', () => {
+    expect(
+      resolveWaitlist({ VERCEL: '1', VERCEL_ENV: 'production', NEXT_PUBLIC_API_URL: api }),
+    ).toEqual(live('https://api.clickco.in/waitlist'));
+  });
+
+  it('build:production (LEGAL_STRICT=1) still requires the URL', () => {
+    expect(() => resolveWaitlist({ LEGAL_STRICT: '1' })).toThrow(/must be set/);
+    expect(() => resolveWaitlist({ LEGAL_STRICT: '1', NEXT_PUBLIC_API_URL: 'http://x' })).toThrow(
       /https/,
     );
-    expect(
-      productionApiProblem({ LEGAL_STRICT: '1', NEXT_PUBLIC_API_URL: 'https://api.clickco.in' }),
-    ).toBeNull();
+    expect(resolveWaitlist({ LEGAL_STRICT: '1', NEXT_PUBLIC_API_URL: api }).kind).toBe('live');
+  });
+
+  it('rejects a malformed URL', () => {
+    expect(() => resolveWaitlist({ NEXT_PUBLIC_API_URL: 'not a url' })).toThrow(/valid URL/);
   });
 });
 

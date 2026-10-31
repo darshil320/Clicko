@@ -40,6 +40,10 @@ export const STATIC_SECURITY_HEADERS: ReadonlyArray<{
   { key: 'Referrer-Policy', value: 'no-referrer' },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+  // No cross-origin window can hold a handle to the portal, and no other site may embed its
+  // responses (audit L4, as the admin panel — ADR-0025).
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+  { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
 ];
 
 /** The API base URL; a deploy build (CLICKCO_DEPLOY=1) must set an https one. */

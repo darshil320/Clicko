@@ -27,6 +27,8 @@ export interface WaitlistInsert {
   readonly cityNameRaw: string | null;
   readonly intendedDate: string | null;
   readonly intendedTier: PlanTier | null;
+  /** The client's /24 or /64 (sourceNetwork), null if unknown. Never the full address. */
+  readonly sourceNet: string | null;
 }
 
 export interface ServiceabilityRepository {
@@ -34,7 +36,14 @@ export interface ServiceabilityRepository {
   /** Waiting entries for the city when known, otherwise for the pincode. */
   countWaiting(cityId: string | null, pincode: string): Promise<number>;
   countForPhoneSince(phone: string, since: Date): Promise<number>;
-  /** Idempotent on (phone, pincode, intended date) — the waitlist_dedupe_uq index. */
+  /** Waitlist joins for a pincode since a time (abuse limit, audit Web M3). */
+  countForPincodeSince(pincode: string, since: Date): Promise<number>;
+  /** Waitlist joins from a source network (CIDR) since a time (abuse limit, audit Web M3). */
+  countForNetworkSince(sourceNet: string, since: Date): Promise<number>;
+  /**
+   * Idempotent on (phone, pincode, intended date) — the waitlist_dedupe_uq index. Every entry is
+   * stored unverified (phone_verified_at NULL) and is never messaged until verified (addendum 0013).
+   */
   insertWaitlist(entry: WaitlistInsert): Promise<void>;
   /** Display names for city ids (other modules never read the cities table themselves). */
   cityNames(cityIds: readonly string[]): Promise<Map<string, string>>;
@@ -103,11 +112,25 @@ export class PgServiceabilityRepository implements ServiceabilityRepository {
     return row?.n ?? 0;
   }
 
+  async countForPincodeSince(pincode: string, since: Date): Promise<number> {
+    const [row] = await this.sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM waitlist_entries WHERE pincode = ${pincode} AND created_at >= ${since}`;
+    return row?.n ?? 0;
+  }
+
+  async countForNetworkSince(sourceNet: string, since: Date): Promise<number> {
+    const [row] = await this.sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM waitlist_entries
+      WHERE source_net = ${sourceNet}::cidr AND created_at >= ${since}`;
+    return row?.n ?? 0;
+  }
+
   async insertWaitlist(e: WaitlistInsert): Promise<void> {
     await this.sql`
-      INSERT INTO waitlist_entries (phone_e164, full_name, pincode, city_id, city_name_raw, intended_date, intended_tier)
+      INSERT INTO waitlist_entries (phone_e164, full_name, pincode, city_id, city_name_raw, intended_date,
+                                    intended_tier, source_net)
       VALUES (${e.phone}, ${e.fullName}, ${e.pincode}, ${e.cityId}, ${e.cityNameRaw},
-              ${e.intendedDate}, ${e.intendedTier})
+              ${e.intendedDate}, ${e.intendedTier}, ${e.sourceNet}::cidr)
       ON CONFLICT (phone_e164, pincode, coalesce(intended_date, '1900-01-01')) DO NOTHING`;
   }
 

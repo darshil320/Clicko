@@ -10,6 +10,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { errorMessage } from '../../shared/api';
 import { findUploadJob } from '../../shared/jobs-api';
+import { markActive } from '../../shared/use-idle-sign-out';
 import { browserCheckpointStore, type Checkpoint } from './checkpoints';
 import { type AcceptedFile, detectFrames, filterFiles, type Rejection } from './file-filter';
 import { abortableSleep } from './plan';
@@ -134,9 +135,11 @@ export function useUpload(bookingId: string, photographerId: string | null) {
       if (!existing) await checkpoints.save(checkpoint).catch(() => undefined);
       const u = new Uploader(uploaderDeps());
       uploader.current = u;
-      const final = await u.run({ session, files: files.current, checkpoint }, (progress) =>
-        setStage({ kind: 'running', session, progress }),
-      );
+      const final = await u.run({ session, files: files.current, checkpoint }, (progress) => {
+        // A running upload is activity: the idle sign-out must never cut it off (audit L4).
+        markActive();
+        setStage({ kind: 'running', session, progress });
+      });
       uploader.current = null;
       if (final.phase === 'done' && final.result) setStage({ kind: 'done', result: final.result });
       else

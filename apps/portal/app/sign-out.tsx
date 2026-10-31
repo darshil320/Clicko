@@ -6,6 +6,7 @@ import { signOut } from '../src/shared/api';
 import { initials } from '../src/shared/format';
 import { Icon } from '../src/shared/icons';
 import { loadSession, onSessionChange, type PortalSession } from '../src/shared/session';
+import { useIdleSignOut } from '../src/shared/use-idle-sign-out';
 
 /**
  * The signed-in header: a link to the shoots, who is signed in, and Sign out. Signing out revokes
@@ -20,6 +21,8 @@ export function SignOut() {
     setSession(loadSession());
     return onSessionChange(setSession);
   }, []);
+  // 30 minutes without activity signs out (audit L4); this header is on every page.
+  useIdleSignOut(session !== null);
   if (!session) return null;
   const name = session.photographer.displayName;
   return (

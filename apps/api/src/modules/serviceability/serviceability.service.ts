@@ -19,6 +19,7 @@ import {
   type ServiceabilityRepository,
 } from './repositories/serviceability.repository';
 import type { AreaLabel, VenueFallback } from './serviceability.types';
+import { sourceNetwork } from './source-network';
 
 export interface BookableVenue {
   readonly pincode: string;
@@ -29,9 +30,26 @@ export interface BookableVenue {
   readonly travelZone: 0 | 1 | 2;
 }
 
-export const WAITLIST_POLICY = { maxJoinsPerPhonePerDay: 3, maxMonthsAhead: 18 } as const;
+/**
+ * POST /waitlist is public, so every cap is counted from stored entries (audit Web M3). Network =
+ * the client's IPv4 /24 or IPv6 /64 (sourceNetwork). Pincode caps stop one area being flooded;
+ * they sit far above organic demand for a single pincode. A CAPTCHA (Cloudflare Turnstile) is a
+ * follow-up that needs the owner's Cloudflare account.
+ */
+export const WAITLIST_POLICY = {
+  maxJoinsPerPhonePerDay: 3,
+  maxJoinsPerNetworkPerHour: 10,
+  maxJoinsPerNetworkPerDay: 30,
+  maxJoinsPerPincodePerHour: 60,
+  maxJoinsPerPincodePerDay: 300,
+  maxMonthsAhead: 18,
+} as const;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+const rateLimited = (message: string) =>
+  new HttpException({ code: 'RATE_LIMITED', message }, HttpStatus.TOO_MANY_REQUESTS);
 const IST_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' });
 
 /** Today in IST as YYYY-MM-DD, and the same date `months` later. */
@@ -74,7 +92,14 @@ export class ServiceabilityService {
     };
   }
 
-  async join(body: JoinWaitlistBody): Promise<JoinWaitlistResponse> {
+  /**
+   * Adds an unverified entry: nobody has proved they own the number, so it is never messaged until
+   * verified (phone_verified_at, addendum 0013). `clientIp` is reduced to its /24 or /64.
+   */
+  async join(
+    body: JoinWaitlistBody,
+    clientIp: string | null = null,
+  ): Promise<JoinWaitlistResponse> {
     const area = await this.repo.findArea(body.pincode);
     if (area?.status === 'LIVE' || area?.status === 'PILOT') {
       throw new ConflictException({
@@ -98,16 +123,8 @@ export class ServiceabilityService {
         });
       }
     }
-    const dayAgo = new Date(now.getTime() - DAY_MS);
-    if (
-      (await this.repo.countForPhoneSince(body.phone, dayAgo)) >=
-      WAITLIST_POLICY.maxJoinsPerPhonePerDay
-    ) {
-      throw new HttpException(
-        { code: 'RATE_LIMITED', message: 'Too many waitlist requests for this number today' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
+    const sourceNet = sourceNetwork(clientIp);
+    await this.enforceJoinLimits(body, sourceNet, now);
     const cityId = area?.city.id ?? null;
     await this.repo.insertWaitlist({
       phone: body.phone,
@@ -117,8 +134,38 @@ export class ServiceabilityService {
       cityNameRaw: body.cityNameRaw ?? null,
       intendedDate: body.intendedDate ?? null,
       intendedTier: body.intendedTier ?? null,
+      sourceNet,
     });
     return { joined: true, waitingCount: await this.repo.countWaiting(cityId, body.pincode) };
+  }
+
+  /** Per phone per day, then per network and per pincode per hour and per day (audit Web M3). */
+  private async enforceJoinLimits(
+    body: JoinWaitlistBody,
+    sourceNet: string | null,
+    now: Date,
+  ): Promise<void> {
+    const P = WAITLIST_POLICY;
+    const hourAgo = new Date(now.getTime() - HOUR_MS);
+    const dayAgo = new Date(now.getTime() - DAY_MS);
+    if ((await this.repo.countForPhoneSince(body.phone, dayAgo)) >= P.maxJoinsPerPhonePerDay) {
+      throw rateLimited('Too many waitlist requests for this number today');
+    }
+    if (sourceNet) {
+      if (
+        (await this.repo.countForNetworkSince(sourceNet, hourAgo)) >= P.maxJoinsPerNetworkPerHour ||
+        (await this.repo.countForNetworkSince(sourceNet, dayAgo)) >= P.maxJoinsPerNetworkPerDay
+      ) {
+        throw rateLimited('Too many waitlist requests from this network — try again later');
+      }
+    }
+    if (
+      (await this.repo.countForPincodeSince(body.pincode, hourAgo)) >=
+        P.maxJoinsPerPincodePerHour ||
+      (await this.repo.countForPincodeSince(body.pincode, dayAgo)) >= P.maxJoinsPerPincodePerDay
+    ) {
+      throw rateLimited('Too many waitlist requests for this pincode — try again later');
+    }
   }
 
   /**

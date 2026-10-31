@@ -5,7 +5,7 @@ import type {
   ServiceabilityRepository,
   WaitlistInsert,
 } from '../repositories/serviceability.repository';
-import { ServiceabilityService } from '../serviceability.service';
+import { ServiceabilityService, WAITLIST_POLICY } from '../serviceability.service';
 
 const NOW = new Date('2026-11-02T10:00:00.000Z');
 const SURAT = {
@@ -38,6 +38,29 @@ class FakeRepo implements ServiceabilityRepository {
 
   async countForPhoneSince(phone: string, since: Date) {
     return this.entries.filter((e) => e.phone === phone && e.createdAt >= since).length;
+  }
+
+  async countForPincodeSince(pincode: string, since: Date) {
+    return this.entries.filter((e) => e.pincode === pincode && e.createdAt >= since).length;
+  }
+  async countForNetworkSince(sourceNet: string, since: Date) {
+    return this.entries.filter((e) => e.sourceNet === sourceNet && e.createdAt >= since).length;
+  }
+  /** Entries made earlier, for the hour/day windows. */
+  seed(count: number, entry: Partial<WaitlistInsert>, createdAt: Date) {
+    const rows = Array.from({ length: count }, (_, i) => ({
+      phone: `+9199000${String(i).padStart(5, '0')}`,
+      fullName: 'Seed',
+      pincode: '600001',
+      cityId: null,
+      cityNameRaw: null,
+      intendedDate: null,
+      intendedTier: null,
+      sourceNet: null,
+      ...entry,
+      createdAt,
+    }));
+    this.entries = [...this.entries, ...rows];
   }
 
   async findArea(pincode: string) {
@@ -197,6 +220,63 @@ describe('ServiceabilityService.join', () => {
       expect(await statusOf(service.join({ ...base, pincode }))).toBe(200);
     }
     expect(await statusOf(service.join({ ...base, pincode: '600004' }))).toBe(429);
+  });
+
+  describe('abuse limits (audit Web M3)', () => {
+    const body = (i: number, pincode = '600001') => ({
+      phone: `+9198000${String(i).padStart(5, '0')}`,
+      fullName: 'A',
+      pincode,
+    });
+    const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000);
+
+    it('stores only the client network, never the address', async () => {
+      await service.join(body(1), '203.0.113.77');
+      await service.join(body(2), '2001:db8:abcd:12::99');
+      await service.join(body(3), null);
+      expect(repo.entries.map((e) => e.sourceNet)).toEqual([
+        '203.0.113.0/24',
+        '2001:db8:abcd:12::/64',
+        null,
+      ]);
+    });
+
+    it('caps joins per IPv4 /24 per hour', async () => {
+      repo.seed(
+        WAITLIST_POLICY.maxJoinsPerNetworkPerHour,
+        { sourceNet: '203.0.113.0/24' },
+        minutesAgo(30),
+      );
+      expect(await statusOf(service.join(body(1, '600002'), '203.0.113.200'))).toBe(429);
+      // A different /24 is unaffected.
+      expect(await statusOf(service.join(body(2, '600002'), '203.0.114.1'))).toBe(200);
+    });
+
+    it('caps joins per network per day, outside the hour window too', async () => {
+      repo.seed(
+        WAITLIST_POLICY.maxJoinsPerNetworkPerDay,
+        { sourceNet: '2001:db8:1:2::/64' },
+        minutesAgo(120),
+      );
+      expect(await statusOf(service.join(body(1, '600002'), '2001:db8:1:2:aaaa::1'))).toBe(429);
+    });
+
+    it('forgets network joins older than a day', async () => {
+      repo.seed(
+        WAITLIST_POLICY.maxJoinsPerNetworkPerDay,
+        { sourceNet: '203.0.113.0/24' },
+        minutesAgo(25 * 60),
+      );
+      expect(await statusOf(service.join(body(1, '600002'), '203.0.113.5'))).toBe(200);
+    });
+
+    it('caps joins per pincode per hour and per day, whatever the network', async () => {
+      repo.seed(WAITLIST_POLICY.maxJoinsPerPincodePerHour, { pincode: '600003' }, minutesAgo(10));
+      expect(await statusOf(service.join(body(1, '600003'), '198.51.100.1'))).toBe(429);
+      repo.seed(WAITLIST_POLICY.maxJoinsPerPincodePerDay, { pincode: '600004' }, minutesAgo(180));
+      expect(await statusOf(service.join(body(2, '600004'), '198.51.100.1'))).toBe(429);
+      expect(await statusOf(service.join(body(3, '600005'), '198.51.100.1'))).toBe(200);
+    });
   });
 
   it('resolves a bookable venue for pricing, including its state', async () => {

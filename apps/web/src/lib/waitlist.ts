@@ -30,23 +30,61 @@ const PINCODE = /^[1-9]\d{5}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const NAME_MAX = 120;
 
+type BuildEnv = Readonly<Record<string, string | undefined>>;
+
+const LOCAL_API = 'http://localhost:4000';
+
+/** Built on Vercel (any environment), with CLICKCO_DEPLOY=1, or with `build:production`. */
+export function isDeployBuild(env: BuildEnv): boolean {
+  return env.VERCEL === '1' || isProductionBuild(env);
+}
+
+/** The production site: Vercel production, CLICKCO_DEPLOY=1, or `build:production`. */
+export function isProductionBuild(env: BuildEnv): boolean {
+  return env.VERCEL_ENV === 'production' || env.CLICKCO_DEPLOY === '1' || env.LEGAL_STRICT === '1';
+}
+
+/** Where the form posts, or why it is switched off. */
+export type WaitlistConfig =
+  | { readonly kind: 'live'; readonly endpoint: string }
+  | { readonly kind: 'unavailable' };
+
 /**
- * Production exports (LEGAL_STRICT=1, `build:production`) must point the form at the real API,
- * never the localhost default. Returns the problem, or null when the build is fine.
+ * Decides at build time where the waitlist form posts (audit M1). Vercel builds with plain
+ * `build`, so this cannot rely on `build:production`:
+ * - local builds fall back to the local API;
+ * - a deploy build never posts to localhost: with no API URL the site shows "Waitlist opens soon";
+ * - a production build with an API URL that is not https fails, as does `build:production`
+ *   (LEGAL_STRICT=1) with none at all.
+ * Throws with the problem; the build must stop.
  */
-export function productionApiProblem(
-  env: Readonly<Record<string, string | undefined>>,
-): string | null {
-  if (env.LEGAL_STRICT !== '1') return null;
-  const url = env.NEXT_PUBLIC_API_URL?.trim();
-  if (!url) return 'NEXT_PUBLIC_API_URL must be set for a production build (waitlist form).';
-  if (!url.startsWith('https://'))
-    return 'NEXT_PUBLIC_API_URL must be an https:// URL in production.';
-  return null;
+export function resolveWaitlist(env: BuildEnv): WaitlistConfig {
+  const configured = env.NEXT_PUBLIC_API_URL?.trim();
+  if (!configured) {
+    if (env.LEGAL_STRICT === '1') {
+      throw new Error('NEXT_PUBLIC_API_URL must be set for a production build (waitlist form).');
+    }
+    return isDeployBuild(env)
+      ? { kind: 'unavailable' }
+      : { kind: 'live', endpoint: waitlistEndpoint(LOCAL_API) };
+  }
+  let url: URL;
+  try {
+    url = new URL(configured);
+  } catch {
+    throw new Error(`NEXT_PUBLIC_API_URL is not a valid URL: ${configured}`);
+  }
+  if (isDeployBuild(env) && url.protocol !== 'https:') {
+    if (isProductionBuild(env)) {
+      throw new Error('NEXT_PUBLIC_API_URL must be an https:// URL in production.');
+    }
+    return { kind: 'unavailable' };
+  }
+  return { kind: 'live', endpoint: waitlistEndpoint(configured) };
 }
 
 export function waitlistEndpoint(base: string | undefined): string {
-  const origin = (base?.trim() || 'http://localhost:4000').replace(/\/+$/, '');
+  const origin = (base?.trim() || LOCAL_API).replace(/\/+$/, '');
   return `${origin}/waitlist`;
 }
 
@@ -155,8 +193,9 @@ export function outcomeMessage(outcome: WaitlistOutcome, pincode: string): Outco
     case 'rate-limited':
       return {
         tone: 'error',
-        title: 'You’ve already joined a few times today.',
-        detail: 'We have your details. Please try again tomorrow if something needs changing.',
+        title: 'Too many sign-ups just now.',
+        detail:
+          'We’ve had a lot of waitlist requests from this number, network or pincode. Please try again later.',
       };
     case 'invalid':
       return { tone: 'error', title: 'Something doesn’t look right.', detail: outcome.message };

@@ -1,11 +1,10 @@
-import { productionApiProblem } from '../../lib/waitlist';
+import { resolveWaitlist } from '../../lib/waitlist';
 import { Section } from '../ui/Section';
 import { WaitlistForm } from './WaitlistForm';
 
 export function WaitlistSection() {
-  // Runs at export time: a production build must never ship a form that posts to localhost.
-  const problem = productionApiProblem(process.env);
-  if (problem) throw new Error(problem);
+  // Runs at export time: a deployed site never ships a form that posts to localhost (audit M1).
+  const waitlist = resolveWaitlist(process.env);
   return (
     <Section
       id="waitlist"
@@ -15,7 +14,16 @@ export function WaitlistSection() {
     >
       <div className="split">
         <div className="form-card">
-          <WaitlistForm />
+          {waitlist.kind === 'live' ? (
+            <WaitlistForm endpoint={waitlist.endpoint} />
+          ) : (
+            <div className="notice" role="status">
+              <div>
+                <p className="notice-title">Waitlist opens soon.</p>
+                <p>We are not taking sign-ups on this site yet. Please check back shortly.</p>
+              </div>
+            </div>
+          )}
         </div>
         <div>
           <h3>How the waitlist works</h3>

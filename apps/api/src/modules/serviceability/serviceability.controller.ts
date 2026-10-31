@@ -1,5 +1,5 @@
 import { JoinWaitlistBody, Pincode } from '@clickco/contracts';
-import { Body, Controller, Get, HttpCode, Inject, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Ip, Param, Post } from '@nestjs/common';
 import { ok } from '../../common/envelope';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { ServiceabilityService } from './serviceability.service';
@@ -16,7 +16,11 @@ export class ServiceabilityController {
 
   @Post('waitlist')
   @HttpCode(200)
-  async join(@Body(new ZodValidationPipe(JoinWaitlistBody)) body: JoinWaitlistBody) {
-    return ok(await this.service.join(body));
+  async join(
+    @Body(new ZodValidationPipe(JoinWaitlistBody)) body: JoinWaitlistBody,
+    @Ip() ip: string,
+  ) {
+    // req.ip is the client (trust proxy = exact hop count); limits use its /24 or /64.
+    return ok(await this.service.join(body, ip || null));
   }
 }

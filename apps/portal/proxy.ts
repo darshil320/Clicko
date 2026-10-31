@@ -25,10 +25,9 @@ export const config = {
   matcher: [
     {
       source: '/((?!_next/static|_next/image|favicon.ico).*)',
-      missing: [
-        { type: 'header', key: 'next-router-prefetch' },
-        { type: 'header', key: 'purpose', value: 'prefetch' },
-      ],
+      // Only Next's own data prefetches skip the proxy; a full-page (`Purpose: prefetch`)
+      // prefetch still gets its CSP (audit L4, as the admin panel).
+      missing: [{ type: 'header', key: 'next-router-prefetch' }],
     },
   ],
 };

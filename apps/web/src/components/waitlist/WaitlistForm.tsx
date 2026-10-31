@@ -10,18 +10,16 @@ import {
   type WaitlistField,
   type WaitlistInput,
   type WaitlistOutcome,
-  waitlistEndpoint,
 } from '../../lib/waitlist';
 
-const ENDPOINT = waitlistEndpoint(process.env.NEXT_PUBLIC_API_URL);
 const TIMEOUT_MS = 15_000;
 const EMPTY: WaitlistInput = { fullName: '', phone: '', pincode: '', intendedDate: '' };
 
-async function postWaitlist(body: unknown): Promise<WaitlistOutcome> {
+async function postWaitlist(endpoint: string, body: unknown): Promise<WaitlistOutcome> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body),
@@ -42,8 +40,11 @@ function todayIso(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-/** Waitlist capture for pincodes we do not serve yet (v0.2 §7). */
-export function WaitlistForm() {
+/**
+ * Waitlist capture for pincodes we do not serve yet (v0.2 §7). The endpoint is decided at build
+ * time (resolveWaitlist) and passed in, so the form can never fall back to localhost on a deploy.
+ */
+export function WaitlistForm({ endpoint }: { readonly endpoint: string }) {
   const id = useId();
   const [values, setValues] = useState<WaitlistInput>(EMPTY);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -69,7 +70,7 @@ export function WaitlistForm() {
     }
     setErrors({});
     setBusy(true);
-    const outcome = await postWaitlist(result.body);
+    const outcome = await postWaitlist(endpoint, result.body);
     setBusy(false);
     setMessage(outcomeMessage(outcome, result.body.pincode));
     if (outcome.kind === 'joined') setValues(EMPTY);

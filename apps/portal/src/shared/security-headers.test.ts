@@ -39,6 +39,12 @@ describe('portal security headers (security review M7)', () => {
     expect(byName['Referrer-Policy']).toBe('no-referrer');
     expect(byName['Permissions-Policy']).toContain('camera=()');
   });
+
+  it('isolates the browsing context and its resources (audit L4)', () => {
+    const byName = Object.fromEntries(STATIC_SECURITY_HEADERS.map((h) => [h.key, h.value]));
+    expect(byName['Cross-Origin-Opener-Policy']).toBe('same-origin');
+    expect(byName['Cross-Origin-Resource-Policy']).toBe('same-origin');
+  });
 });
 
 describe('resolveApiUrl (security review L7)', () => {
