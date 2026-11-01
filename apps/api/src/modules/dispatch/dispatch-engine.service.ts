@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { appendDomainEvent } from '../../infra/outbox/outbox';
 import type { DispatchFacts } from '../bookings/bookings.types';
 import { PhotographersService } from '../photographers/photographers.service';
+import { ClientBlocksReader } from '../safety/client-blocks.reader';
 import type { DispatchTimer, OfferCandidate, RoundRecord, Tx } from './dispatch.types';
 import { rankCandidates } from './ranking';
 import { AttemptsRepository } from './repositories/attempts.repository';
@@ -45,6 +46,7 @@ export class DispatchEngine {
     @Inject(AttemptsRepository) private readonly attempts: AttemptsRepository,
     @Inject(EligibilityRepository) private readonly eligibility: EligibilityRepository,
     @Inject(DispatchRunState) private readonly runs: DispatchRunState,
+    @Inject(ClientBlocksReader) private readonly blocks: ClientBlocksReader,
   ) {}
 
   /** A new search: the initial dispatch, or a re-dispatch (ADR-0011). */
@@ -159,7 +161,10 @@ export class DispatchEngine {
     return round;
   }
 
-  /** Hard filters (photographers module + the geo query), then ranking, then the wave's cut. */
+  /**
+   * Hard filters (photographers module + the geo query, which also drops anyone the client
+   * blocked), then ranking, then the wave's cut.
+   */
   private async candidates(
     tx: Tx,
     facts: DispatchFacts,
@@ -188,6 +193,7 @@ export class DispatchEngine {
       blockedFrom: block.from,
       blockedUntil: block.until,
       runFromWave,
+      clientBlocked: this.blocks.blockedPhotographerIds(tx, facts.userId),
     });
     const metrics = new Map(pool.map((p) => [p.id, p.metrics]));
     const ranked = rankCandidates(

@@ -48,12 +48,13 @@ export interface StaffAccessPort {
   activePrincipal(staffId: string): Promise<StaffPrincipal | null>;
 }
 
-export type ScopedEntity = 'booking' | 'assignment' | 'breach';
+/** A report (ADR-0027 D4) carries its own city; the others resolve through their booking. */
+export type ScopedEntity = 'booking' | 'assignment' | 'breach' | 'report';
 
 export const CITY_RESOLVER = Symbol('CITY_RESOLVER');
 
 export interface CityResolverPort {
-  /** The city of the booking behind the entity; null when it does not exist. */
+  /** The city of the entity (a booking's, or a report's own); null when it does not exist. */
   cityOf(entity: ScopedEntity, id: string): Promise<string | null>;
 }
 

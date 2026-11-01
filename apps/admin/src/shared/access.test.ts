@@ -166,6 +166,15 @@ const MATRIX: Record<Desk, Record<StaffRole, boolean>> = {
     FINANCE: true,
     READ_ONLY: false,
   },
+  moderation: {
+    SUPER_ADMIN: true,
+    CITY_MANAGER: true,
+    OPS_AGENT: false,
+    QUALITY_MANAGER: true,
+    SUPPORT: true,
+    FINANCE: false,
+    READ_ONLY: false,
+  }, // ADR-0027 D4 (Sprint 11).
 };
 
 describe('the ADR-0025 D3 role matrix', () => {
@@ -202,6 +211,7 @@ describe('the ADR-0025 D3 role matrix', () => {
       'Quality issues',
       'Support tickets',
       'Equipment claims',
+      'Moderation',
       'Late deliveries',
     ]);
   });
@@ -219,8 +229,9 @@ describe('navigation', () => {
       '/photographers',
       '/quality',
       '/tickets',
+      '/moderation',
     ]);
-    expect(navFor([grant('SUPER_ADMIN')])).toHaveLength(16);
+    expect(navFor([grant('SUPER_ADMIN')])).toHaveLength(17);
   });
 
   it('lands on the first allowed desk', () => {
@@ -231,6 +242,7 @@ describe('navigation', () => {
   it('knows which desk a path is on', () => {
     expect(deskOf('/bookings/7d9f3c1a-2b4e-4c8d-9f10-1a2b3c4d5e6f')).toBe('bookings');
     expect(deskOf('/staff')).toBe('staff');
+    expect(deskOf('/moderation')).toBe('moderation');
     expect(deskOf('/dev/pricing')).toBeNull();
     expect(deskOf('/')).toBeNull();
     expect(deskOf('/today')).toBe('overview');

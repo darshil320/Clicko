@@ -19,6 +19,7 @@ const NOT_FOUND: Readonly<Record<ScopedEntity, { code: string; message: string }
   booking: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' },
   assignment: { code: 'ASSIGNMENT_NOT_FOUND', message: 'Assignment not found' },
   breach: { code: 'BREACH_NOT_FOUND', message: 'Breach not found' },
+  report: { code: 'REPORT_NOT_FOUND', message: 'Report not found' },
 };
 
 /**

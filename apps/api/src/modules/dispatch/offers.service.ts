@@ -8,9 +8,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
 import { SQL } from '../../infra/db/db.module';
+import { appendDomainEvent } from '../../infra/outbox/outbox';
 import { BookingsService } from '../bookings/bookings.service';
 import type { BookingRow } from '../bookings/bookings.types';
 import { PhotographersService } from '../photographers/photographers.service';
+import { ClientBlocksReader } from '../safety/client-blocks.reader';
 import { ServiceabilityService } from '../serviceability/serviceability.service';
 import type { AssignmentRecord, AttemptRecord, DispatchTimer, Tx } from './dispatch.types';
 import { DispatchEngine } from './dispatch-engine.service';
@@ -29,9 +31,13 @@ import { calendarBlock } from './wave-plan';
 
 type AcceptOutcome =
   | { readonly kind: 'ASSIGNED'; readonly assignment: AssignmentRecord }
-  | { readonly kind: 'SLOT_CONFLICT'; readonly timers: DispatchTimer[] };
+  | { readonly kind: 'SLOT_CONFLICT'; readonly timers: DispatchTimer[] }
+  | { readonly kind: 'WITHDRAWN'; readonly timers: DispatchTimer[] };
 
 const SLOT_CONFLICT_MESSAGE = 'You already have a booking or a block that overlaps this one';
+const OFFER_CLOSED_MESSAGE = 'This offer is no longer open';
+/** dispatch_attempts.decline_reason of an offer withdrawn because the client blocked them. */
+export const CLIENT_BLOCKED = 'CLIENT_BLOCKED';
 
 const sqlState = (error: unknown): string | undefined =>
   typeof error === 'object' && error !== null && 'code' in error
@@ -56,6 +62,7 @@ export class OffersService {
     @Inject(AttemptsRepository) private readonly attempts: AttemptsRepository,
     @Inject(AssignmentsRepository) private readonly assignments: AssignmentsRepository,
     @Inject(DispatchTimerScheduler) private readonly timers: DispatchTimerScheduler,
+    @Inject(ClientBlocksReader) private readonly clientBlocks: ClientBlocksReader,
   ) {}
 
   async list(photographerId: string): Promise<ProOffer[]> {
@@ -92,6 +99,11 @@ export class OffersService {
       await this.timers.scheduleOrLog(outcome.timers);
       throw conflict('SLOT_CONFLICT', SLOT_CONFLICT_MESSAGE);
     }
+    if (outcome.kind === 'WITHDRAWN') {
+      // Never says why: the photographer is not told that a client blocked them.
+      await this.timers.scheduleOrLog(outcome.timers);
+      throw conflict('OFFER_CLOSED', OFFER_CLOSED_MESSAGE);
+    }
     return {
       attemptId,
       assignmentId: outcome.assignment.id,
@@ -111,6 +123,28 @@ export class OffersService {
     const timers = await this.sql.begin((tx) => this.declineInTx(tx, offer, reason ?? null, now));
     await this.timers.scheduleOrLog(timers);
     return { attemptId, outcome: 'DECLINED' };
+  }
+
+  /**
+   * ADR-0027 D4 (`client_block.added`): this photographer's open offers on the client's
+   * DISPATCHING bookings are withdrawn, each in its own transaction under the booking lock (the
+   * accept path's lock order). Idempotent: an offer no longer PENDING, a booking no longer
+   * dispatching, or a block already lifted is left alone.
+   */
+  async withdrawForBlock(userId: string, photographerId: string): Promise<void> {
+    const now = this.clock();
+    const open = await this.attempts.pendingFor(this.sql, photographerId, now);
+    for (const offer of open) {
+      const timers = await this.sql.begin(async (tx) => {
+        const booking = await this.bookings.lock(tx, offer.bookingId);
+        if (booking.userId !== userId || booking.status !== 'DISPATCHING') return [];
+        const attempt = await this.attempts.lock(tx, offer.id);
+        if (attempt?.outcome !== 'PENDING') return [];
+        if (!(await this.clientBlocks.isBlocked(tx, userId, photographerId))) return [];
+        return (await this.withdrawn(tx, attempt, now)).timers;
+      });
+      await this.timers.scheduleOrLog(timers);
+    }
   }
 
   /** Upcoming accepted work, with the address (revealed only after acceptance). */
@@ -156,6 +190,10 @@ export class OffersService {
     );
     if (availability === 'INACTIVE') throw accountInactive();
     if (availability === 'BLOCKED') return this.slotConflict(tx, attempt, now);
+    // ADR-0027 D4: the client blocked them while the offer was open.
+    if (await this.clientBlocks.isBlocked(tx, facts.userId, attempt.photographerId)) {
+      return this.withdrawn(tx, attempt, now);
+    }
     const previous = await this.assignments.latestEndedForBooking(tx, booking.id);
     let assignment: AssignmentRecord;
     try {
@@ -209,6 +247,29 @@ export class OffersService {
   private async slotConflict(tx: Tx, attempt: AttemptRecord, now: Date): Promise<AcceptOutcome> {
     await this.attempts.resolve(tx, attempt.id, 'CANCELLED', now, 'SLOT_CONFLICT');
     return { kind: 'SLOT_CONFLICT', timers: await this.afterResponse(tx, attempt, now) };
+  }
+
+  /** The client blocked this photographer: the offer is void; the wave may now be resolved. */
+  private async withdrawn(
+    tx: Tx,
+    attempt: AttemptRecord,
+    now: Date,
+  ): Promise<Extract<AcceptOutcome, { kind: 'WITHDRAWN' }>> {
+    await this.attempts.resolve(tx, attempt.id, 'CANCELLED', now, CLIENT_BLOCKED);
+    await appendDomainEvent(tx, {
+      eventType: 'dispatch.offer_withdrawn',
+      aggregateKind: 'booking',
+      aggregateId: attempt.bookingId,
+      occurredAt: now,
+      payload: {
+        booking_id: attempt.bookingId,
+        attempt_id: attempt.id,
+        round_id: attempt.roundId,
+        photographer_id: attempt.photographerId,
+        reason: CLIENT_BLOCKED,
+      },
+    });
+    return { kind: 'WITHDRAWN', timers: await this.afterResponse(tx, attempt, now) };
   }
 
   private async declineInTx(

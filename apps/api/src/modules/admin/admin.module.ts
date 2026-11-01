@@ -34,6 +34,11 @@ import { BreachDeskService } from './desks/breach-desk.service';
 import { DispatchQueueService } from './desks/dispatch-queue.service';
 import { IncidentDeskService } from './desks/incident-desk.service';
 import { QaDeskService } from './desks/qa-desk.service';
+import {
+  MODERATION_CONTROLLERS,
+  MODERATION_IMPORTS,
+  MODERATION_PROVIDERS,
+} from './moderation.providers';
 import { MONEY_CONTROLLERS, MONEY_IMPORTS, MONEY_PROVIDERS } from './money/money.providers';
 import { PLATFORM_CONTROLLERS, PLATFORM_PROVIDERS } from './platform.providers';
 import { PRICING_CONTROLLERS, PRICING_IMPORTS, PRICING_PROVIDERS } from './pricing.providers';
@@ -50,7 +55,7 @@ import {
  * The staff admin API (ADR-0025, doc 02 `modules/admin`). Owns staff_users, staff_role_grants and
  * audit_logs. The desks read and decide through the services of the modules that own the data
  * (bookings, dispatch, delivery, onsite, sla, ops, payments, photographers, serviceability,
- * media); this module never queries their tables.
+ * media, safety); this module never queries their tables.
  */
 @Module({
   imports: [
@@ -70,6 +75,7 @@ import {
     ...MONEY_IMPORTS,
     ...SUPPLY_CARE_IMPORTS,
     ...PAYOUTS_ADMIN_IMPORTS,
+    ...MODERATION_IMPORTS,
   ],
   controllers: [
     AdminAuthController,
@@ -81,6 +87,7 @@ import {
     ...MONEY_CONTROLLERS,
     ...SUPPLY_CARE_CONTROLLERS,
     ...PAYOUTS_ADMIN_CONTROLLERS,
+    ...MODERATION_CONTROLLERS,
   ],
   providers: [
     ...PAYOUTS_ADMIN_PROVIDERS,
@@ -105,6 +112,7 @@ import {
     ...PRICING_PROVIDERS,
     ...MONEY_PROVIDERS,
     ...SUPPLY_CARE_PROVIDERS,
+    ...MODERATION_PROVIDERS,
   ],
 })
 export class AdminModule {}

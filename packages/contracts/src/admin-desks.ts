@@ -2,7 +2,8 @@ import type { StaffRole } from './enums.js';
 
 /**
  * The staff panel's desks and the roles that open each one — ADR-0025 D3 (Sprint 9) and ADR-0026
- * (Sprint 10). The single source for both the API guards and the panel's navigation.
+ * (Sprint 10), plus the moderation desk (ADR-0027 D4). The single source for both the API guards
+ * and the panel's navigation.
  * SUPER_ADMIN opens every desk in every city and is not listed. Finer rules (who may approve a
  * refund, publish pricing, decide KYC) are checked per action on the server.
  */
@@ -21,6 +22,7 @@ export const ADMIN_DESKS = [
   'quality',
   'tickets',
   'claims',
+  'moderation',
   'breaches',
   'staff',
 ] as const;
@@ -48,6 +50,8 @@ export const ADMIN_DESK_ROLES: Readonly<Record<AdminDesk, readonly StaffRole[]>>
   quality: ['QUALITY_MANAGER', 'CITY_MANAGER', 'SUPPORT'],
   tickets: ['SUPPORT', 'CITY_MANAGER', 'QUALITY_MANAGER', 'OPS_AGENT'],
   claims: ['FINANCE', 'CITY_MANAGER', 'QUALITY_MANAGER'],
+  /** ADR-0027 D4: reports of reviews, clients and photographers — hide, keep, warn, dismiss. */
+  moderation: ['QUALITY_MANAGER', 'SUPPORT', 'CITY_MANAGER'],
   /** Late deliveries: attribute or waive. */
   breaches: ['CITY_MANAGER', 'QUALITY_MANAGER'],
   staff: [],

@@ -95,6 +95,20 @@ export class AssignmentReads {
     );
   }
 
+  /**
+   * Whether this photographer ever held an assignment (any status, replaced ones too) on one of
+   * these bookings — "worked on your booking" for blocks and reports (ADR-0027 D4).
+   */
+  async everAssigned(photographerId: string, bookingIds: readonly string[]): Promise<boolean> {
+    if (bookingIds.length === 0) return false;
+    const [row] = await this.sql<{ found: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM assignments
+        WHERE photographer_id = ${photographerId} AND booking_id IN ${this.sql([...new Set(bookingIds)])}
+      ) AS found`;
+    return row?.found ?? false;
+  }
+
   /** null when the assignment does not exist. */
   async bookingIdOf(assignmentId: string): Promise<string | null> {
     const [row] = await this.sql<{ booking_id: string }[]>`

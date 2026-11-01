@@ -79,6 +79,12 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0016 is byte-identical to docs/schema-addenda/0016-reviews-ugc.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0016_reviews_ugc.sql')).toBe(
+      read('docs/schema-addenda/0016-reviews-ugc.sql'),
+    );
+  });
+
   it('0014 is byte-identical to docs/schema-addenda/0014-performance-indexes.sql', () => {
     expect(read('apps/api/src/infra/db/migrations/0014_performance_indexes.sql')).toBe(
       read('docs/schema-addenda/0014-performance-indexes.sql'),
@@ -102,6 +108,7 @@ describe('migrations mirror the specification (ADR-0006)', () => {
       '0013_waitlist_abuse.sql',
       '0014_performance_indexes.sql',
       '0015_notifications_calls.sql',
+      '0016_reviews_ugc.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

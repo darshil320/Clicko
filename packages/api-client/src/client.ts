@@ -1,6 +1,10 @@
 import {
+  BlockedPhotographer,
+  BlockedPhotographerList,
+  type BlockPhotographerBody,
   BookingDetail,
   BookingSummary,
+  ClientReview,
   type CreateBookingBody,
   CreateBookingResponse,
   type JoinWaitlistBody,
@@ -10,11 +14,15 @@ import {
   PhoneE164,
   type QuoteRequestBody,
   QuoteResponse,
+  type ReportBody,
+  ReportReceipt,
   type RequestOtpBody,
   RequestOtpResponse,
+  type ReviewBody,
   ServiceabilityResult,
   SessionUser,
   type SimulatePaymentBody,
+  UnblockResponse,
   Uuid,
   type VerifyOtpBody,
   VerifyOtpResponse,
@@ -44,6 +52,7 @@ export type SimulatedOutcome = z.infer<typeof SimulatePaymentBody>['outcome'];
 
 const LoggedOut = z.object({ loggedOut: z.literal(true) });
 const BookingList = z.array(BookingSummary);
+const MaybeReview = ClientReview.nullable();
 
 export interface Idempotent {
   /** One key per user intent; pass the same key again when retrying that intent. */
@@ -143,6 +152,63 @@ export function createApiClient(options: ApiClientOptions) {
           schema: BookingSummary,
           auth: true,
           idempotencyKey,
+        }),
+    },
+
+    /** ADR-0027 D4: the client's rating of a delivered booking. */
+    reviews: {
+      /** The client's review of this booking; null before one is written. */
+      mine: async (bookingId: string) =>
+        http.request({
+          method: 'GET',
+          path: `/bookings/${uuidSegment(bookingId)}/review`,
+          schema: MaybeReview,
+          auth: true,
+        }),
+      /**
+       * Writes the review, or edits it within 7 days of writing it (after that: 409
+       * REVIEW_EDIT_WINDOW_CLOSED). Links, emails and phone numbers are removed from the comment.
+       */
+      save: async (bookingId: string, body: ReviewBody) =>
+        http.request({
+          method: 'POST',
+          path: `/bookings/${uuidSegment(bookingId)}/review`,
+          body,
+          schema: ClientReview,
+          auth: true,
+        }),
+    },
+
+    /** ADR-0027 D4: report a review, or a photographer about a booking you shared. */
+    reports: {
+      create: (body: ReportBody) =>
+        http.request({ method: 'POST', path: '/reports', body, schema: ReportReceipt, auth: true }),
+    },
+
+    /** ADR-0027 D4: photographers this client never wants offered their bookings again. */
+    blocks: {
+      list: () =>
+        http.request({
+          method: 'GET',
+          path: '/me/blocks',
+          schema: BlockedPhotographerList,
+          auth: true,
+        }),
+      /** Idempotent: blocking twice is the same block. */
+      block: (body: BlockPhotographerBody) =>
+        http.request({
+          method: 'POST',
+          path: '/me/blocks',
+          body,
+          schema: BlockedPhotographer,
+          auth: true,
+        }),
+      unblock: async (photographerId: string) =>
+        http.request({
+          method: 'POST',
+          path: `/me/blocks/${uuidSegment(photographerId)}/unblock`,
+          schema: UnblockResponse,
+          auth: true,
         }),
     },
 

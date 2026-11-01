@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DESK_ROLES } from './access';
 import { canAct } from './use-can';
 
 describe('canAct', () => {
@@ -16,5 +17,15 @@ describe('canAct', () => {
     expect(canAct([{ role: 'QUALITY_MANAGER', cityId: null }], ['QUALITY_MANAGER'], surat)).toBe(
       true,
     );
+  });
+
+  it('lets the moderation roles decide a report in their city (ADR-0027 D4)', () => {
+    const roles = DESK_ROLES.moderation;
+    expect(canAct([{ role: 'QUALITY_MANAGER', cityId: null }], roles, surat)).toBe(true);
+    expect(canAct([{ role: 'SUPPORT', cityId: null }], roles, surat)).toBe(true);
+    expect(canAct([{ role: 'CITY_MANAGER', cityId: surat }], roles, surat)).toBe(true);
+    expect(canAct([{ role: 'CITY_MANAGER', cityId: surat }], roles, 'mumbai-id')).toBe(false);
+    expect(canAct([{ role: 'FINANCE', cityId: null }], roles, surat)).toBe(false);
+    expect(canAct([{ role: 'OPS_AGENT', cityId: null }], roles, surat)).toBe(false);
   });
 });

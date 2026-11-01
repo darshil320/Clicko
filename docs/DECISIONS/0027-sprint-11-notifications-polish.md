@@ -177,3 +177,33 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
     updates must match.
   - Replace `script-src 'unsafe-inline'` on the web CSP with build hashes.
   - Run one full-history gitleaks scan of the public repo.
+
+### D2/D3a — Notifications and masked calls as built (1 Nov 2026)
+- Client messages go to the account's verified phone, not the booker phone typed into a booking.
+- The link in messages is `PUBLIC_API_URL/d/<token>`. Until the delivery page exists (D6a), it
+  returns the JSON file list.
+- Ticket acknowledged/resolved and the Pro assignment reminder have no domain event yet, so they
+  have no template either. They wait for those events.
+- Masked calls are their own `CallsModule`. A binding opens only for the booking's current
+  assignment. An access-denied or unsafe-site ending closes it 2 h later, like a check-out. Calls
+  are reserved under a lock before the provider is asked, with per-window and per-day caps.
+- 0015 supersedes the spec's `notification_log` and `masked_call_log` (full addresses; a
+  recording key) and makes them read-only to the app role.
+- **Deferred:** Expo push receipt checks; the call buttons in the client and Pro apps; device
+  registration in the apps (needs `expo-notifications`, awaiting the owner).
+
+### D4a — Reviews and UGC safety as built (1 Nov 2026)
+- `reviews.photographer_id` (0016) records who was reviewed. A re-dispatch never moves a rating.
+  The rating is recomputed from published CLIENT_TO_PRO reviews by the photographers module's own
+  subscriber.
+- Editing a review is refused while a report on it is open, and once staff have kept it. A report
+  on a review keeps a copy of the rating and comment it was filed against.
+- **Blocking:** dispatch never offers a blocked photographer the client's bookings. Open offers
+  are withdrawn when the block lands (`dispatch.offer_withdrawn`, reason CLIENT_BLOCKED), and a
+  late accept is refused under the booking lock. An existing assignment is not touched; the
+  client cancels or contacts support.
+- **Public text:** after NFKC and digit folding, links, emails and phone numbers are stripped,
+  including spaced, "dot" and "[.]" forms. "name. com" and "name dot in" are left alone, because
+  stripping them would also catch ordinary sentences.
+- **Deferred:** reporting a message (there is no in-app messaging yet); notifying the person on
+  WARN; unhide; PRO_TO_CLIENT reviews and the sub-scores; the client and Pro app screens.

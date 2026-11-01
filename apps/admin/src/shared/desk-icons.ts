@@ -9,6 +9,7 @@ import {
   RadarIcon,
   ReceiptTextIcon,
   ScaleIcon,
+  ShieldAlertIcon,
   ShieldCheckIcon,
   SirenIcon,
   StarIcon,
@@ -35,6 +36,7 @@ export const DESK_ICONS: Readonly<Record<Desk, LucideIcon>> = {
   quality: StarIcon,
   tickets: LifeBuoyIcon,
   claims: ShieldCheckIcon,
+  moderation: ShieldAlertIcon,
   breaches: TimerOffIcon,
   staff: UsersIcon,
 };

@@ -45,6 +45,7 @@ import {
 import type { z } from 'zod';
 import { adminCareRoutes } from './admin-care-client.js';
 import { adminRequests, checked, idSegment, listParams, withQuery } from './admin-http.js';
+import { adminModerationRoutes } from './admin-moderation-client.js';
 import { adminMoneyRoutes } from './admin-money-client.js';
 import { adminOverviewRoutes } from './admin-overview-client.js';
 import { adminPayoutsRoutes } from './admin-payouts-client.js';
@@ -110,6 +111,7 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
     payouts: adminPayoutsRoutes(r),
     supply: adminSupplyRoutes(r),
     care: adminCareRoutes(r),
+    moderation: adminModerationRoutes(r),
     pricing: adminPricingRoutes(r),
     overview: adminOverviewRoutes(r),
 

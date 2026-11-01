@@ -18,6 +18,8 @@ const APPEND_ONLY = [
   // migration 0015 (ADR-0027 D2/D3)
   'notification_sends',
   'call_logs',
+  // migration 0016 (ADR-0027 D4)
+  'moderation_actions',
 ] as const;
 
 const APP_ROLE = 'clickco_app';

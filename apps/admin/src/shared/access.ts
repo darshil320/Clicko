@@ -51,6 +51,7 @@ export const NAV: ReadonlyArray<NavEntry> = [
   { desk: 'quality', href: '/quality', label: 'Quality issues', section: 'Customer care' },
   { desk: 'tickets', href: '/tickets', label: 'Support tickets', section: 'Customer care' },
   { desk: 'claims', href: '/claims', label: 'Equipment claims', section: 'Customer care' },
+  { desk: 'moderation', href: '/moderation', label: 'Moderation', section: 'Customer care' },
   { desk: 'breaches', href: '/breaches', label: 'Late deliveries', section: 'Customer care' },
   { desk: 'staff', href: '/staff', label: 'Staff', section: 'Admin' },
 ];

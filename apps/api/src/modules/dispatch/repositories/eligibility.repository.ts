@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { IdSubquery } from '../../../infra/db/id-subquery';
 import type { Db } from '../dispatch.types';
 
 /** A photographer from the pool, with the opaque base location the photographers module returned. */
@@ -20,6 +21,8 @@ export interface ReachQuery {
   readonly blockedUntil: Date;
   /** First wave number of the current run: anyone offered since then is not offered again. */
   readonly runFromWave: number;
+  /** Photographers the booking's client blocked (ADR-0027 D4), built by the safety module. */
+  readonly clientBlocked: IdSubquery;
 }
 
 export interface Reachable {
@@ -32,8 +35,8 @@ export interface Reachable {
 /**
  * THE geo query (apps/api/CLAUDE.md: PostGIS only in dispatch/repositories). Takes the pool from
  * PhotographersService and keeps those within reach of the venue (ST_DWithin on geography, metres)
- * who are not already booked in the window, not already offered in this run, and did not cancel
- * on / no-show this booking before.
+ * who are not already booked in the window, not already offered in this run, did not cancel
+ * on / no-show this booking before, and were not blocked by the booking's client.
  */
 @Injectable()
 export class EligibilityRepository {
@@ -66,6 +69,7 @@ export class EligibilityRepository {
           SELECT 1 FROM assignments x
           WHERE x.booking_id = ${q.bookingId} AND x.photographer_id = pool.id
             AND x.status IN ('RELEASED', 'ABANDONED'))
+        AND pool.id NOT IN (${q.clientBlocked})
       ORDER BY distance_km, pool.id`;
     return rows.map((r) => ({
       photographerId: r.photographer_id,

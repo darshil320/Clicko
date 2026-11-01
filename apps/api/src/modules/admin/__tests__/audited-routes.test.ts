@@ -10,7 +10,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { AppModule } from '../../../app.module';
 import { DevToolsModule } from '../../../dev/dev-tools.module';
-import { AUDIT_ACTION_KEY, ROLES_KEY } from '../access/decorators';
+import { AUDIT_ACTION_KEY, CITY_SCOPED_KEY, ROLES_KEY } from '../access/decorators';
 import { StaffGuard } from '../access/staff.guard';
 import { AuditLogInterceptor } from '../audit/audit-log.interceptor';
 
@@ -107,8 +107,24 @@ describe('every /admin route is guarded and audited (ADR-0025 D3/D4)', () => {
       'staff.deactivate',
       'staff.reset_totp',
       'staff.login',
+      // ADR-0027 D4: the moderation desk's decision.
+      'moderation.decide',
     ]) {
       expect(actions).toContain(action);
+    }
+  });
+
+  it('the moderation desk is city-scoped per report (ADR-0027 D4)', () => {
+    const scoped = ADMIN.filter((r) => r.path.startsWith('/admin/moderation/reports/:id'));
+    expect(scoped.map((r) => `${RequestMethod[r.method]} ${r.path}`).sort()).toEqual([
+      'GET /admin/moderation/reports/:id',
+      'POST /admin/moderation/reports/:id/decide',
+    ]);
+    for (const route of scoped) {
+      expect(Reflect.getMetadata(CITY_SCOPED_KEY, handlerOf(route))).toEqual({
+        entity: 'report',
+        param: 'id',
+      });
     }
   });
 });

@@ -1,6 +1,7 @@
 export * from './admin.js';
 export * from './admin-care.js';
 export * from './admin-desks.js';
+export * from './admin-moderation.js';
 export * from './admin-money.js';
 export * from './admin-overview.js';
 export * from './admin-payouts.js';
@@ -21,4 +22,5 @@ export * from './onsite.js';
 export * from './photographer.js';
 export * from './price-snapshot.js';
 export * from './pricing.js';
+export * from './reviews.js';
 export * from './serviceability.js';

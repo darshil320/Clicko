@@ -6,6 +6,7 @@ import { BookingsModule } from '../bookings/bookings.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { PhotographersModule } from '../photographers/photographers.module';
 import { PricingModule } from '../pricing/pricing.module';
+import { SafetyReadersModule } from '../safety/safety-readers.module';
 import { ServiceabilityModule } from '../serviceability/serviceability.module';
 import { AcceptanceCaptureService } from './acceptance-capture.service';
 import { AssignmentReads } from './assignment-reads.service';
@@ -34,7 +35,8 @@ import { VenuePoints } from './venue-points';
  * Owns dispatch_rounds, dispatch_attempts and assignments (ADR-0010/0012). Orchestrates bookings
  * (status), payments (capture/release), photographers (pool, penalties), pricing (deadline,
  * incentive) and serviceability (venue fallback); the PostGIS queries live in
- * repositories/ (eligibility, geofence). AssignmentsService is the on-site write path for the
+ * repositories/ (eligibility, geofence); the safety module's reader names the photographers a
+ * client blocked (ADR-0027 D4). AssignmentsService is the on-site write path for the
  * onsite module (ADR-0013 D1). The dev desk controller is in DevToolsModule.
  */
 @Module({
@@ -46,6 +48,7 @@ import { VenuePoints } from './venue-points';
     PhotographersModule,
     PricingModule,
     ServiceabilityModule,
+    SafetyReadersModule,
   ],
   controllers: [ProOffersController, ProAssignmentsController],
   providers: [

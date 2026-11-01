@@ -21,6 +21,8 @@ import {
   type ProOtpVerifyBody,
   ProUploadJob,
   ProVerifyOtpResponse,
+  type ReportBody,
+  ReportReceipt,
   RequestOtpResponse,
   StartShootResponse,
   Uuid,
@@ -237,6 +239,18 @@ export function createProApiClient(options: ProApiClientOptions) {
           schema: ClientAbsentResponse,
           auth: true,
           idempotencyKey,
+        }),
+    },
+
+    /** ADR-0027 D4: report a review, or a client about a booking you worked on. */
+    reports: {
+      create: (body: ReportBody) =>
+        http.request({
+          method: 'POST',
+          path: '/pro/reports',
+          body,
+          schema: ReportReceipt,
+          auth: true,
         }),
     },
 

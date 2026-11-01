@@ -64,6 +64,8 @@ const MATRIX: Readonly<Record<Desk, readonly StaffRole[]>> = {
   quality: ['SUPER_ADMIN', 'QUALITY_MANAGER', 'CITY_MANAGER', 'SUPPORT'],
   tickets: ['SUPER_ADMIN', 'SUPPORT', 'CITY_MANAGER', 'QUALITY_MANAGER', 'OPS_AGENT'],
   claims: ['SUPER_ADMIN', 'FINANCE', 'CITY_MANAGER', 'QUALITY_MANAGER'],
+  // ADR-0027 D4 (Sprint 11).
+  moderation: ['SUPER_ADMIN', 'QUALITY_MANAGER', 'SUPPORT', 'CITY_MANAGER'],
 };
 
 const ALL_ROLES: readonly StaffRole[] = [

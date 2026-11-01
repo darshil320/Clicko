@@ -23,6 +23,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OnsiteModule } from './modules/onsite/onsite.module';
 import { OpsModule } from './modules/ops/ops.module';
 import { PricingModule } from './modules/pricing/pricing.module';
+import { SafetyModule } from './modules/safety/safety.module';
 import { ServiceabilityModule } from './modules/serviceability/serviceability.module';
 import { SlaModule } from './modules/sla/sla.module';
 import { UsersModule } from './modules/users/users.module';
@@ -61,6 +62,7 @@ class CoreModule {}
     OpsModule,
     CallsModule,
     NotificationsModule,
+    SafetyModule,
     AdminModule,
     JobsModule,
     ...devOnlyModules(process.env),
