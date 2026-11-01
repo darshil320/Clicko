@@ -5,6 +5,11 @@ import { AppModule } from './app.module';
 import { DevToolsModule } from './dev/dev-tools.module';
 import { AuthController } from './modules/auth/auth.controller';
 import { ProAuthController } from './modules/auth/pro-auth.controller';
+import {
+  ClientCallsController,
+  ExotelWebhookController,
+  ProCallsController,
+} from './modules/calls/call.controllers';
 import { CheckoutController } from './modules/checkout/checkout.controller';
 import { DevPaymentsController } from './modules/checkout/dev-payments.controller';
 import { PaymentWebhooksController } from './modules/checkout/payment-webhooks.controller';
@@ -12,6 +17,10 @@ import { DevDispatchController } from './modules/dispatch/dev-dispatch.controlle
 import { ProAssignmentsController } from './modules/dispatch/pro-assignments.controller';
 import { ProOffersController } from './modules/dispatch/pro-offers.controller';
 import { ProUploadsController } from './modules/media/pro-uploads.controller';
+import {
+  ClientNotificationSettingsController,
+  ProNotificationSettingsController,
+} from './modules/notifications/notification-settings.controllers';
 import { ClientExtensionsController } from './modules/onsite/client-extensions.controller';
 import { DevOnsiteController } from './modules/onsite/dev-onsite.controller';
 import { ProEarningsController } from './modules/onsite/pro-earnings.controller';
@@ -49,6 +58,15 @@ describe('AppModule dependency graph', () => {
     expect(moduleRef.get(ProEarningsController)).toBeInstanceOf(ProEarningsController);
     expect(moduleRef.get(ClientExtensionsController)).toBeInstanceOf(ClientExtensionsController);
     expect(moduleRef.get(ProUploadsController)).toBeInstanceOf(ProUploadsController);
+    for (const c of [
+      ClientNotificationSettingsController,
+      ProNotificationSettingsController,
+      ClientCallsController,
+      ProCallsController,
+      ExotelWebhookController,
+    ]) {
+      expect(moduleRef.get(c)).toBeInstanceOf(c);
+    }
     // Dev-only routes are not mounted outside NODE_ENV=development (ADR-0012).
     expect(() => moduleRef.get(DevPaymentsController)).toThrow();
     expect(() => moduleRef.get(DevDispatchController)).toThrow();

@@ -1,7 +1,14 @@
 import type { BookingStatus, EmergencyBand, PlanTier } from '@clickco/contracts';
 import { Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
-import type { BookingView, Db, PromoUsage, SnapshotTotals, TimelineEntry } from '../bookings.types';
+import type {
+  BookingContactFacts,
+  BookingView,
+  Db,
+  PromoUsage,
+  SnapshotTotals,
+  TimelineEntry,
+} from '../bookings.types';
 import { hoursFromNumeric } from '../hours';
 import type { ActorKind } from '../state-machine';
 
@@ -78,6 +85,33 @@ export class BookingReadsRepository {
 
   forUser(db: Db, userId: string): Promise<BookingView[]> {
     return this.views(db, db`b.user_id = ${userId}`);
+  }
+
+  async contactFacts(db: Db, bookingId: string): Promise<BookingContactFacts | null> {
+    const [row] = await db<
+      {
+        id: string;
+        reference: string;
+        status: BookingStatus;
+        user_id: string;
+        scheduled_start: Date;
+        subject_phone: string | null;
+        gallery_recipient: 'BOOKER' | 'SUBJECT';
+      }[]
+    >`
+      SELECT id, reference, status, user_id, scheduled_start, subject_phone, gallery_recipient
+      FROM bookings WHERE id = ${bookingId}`;
+    return row
+      ? {
+          bookingId: row.id,
+          reference: row.reference,
+          status: row.status,
+          userId: row.user_id,
+          scheduledStart: row.scheduled_start,
+          subjectPhone: row.subject_phone,
+          galleryRecipient: row.gallery_recipient,
+        }
+      : null;
   }
 
   async timeline(db: Db, bookingId: string): Promise<TimelineEntry[]> {

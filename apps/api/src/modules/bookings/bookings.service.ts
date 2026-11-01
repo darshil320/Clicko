@@ -18,6 +18,7 @@ import {
   type AdminBookingFilter,
   type AssignmentBookingDetail,
   type BookingChargeRecord,
+  type BookingContactFacts,
   type BookingRow,
   type BookingView,
   type ChargeBasis,
@@ -174,6 +175,11 @@ export class BookingsService {
 
   listForUser(userId: string): Promise<BookingView[]> {
     return this.reads.forUser(this.sql, userId);
+  }
+
+  /** Reference, schedule and who to message (notifications); null when the booking is absent. */
+  contactFacts(bookingId: string): Promise<BookingContactFacts | null> {
+    return this.reads.contactFacts(this.sql, bookingId);
   }
 
   timeline(bookingId: string): Promise<TimelineEntry[]> {

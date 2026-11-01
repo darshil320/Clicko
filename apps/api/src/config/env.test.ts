@@ -9,7 +9,31 @@ const BANK_KEY = Buffer.alloc(32, 9).toString('base64');
 /** A deployed-looking DELIVERY_LINK_KEY (audit L2); not a real secret. */
 const LINK_KEY = 'l'.repeat(40);
 
+/**
+ * Real notification and call adapters with test-only credentials (ADR-0027 D1): deployed
+ * environments refuse the console ones. Not real secrets.
+ */
+const LIVE_CHANNELS = {
+  WHATSAPP_ADAPTER: 'meta',
+  WHATSAPP_PHONE_NUMBER_ID: '123456789012345',
+  WHATSAPP_ACCESS_TOKEN: 'EAAG-test-only-whatsapp-token-000000',
+  NOTIFY_SMS_ADAPTER: 'msg91',
+  MSG91_AUTH_KEY: 'msg91-test-only-auth-key',
+  MSG91_SENDER_ID: 'CLKCOO',
+  MSG91_DLT_ENTITY_ID: '1201160000000000000',
+  MSG91_TEMPLATES: '{}',
+  PUSH_ADAPTER: 'expo',
+  CALLS_ADAPTER: 'exotel',
+  EXOTEL_ACCOUNT_SID: 'clickco-test',
+  EXOTEL_API_KEY: 'exotel-test-api-key',
+  EXOTEL_API_TOKEN: 'exotel-test-api-token',
+  EXOTEL_CALLER_ID: '08047112233',
+  EXOTEL_WEBHOOK_SECRET: 'exotel-test-webhook-secret-0123456789',
+  PUBLIC_API_URL: 'https://api.clickco.test',
+};
+
 const valid = {
+  ...LIVE_CHANNELS,
   NODE_ENV: 'development',
   PORT: '4000',
   DATABASE_URL: 'postgres://clickco:pw@localhost:5432/clickco',
@@ -40,10 +64,82 @@ describe('loadEnv', () => {
       STAFF_TOTP_KEY: DEV_STAFF_TOTP_KEY,
       BANK_ACCOUNT_KEY_VERSION: 2,
       DEV_TOOLS: 'off',
+      WHATSAPP_GRAPH_VERSION: 'v21.0',
+      EXOTEL_API_HOST: 'api.exotel.com',
       DB_POOL_MAX: 20,
       DB_IDLE_TIMEOUT_S: 30,
       DB_STATEMENT_TIMEOUT_MS: 5_000,
       DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: 30_000,
+    });
+  });
+
+  describe('notification and call adapters (ADR-0027 D1)', () => {
+    const consoleOnly = Object.fromEntries(
+      Object.keys(LIVE_CHANNELS).map((k) => [k, undefined]),
+    ) as Record<keyof typeof LIVE_CHANNELS, undefined>;
+    const prod = {
+      ...valid,
+      NODE_ENV: 'production',
+      SMS_ADAPTER: 'dlt',
+      REDIS_URL: 'rediss://cache:6380',
+      QUEUE_PREFIX: 'clickco-prod',
+      TRUST_PROXY_HOPS: '1',
+      PAYMENT_GATEWAY: 'razorpay',
+      RAZORPAY_KEY_ID: 'rzp_live_key',
+      RAZORPAY_KEY_SECRET: 'Vb3kq9ZtL2xWm8rPa4sNc7Hd',
+      RAZORPAY_WEBHOOK_SECRET: 'Qm7tR2vX9kLp4sWz8nBc',
+      STORAGE_ADAPTER: 'drive',
+      JPEG_EXPORT_ADAPTER: 'darktable',
+      MEDIA_WORKER_ISOLATED: 'true',
+      STAFF_TOTP_KEY: TOTP_KEY,
+      BANK_ACCOUNT_KEY: BANK_KEY,
+      DELIVERY_LINK_KEY: LINK_KEY,
+    };
+
+    it('development and test default every channel to its console adapter', () => {
+      const env = loadEnv({ ...valid, ...consoleOnly });
+      expect(env).toMatchObject({
+        WHATSAPP_ADAPTER: 'console',
+        NOTIFY_SMS_ADAPTER: 'console',
+        PUSH_ADAPTER: 'console',
+        CALLS_ADAPTER: 'console',
+      });
+    });
+
+    it('staging and production refuse each console adapter', () => {
+      expect(loadEnv(prod).NODE_ENV).toBe('production');
+      for (const name of [
+        'WHATSAPP_ADAPTER',
+        'NOTIFY_SMS_ADAPTER',
+        'PUSH_ADAPTER',
+        'CALLS_ADAPTER',
+      ]) {
+        for (const NODE_ENV of ['staging', 'production']) {
+          expect(() => loadEnv({ ...prod, NODE_ENV, [name]: 'console' }), name).toThrow(
+            new RegExp(name),
+          );
+        }
+      }
+    });
+
+    it('each real adapter needs its credentials', () => {
+      const cases: [string, Record<string, undefined>][] = [
+        ['WHATSAPP_ACCESS_TOKEN', { WHATSAPP_ACCESS_TOKEN: undefined }],
+        ['WHATSAPP_ACCESS_TOKEN', { WHATSAPP_PHONE_NUMBER_ID: undefined }],
+        ['MSG91_AUTH_KEY', { MSG91_TEMPLATES: undefined }],
+        ['MSG91_AUTH_KEY', { MSG91_DLT_ENTITY_ID: undefined }],
+        ['EXOTEL_API_KEY', { EXOTEL_CALLER_ID: undefined }],
+        ['EXOTEL_API_KEY', { EXOTEL_WEBHOOK_SECRET: undefined }],
+      ];
+      for (const [path, drop] of cases) {
+        expect(() => loadEnv({ ...valid, ...drop }), path).toThrow(new RegExp(path));
+      }
+    });
+
+    it('a deployed PUBLIC_API_URL is https', () => {
+      expect(() => loadEnv({ ...prod, PUBLIC_API_URL: 'http://api.clickco.in' })).toThrow(
+        /PUBLIC_API_URL/,
+      );
     });
   });
 

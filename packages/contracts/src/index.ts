@@ -16,6 +16,7 @@ export * from './dispatch.js';
 export * from './enums.js';
 export * from './media.js';
 export * from './money.js';
+export * from './notifications.js';
 export * from './onsite.js';
 export * from './photographer.js';
 export * from './price-snapshot.js';

@@ -18,6 +18,9 @@ import { DeliveryLinksRepository } from './repositories/delivery-links.repositor
 
 export type ReleaseOutcome = 'RELEASED' | 'ALREADY_RELEASED' | 'NOT_READY';
 
+/** Which link the "your photos are here" message points at. */
+const LINK_PREFERENCE: readonly DeliveryLinkKind[] = ['JPEG_PHOTO', 'VIDEO', 'RAW_PHOTO'];
+
 interface CreatedLink {
   readonly kind: DeliveryLinkKind;
   readonly url: string;
@@ -113,6 +116,23 @@ export class ReleaseService {
     });
     if (outcome !== 'RELEASED') await this.revokeQuietly(created.map((c) => c.linkId));
     return outcome;
+  }
+
+  /**
+   * The public token of the booking's main live link (JPEG, else video, else RAW) for the
+   * "delivered" message (ADR-0027 D2); null when none is live. The token is derived, never stored.
+   */
+  async primaryLinkToken(bookingId: string): Promise<string | null> {
+    const now = this.clock();
+    const live = (await this.links.forBooking(this.sql, bookingId)).filter(
+      (l) => l.revokedAt === null && l.expiresAt > now,
+    );
+    for (const kind of LINK_PREFERENCE) {
+      const link = live.find((l) => l.kind === kind);
+      const token = link ? this.tokens.tokenIfCurrent(link.id, link.tokenSha256) : null;
+      if (token) return token;
+    }
+    return null;
   }
 
   /** Links made for a release that lost a race: never left live at the provider. */

@@ -73,6 +73,12 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0015 is byte-identical to docs/schema-addenda/0015-notifications-calls.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0015_notifications_calls.sql')).toBe(
+      read('docs/schema-addenda/0015-notifications-calls.sql'),
+    );
+  });
+
   it('0014 is byte-identical to docs/schema-addenda/0014-performance-indexes.sql', () => {
     expect(read('apps/api/src/infra/db/migrations/0014_performance_indexes.sql')).toBe(
       read('docs/schema-addenda/0014-performance-indexes.sql'),
@@ -95,6 +101,7 @@ describe('migrations mirror the specification (ADR-0006)', () => {
       '0012_money_files_hardening.sql',
       '0013_waitlist_abuse.sql',
       '0014_performance_indexes.sql',
+      '0015_notifications_calls.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

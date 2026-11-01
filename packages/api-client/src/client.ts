@@ -22,6 +22,7 @@ import {
 import { z } from 'zod';
 import { ApiError } from './errors.js';
 import { createHttp, type HttpOptions } from './http.js';
+import { notificationSettingsApi, startMaskedCall } from './notifications-client.js';
 
 /** GET /me — the session user without the sign-in-only `isNew` flag. */
 export const MeResponse = SessionUser.omit({ isNew: true });
@@ -143,6 +144,15 @@ export function createApiClient(options: ApiClientOptions) {
           auth: true,
           idempotencyKey,
         }),
+    },
+
+    /** ADR-0027 D2: this install's push token and the account's notification preferences. */
+    notifications: notificationSettingsApi(http, '/me'),
+
+    /** ADR-0027 D3: a masked call to the photographer assigned to this booking. */
+    calls: {
+      start: async (bookingId: string) =>
+        startMaskedCall(http, `/bookings/${uuidSegment(bookingId)}/call`),
     },
 
     /** Development-only endpoints. They answer 404 against any non-development API. */

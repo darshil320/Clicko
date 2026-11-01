@@ -15,6 +15,9 @@ const APPEND_ONLY = [
   'photographer_application_events',
   'ticket_messages',
   'booking_price_snapshots',
+  // migration 0015 (ADR-0027 D2/D3)
+  'notification_sends',
+  'call_logs',
 ] as const;
 
 const APP_ROLE = 'clickco_app';
@@ -140,6 +143,15 @@ describe.runIf(TEST_DATABASE_URL)(
       expect(await canApp('schema_migrations', 'SELECT')).toBe(true);
       for (const privilege of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
         expect(await canApp('schema_migrations', privilege)).toBe(false);
+      }
+    });
+
+    it('0015: the superseded spec tables (notification_log, masked_call_log) are read-only to the app', async () => {
+      for (const table of ['notification_log', 'masked_call_log']) {
+        expect(await canApp(table, 'SELECT')).toBe(true);
+        for (const privilege of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
+          expect(await canApp(table, privilege), `${table} ${privilege}`).toBe(false);
+        }
       }
     });
 

@@ -13,6 +13,8 @@ export const QUEUE = {
   SLA: 'sla',
   /** Checkout housekeeping (audit L3: stale ADVANCE_PENDING bookings). */
   CHECKOUT: 'checkout',
+  /** Lifecycle messages: one job per recipient of a domain event (ADR-0027 D2). */
+  NOTIFICATIONS: 'notifications',
 } as const;
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
@@ -50,6 +52,11 @@ export const JOB = {
    * expiry + grace), which releases their promo redemption (audit L3).
    */
   CHECKOUT_STALE_SWEEP: 'checkout.stale-advance-sweep',
+  /**
+   * Immediate, or delayed to 08:00 IST for a non-essential message in quiet hours: one recipient's
+   * message for one domain event (WhatsApp → SMS fallback, push alongside). ADR-0027 D2.
+   */
+  NOTIFICATION_SEND: 'notifications.send',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -69,6 +76,7 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.SLA_CLOCK_DUE]: QUEUE.SLA,
   [JOB.SLA_SWEEP]: QUEUE.SLA,
   [JOB.CHECKOUT_STALE_SWEEP]: QUEUE.CHECKOUT,
+  [JOB.NOTIFICATION_SEND]: QUEUE.NOTIFICATIONS,
 };
 
 export interface JobOptions {
@@ -82,6 +90,9 @@ export const JOB_OPTIONS: Partial<Readonly<Record<JobName, JobOptions>>> = {
   [JOB.AUTH_OTP_SMS]: { attempts: 5, backoffMs: 2_000 },
   // A failed export (corrupt RAW, missing darktable) alerts ops on the first failure: 30 s … 8 min.
   [JOB.MEDIA_JPEG_EXPORT]: { attempts: 5, backoffMs: 30_000 },
+  // A provider outage (WhatsApp, MSG91, Expo): 20 s, 40 s, 80 s, 160 s, 320 s — about 10 minutes
+  // in all; every failed attempt is a FAILED notification_sends row.
+  [JOB.NOTIFICATION_SEND]: { attempts: 6, backoffMs: 20_000 },
 };
 
 export interface RepeatableJob {
@@ -112,4 +123,5 @@ export const WORKER_CONCURRENCY: Readonly<Record<QueueName, number>> = {
   [QUEUE.MEDIA_EXPORT]: 2,
   [QUEUE.SLA]: 4,
   [QUEUE.CHECKOUT]: 1,
+  [QUEUE.NOTIFICATIONS]: 4,
 };

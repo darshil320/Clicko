@@ -8,9 +8,11 @@ import { JOB, QUEUE } from '../../infra/queues/queue-names';
 import { AdminModule } from '../../modules/admin/admin.module';
 import { AuthModule } from '../../modules/auth/auth.module';
 import { TokenModule } from '../../modules/auth/token.module';
+import { CallsModule } from '../../modules/calls/calls.module';
 import { CheckoutModule } from '../../modules/checkout/checkout.module';
 import { DispatchModule } from '../../modules/dispatch/dispatch.module';
 import type { JpegExportService } from '../../modules/media/jpeg-export.service';
+import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { PaymentsModule } from '../../modules/payments/payments.module';
 import { WorkerModule } from '../../worker.module';
 import { JpegExportProcessor } from '../jpeg-export.processor';
@@ -33,6 +35,7 @@ describe('audit H1 — darktable runs in its own worker process', () => {
     expect(queuesFor('api', true)).toContain(QUEUE.OUTBOX);
     expect(queuesFor('api', false)).toContain(QUEUE.MEDIA_EXPORT);
     expect(queuesFor('media-worker', true)).toEqual([QUEUE.MEDIA_EXPORT]);
+    expect(queuesFor('api', true)).toContain(QUEUE.NOTIFICATIONS);
     expect(repeatablesFor('media-worker', true)).toEqual([]);
     expect(repeatablesFor('api', true).map((r) => r.job)).toContain(JOB.OUTBOX_PUBLISH);
   });
@@ -51,7 +54,7 @@ describe('audit H1 — darktable runs in its own worker process', () => {
     expect(worker.processorFor(JOB.MEDIA_JPEG_EXPORT)).toBeDefined();
   });
 
-  it('the worker never loads payments, checkout, auth, admin or token signing', () => {
+  it('the worker never loads payments, checkout, auth, admin, token signing or messaging', () => {
     const modules = reachable(WorkerModule);
     for (const forbidden of [
       PaymentsModule,
@@ -60,6 +63,9 @@ describe('audit H1 — darktable runs in its own worker process', () => {
       TokenModule,
       AdminModule,
       DispatchModule,
+      // ADR-0027 D1: provider credentials (WhatsApp, MSG91, Expo, Exotel) never reach the worker.
+      NotificationsModule,
+      CallsModule,
     ]) {
       expect(modules.has(forbidden)).toBe(false);
     }

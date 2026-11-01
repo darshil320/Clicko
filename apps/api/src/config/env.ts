@@ -144,6 +144,83 @@ export const EnvSchema = z
     // development and test derive one from JWT_ACCESS_SECRET.
     DELIVERY_LINK_KEY: unsetIfEmpty(Secret.optional()),
     BANK_ACCOUNT_KEY: unsetIfEmpty(Base64Key32.optional()),
+    // ── Notifications and masked calls (ADR-0027 D1). `console` records what would be sent —
+    // development and test only; staging/production refuse it. Real adapters go live once the
+    // provider approvals exist (WhatsApp templates, DLT headers/templates, Exotel KYC).
+    WHATSAPP_ADAPTER: unsetIfEmpty(z.enum(['console', 'meta']).default('console')),
+    // WhatsApp Business Cloud API: the sending number's id and a system-user access token.
+    WHATSAPP_PHONE_NUMBER_ID: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^\d{5,20}$/)
+        .optional(),
+    ),
+    WHATSAPP_ACCESS_TOKEN: unsetIfEmpty(z.string().min(20).optional()),
+    WHATSAPP_GRAPH_VERSION: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^v\d{1,3}\.\d$/)
+        .default('v21.0'),
+    ),
+    // Lifecycle SMS (DLT). The OTP SMS keeps its own SMS_ADAPTER.
+    NOTIFY_SMS_ADAPTER: unsetIfEmpty(z.enum(['console', 'msg91']).default('console')),
+    MSG91_AUTH_KEY: unsetIfEmpty(z.string().min(10).optional()),
+    // The DLT-registered header (6 letters) and principal entity id.
+    MSG91_SENDER_ID: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^[A-Z]{6}$/)
+        .optional(),
+    ),
+    MSG91_DLT_ENTITY_ID: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^\d{10,25}$/)
+        .optional(),
+    ),
+    // JSON: { "<TEMPLATE_CODE>": { "flowId": "…", "dltTemplateId": "…" } } — one per SMS template
+    // (checked against the template catalogue at boot).
+    MSG91_TEMPLATES: unsetIfEmpty(z.string().min(2).optional()),
+    PUSH_ADAPTER: unsetIfEmpty(z.enum(['console', 'expo']).default('console')),
+    // Expo push security: optional unless "enhanced push security" is on for the project.
+    EXPO_ACCESS_TOKEN: unsetIfEmpty(z.string().min(20).optional()),
+    CALLS_ADAPTER: unsetIfEmpty(z.enum(['console', 'exotel']).default('console')),
+    EXOTEL_ACCOUNT_SID: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{2,64}$/)
+        .optional(),
+    ),
+    EXOTEL_API_KEY: unsetIfEmpty(z.string().min(8).optional()),
+    EXOTEL_API_TOKEN: unsetIfEmpty(z.string().min(8).optional()),
+    // Singapore cluster (default) or Mumbai (api.in.exotel.com).
+    EXOTEL_API_HOST: unsetIfEmpty(
+      z.enum(['api.exotel.com', 'api.in.exotel.com']).default('api.exotel.com'),
+    ),
+    // The ExoPhone both sides see.
+    EXOTEL_CALLER_ID: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^\+?\d{8,15}$/)
+        .optional(),
+    ),
+    // Public https base of this API; Exotel posts call status (duration) to
+    // <base>/webhooks/exotel/call-status/<EXOTEL_WEBHOOK_SECRET>.
+    PUBLIC_API_URL: unsetIfEmpty(z.url({ protocol: /^https?$/ }).optional()),
+    EXOTEL_WEBHOOK_SECRET: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be 32+ url-safe characters')
+        .optional(),
+    ),
+    // Rotation: the old secret, still accepted until Exotel's StatusCallback points at the new one.
+    EXOTEL_WEBHOOK_SECRET_PREVIOUS: unsetIfEmpty(
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be 32+ url-safe characters')
+        .optional(),
+    ),
+
     BANK_ACCOUNT_KEY_VERSION: unsetIfEmpty(z.coerce.number().int().min(2).max(255).default(2)),
     BANK_ACCOUNT_KEY_PREVIOUS: unsetIfEmpty(
       z
@@ -293,6 +370,70 @@ export const EnvSchema = z
       path: ['BANK_ACCOUNT_KEY_PREVIOUS'],
     },
   )
+  .superRefine((e, ctx) => {
+    // ADR-0027 D1: production refuses to boot with a console adapter selected.
+    if (!DEPLOYED.includes(e.NODE_ENV)) return;
+    const consoles = [
+      ['WHATSAPP_ADAPTER', e.WHATSAPP_ADAPTER],
+      ['NOTIFY_SMS_ADAPTER', e.NOTIFY_SMS_ADAPTER],
+      ['PUSH_ADAPTER', e.PUSH_ADAPTER],
+      ['CALLS_ADAPTER', e.CALLS_ADAPTER],
+    ] as const;
+    for (const [name, value] of consoles) {
+      if (value === 'console') {
+        ctx.addIssue({
+          code: 'custom',
+          path: [name],
+          message: 'console adapters are only allowed in development and test',
+        });
+      }
+    }
+  })
+  .refine(
+    (e) =>
+      e.WHATSAPP_ADAPTER !== 'meta' ||
+      Boolean(e.WHATSAPP_PHONE_NUMBER_ID && e.WHATSAPP_ACCESS_TOKEN),
+    {
+      message: 'the WhatsApp Cloud API needs WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN',
+      path: ['WHATSAPP_ACCESS_TOKEN'],
+    },
+  )
+  .refine(
+    (e) =>
+      e.NOTIFY_SMS_ADAPTER !== 'msg91' ||
+      Boolean(e.MSG91_AUTH_KEY && e.MSG91_SENDER_ID && e.MSG91_DLT_ENTITY_ID && e.MSG91_TEMPLATES),
+    {
+      message: 'MSG91 needs its auth key, DLT sender id, DLT entity id and template ids',
+      path: ['MSG91_AUTH_KEY'],
+    },
+  )
+  .refine(
+    (e) =>
+      e.CALLS_ADAPTER !== 'exotel' ||
+      Boolean(
+        e.EXOTEL_ACCOUNT_SID &&
+          e.EXOTEL_API_KEY &&
+          e.EXOTEL_API_TOKEN &&
+          e.EXOTEL_CALLER_ID &&
+          e.EXOTEL_WEBHOOK_SECRET &&
+          e.PUBLIC_API_URL,
+      ),
+    {
+      message:
+        'Exotel needs its account sid, API key and token, caller id (ExoPhone), webhook secret and PUBLIC_API_URL',
+      path: ['EXOTEL_API_KEY'],
+    },
+  )
+  .refine(
+    (e) =>
+      !DEPLOYED.includes(e.NODE_ENV) ||
+      e.PUBLIC_API_URL === undefined ||
+      e.PUBLIC_API_URL.startsWith('https://'),
+    {
+      message: 'staging and production must use an https PUBLIC_API_URL',
+      path: ['PUBLIC_API_URL'],
+    },
+  )
   .transform((e) => ({
     ...e,
     QUEUE_PREFIX: e.QUEUE_PREFIX ?? 'clickco',
@@ -329,7 +470,33 @@ export const WORKER_FORBIDDEN_SECRETS = [
   'RAZORPAY_WEBHOOK_SECRET',
   'SANDBOX_WEBHOOK_SECRET',
   'MIGRATION_DATABASE_URL',
+  'WHATSAPP_ACCESS_TOKEN',
+  'MSG91_AUTH_KEY',
+  'EXPO_ACCESS_TOKEN',
+  'EXOTEL_API_KEY',
+  'EXOTEL_API_TOKEN',
+  'EXOTEL_WEBHOOK_SECRET',
+  'EXOTEL_WEBHOOK_SECRET_PREVIOUS',
 ] as const;
+
+const WORKER_NO_CHANNELS = {
+  WHATSAPP_ADAPTER: 'meta',
+  WHATSAPP_PHONE_NUMBER_ID: '10000000000',
+  WHATSAPP_ACCESS_TOKEN: randomBytes(32).toString('hex'),
+  NOTIFY_SMS_ADAPTER: 'msg91',
+  MSG91_AUTH_KEY: randomBytes(16).toString('hex'),
+  MSG91_SENDER_ID: 'NOSEND',
+  MSG91_DLT_ENTITY_ID: '1000000000000000000',
+  MSG91_TEMPLATES: '{}',
+  PUSH_ADAPTER: 'expo',
+  CALLS_ADAPTER: 'exotel',
+  EXOTEL_ACCOUNT_SID: 'media-worker-has-no-calls',
+  EXOTEL_API_KEY: randomBytes(16).toString('hex'),
+  EXOTEL_API_TOKEN: randomBytes(16).toString('hex'),
+  EXOTEL_CALLER_ID: '0000000000',
+  EXOTEL_WEBHOOK_SECRET: randomBytes(32).toString('hex'),
+  PUBLIC_API_URL: 'https://media-worker.invalid',
+} as const;
 
 /**
  * The media worker's environment (audit H1): the same validated shape as the API's, but every
@@ -361,6 +528,9 @@ export function loadWorkerEnv(source: Record<string, string | undefined>): Env {
           RAZORPAY_KEY_ID: 'media-worker-has-no-gateway',
           RAZORPAY_KEY_SECRET: random(),
           RAZORPAY_WEBHOOK_SECRET: random(),
+          // The worker never sends notifications or calls: real adapters with throwaway values
+          // only satisfy the deployed "no console adapter" rule (ADR-0027 D1).
+          ...WORKER_NO_CHANNELS,
         }
       : { PAYMENT_GATEWAY: 'sandbox', SANDBOX_WEBHOOK_SECRET: random(48) }),
   });

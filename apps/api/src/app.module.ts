@@ -14,10 +14,12 @@ import { QueuesModule } from './infra/queues/queues.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CallsModule } from './modules/calls/calls.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { DispatchModule } from './modules/dispatch/dispatch.module';
 import { MediaModule } from './modules/media/media.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OnsiteModule } from './modules/onsite/onsite.module';
 import { OpsModule } from './modules/ops/ops.module';
 import { PricingModule } from './modules/pricing/pricing.module';
@@ -57,6 +59,8 @@ class CoreModule {}
     DeliveryModule,
     MediaModule,
     OpsModule,
+    CallsModule,
+    NotificationsModule,
     AdminModule,
     JobsModule,
     ...devOnlyModules(process.env),

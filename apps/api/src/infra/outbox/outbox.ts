@@ -1,4 +1,5 @@
 import type postgres from 'postgres';
+import type { PublishedEvent } from './outbox-subscribers';
 
 /** JSON-safe payload values. Money goes in as integer paise numbers (ADR-0007), never bigint. */
 export type EventValue =
@@ -49,4 +50,36 @@ export async function appendDomainEventOnce(
   const { dedupeKey, ...rest } = event;
   await appendDomainEvent(tx, { ...rest, payload: { ...event.payload, dedupe_key: dedupeKey } });
   return true;
+}
+
+/**
+ * One event by its id, as subscribers receive it — for queued work that carries only the event id
+ * (the notification jobs) and reads the rest when it runs. null when unknown.
+ */
+export async function readDomainEvent(
+  db: postgres.ISql,
+  eventId: string,
+): Promise<PublishedEvent | null> {
+  const [row] = await db<
+    {
+      event_id: string;
+      event_type: string;
+      aggregate_kind: string;
+      aggregate_id: string;
+      payload: Record<string, unknown>;
+      occurred_at: Date;
+    }[]
+  >`
+    SELECT event_id, event_type, aggregate_kind, aggregate_id, payload, occurred_at
+    FROM domain_events WHERE event_id = ${eventId}`;
+  return row
+    ? {
+        eventId: row.event_id,
+        eventType: row.event_type,
+        aggregateKind: row.aggregate_kind,
+        aggregateId: row.aggregate_id,
+        payload: row.payload,
+        occurredAt: row.occurred_at,
+      }
+    : null;
 }

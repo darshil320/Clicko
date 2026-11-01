@@ -228,6 +228,21 @@ export interface DeliveryBookingFacts {
 // ── Staff panel reads (ADR-0025) ────────────────────────────────────────────
 
 /** Cities a staff caller may see: every city, or a list (from the admin module's role grants). */
+/**
+ * Who a booking's lifecycle messages go to (notifications, ADR-0027 D2): the account holder, and
+ * per G-08 the person at the venue when the booker named one. Phones never leave the server.
+ */
+export interface BookingContactFacts {
+  readonly bookingId: string;
+  readonly reference: string;
+  readonly status: BookingStatus;
+  readonly userId: string;
+  readonly scheduledStart: Date;
+  readonly subjectPhone: string | null;
+  /** Who receives the delivery link (G-08). */
+  readonly galleryRecipient: 'BOOKER' | 'SUBJECT';
+}
+
 export type CitySet = 'ALL' | readonly string[];
 
 /** A booking as the staff panel lists and opens it. Money is bigint paise. */

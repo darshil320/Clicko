@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { DevOtpResponse, type Idempotent } from './client.js';
 import { ApiError } from './errors.js';
 import { createHttp, type HttpOptions } from './http.js';
+import { notificationSettingsApi, startMaskedCall } from './notifications-client.js';
 
 /** The Pro app refreshes its photographer session here, not at the client's /auth/refresh. */
 export const PRO_REFRESH_PATH = '/pro/auth/refresh';
@@ -237,6 +238,15 @@ export function createProApiClient(options: ProApiClientOptions) {
           auth: true,
           idempotencyKey,
         }),
+    },
+
+    /** ADR-0027 D2: this install's push token and the photographer's notification preferences. */
+    notifications: notificationSettingsApi(http, '/pro'),
+
+    /** ADR-0027 D3: a masked call to the client of this assignment. */
+    calls: {
+      start: async (assignmentId: string) =>
+        startMaskedCall(http, `/pro/assignments/${idSegment(assignmentId)}/call`),
     },
 
     earnings: () =>
