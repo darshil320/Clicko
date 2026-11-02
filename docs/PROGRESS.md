@@ -2,6 +2,41 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-11-02 · Website design pass — Hallmark audit, ADR-0028
+- **Setup:** design skills hue, hallmark, better-typography and interface-design live in
+  `~/.claude/skills`; CLAUDE.md §Design routes them by surface; the `clickco-design-pass` project
+  skill runs audit → plan → fix → verify for one surface and carries `cdp-shot.mjs` (headless
+  Chrome screenshots with device emulation, no dependencies).
+- **Audit** (`/hallmark audit apps/web`, sloplint plus screenshots at 390, 1280 x 800, 1366 x 768
+  and 1920): kept the product-led hero, real photos and honest prices; found the hero price below
+  the 1280 x 800 fold, "+ GST" wrapping, and one repeated section formula (eyebrow, two-tone
+  heading), middle-dot meta lines, glued arrows, icon tiles and facts printed in 4+ sections.
+- **Fixes:**
+  - hero price and its action inside 1280 x 800 and 1366 x 768 (`fec2ef2`);
+  - "+ GST" under every tier price (`3f73bef`);
+  - overflow-x clip, pressed and disabled states (`e63636e`);
+  - city-page category titles no longer clip (`3e9a17f`).
+- **ADR-0028** (`5ff11ed`), then: plain section heads and sentence-case labels (`44b4ba4`), no
+  middle dots and arrows on the primary only (`801cb17`), no icon tiles (`5fb419b`), each proof
+  fact once on the home page (`ab8f018`). Every changed line of copy is listed in its commit.
+- **Finish review** (fresh-context subagent, before vs after screenshots), then: two-part
+  headings break between their parts and the hero accent phrase takes its own line
+  (`d0cc2a5`); Why Clickco tiles size to their text, category uplifts never split, captions lose
+  the last middle dot, linked cards underline their title on hover (`a8d4699`).
+- **Checks:** web typecheck, 182 tests, build and Biome clean; token tests 77 green; Hallmark
+  `--kept` 26/26 links and 25/25 handlers. design-verifier was not run: it diffs against Figma
+  frames, the website has none, and the Figma MCP is not authorised here.
+- **Open (layout depth, needs a decision before a full redesign):**
+  - Nine sections open with the same block (two-line heading left, small lead right), and four
+    card grids in a row share one card; the Why Clickco bento carries no photo frame, against
+    DESIGN-DAYLIGHT §Rules.
+  - The picker's "recommended tier" dot still carries meaning by colour alone (DESIGN.md
+    §Accessibility, ADR-0028 D4); a visible label needs room the 1366 x 768 fold does not have.
+  - The hero reel stops ~58px short of the content edge. `apps/web/src/styles/hero.ts` has an
+    uncommitted `justify-self:left` that this session did not write; in a flex column it does
+    nothing.
+  - The home page is still 14 sections; Hallmark's 6 to 9 budget was not adopted.
+
 ## 2026-11-02 · Sprint 11 — perf, notifications, calls, reviews/UGC, app states (ADR-0027)
 - **Performance** (`48dc117`, D6b):
   - 0014 indexes;
