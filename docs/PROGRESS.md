@@ -2,6 +2,33 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-11-02 · Sprint 11 — perf, notifications, calls, reviews/UGC, app states (ADR-0027)
+- **Performance** (`48dc117`, D6b):
+  - 0014 indexes;
+  - the outbox claims under a lease and delivers outside the transaction;
+  - DB pool size and timeouts from env;
+  - overview cache; a single-query UTR check; a scrypt cap;
+  - polling back-off and per-second clocks in the apps.
+  - The CI workflow is written but parked on the local branch `ci-workflow` (the token has no
+    `workflow` scope).
+- **Notifications** (`e724868`, D2/D3a):
+  - ports plus console and real adapters for WhatsApp (Meta), SMS (MSG91 DLT), push (Expo) and
+    calls (Exotel);
+  - 13 templates mapped to events; a BullMQ pipeline with dedupe, fallback, quiet hours and mutes;
+  - push-token and preference endpoints;
+  - masked calls with locked reservations and caps; migration 0015.
+- **Reviews and UGC** (`341b394`, D4a):
+  - client ratings that feed metrics;
+  - reports with a copy of the reported text;
+  - blocks that dispatch honours (offers withdrawn, late accept refused);
+  - an audited, city-scoped moderation desk;
+  - public-text sanitiser; migration 0016.
+- **Apps** (`caede31`): every client and Pro screen has empty, error and offline states, built
+  from the new packages/ui `StateView`, `ErrorState` and `OfflineBanner`.
+- **Reviews run:** schema-guardian, security-reviewer and domain-guardian on each stream. Every
+  CRITICAL, HIGH and MEDIUM was fixed with a test; the remaining LOWs are recorded in ADR-0027.
+- **Tests:** API 1,668 green; every other package green; typecheck 17/17.
+
 ## 2026-11-02 · Sprint 11 D5 carry-overs — API and staff panel (ADR-0027 D5a)
 - **Payouts for undelivered shoots:**
   - Data loss pays in full; the third in a year is withheld, and finance can release it.

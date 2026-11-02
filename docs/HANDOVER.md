@@ -1,4 +1,4 @@
-# CLICKCO — HANDOVER (31 Oct 2026)
+# CLICKCO — HANDOVER (2 Nov 2026)
 
 Read this first in a new chat, then `CLAUDE.md`, `docs/PROGRESS.md` (newest first), and the ADRs it
 names. This file is the shortest path back to full context.
@@ -28,66 +28,60 @@ Turborepo + pnpm monorepo:
 | S9 | Done: staff admin foundation. Password + mandatory TOTP sign-in, role and city guards, audit log, ops desks (ADR-0025). |
 | S10 | Done: money (refunds four-eyes, GST credit notes, review settlement, credits, breach remedies), payouts + TDS 194C, supply (onboarding, KYC, directory, waivers), care (quality issues, tickets, equipment claims), pricing editor, "Today" home, ⌘K, grouped nav, password lifecycle (ADR-0026). |
 | Security | Done: whole-app audit (4 reviewers); every CRITICAL/HIGH fixed with tests; committed and pushed (`613a935`). See ADR-0027 D6/D6a. |
-| **S11** | **In progress.** Plan in ADR-0027. Two background jobs were running when this chat ended (section 3). |
+| **S11** | **Nearly done.** Plan and as-built notes in ADR-0027 (D2/D3a, D4a, D5a, D6b). Left: the D5 app screens (section 3) and the follow-ups in section 4. |
 | S12 | Not started: launch prep (EAS builds, store listings, Sentry/PostHog, load test, runbook, dry runs). |
 
-## 3. Uncommitted work in the tree right now (check before anything else)
-Two agents were mid-task when this handover was written. Their files are on disk, **not committed**.
-1. **Performance fixes.**
-   - DB indexes: migration `0014_performance_indexes.sql`.
-   - Outbox: claim a batch, then deliver outside the transaction.
-   - DB pool size and timeouts.
-   - Quote ruleset cache; overview cache (Redis, 20 s).
-   - Payout UTR batch check; scrypt concurrency cap.
-   - Frontend polling back-off (Pro offers, portal), web video preload and cache headers, client
-     draft debounce, per-second clock components, admin `maxPages: 3`, Pro focus gating.
-   - A `.github/workflows/ci.yml`: biome, typecheck, tests, `pnpm audit`, secret scan.
-2. **S11 notifications foundation** (`apps/api/src/modules/notifications`, migration
-   `0015_notifications_calls.sql`):
-   - WhatsApp, SMS and push ports, each with a console adapter plus a real one (Meta Cloud API,
-     MSG91 DLT, Expo push).
-   - Versioned templates per lifecycle event; a BullMQ send queue; WhatsApp→SMS fallback; quiet
-     hours 21:00–08:00 IST; opt-outs.
-   - Tables `notification_sends`, `device_push_tokens`, `notification_preferences`.
-   - Push-token and preference endpoints.
-   - Masked calls (Exotel port).
+## 3. Where the last session stopped
+Committed and pushed on `main`, in order:
+- `48dc117` perf: indexes (0014), outbox claim-then-deliver, pool limits, caches, polling
+  back-off (ADR-0027 D6b).
+- `e724868` notifications pipeline, push tokens, preferences, masked calls (0015; D2/D3a).
+- `341b394` reviews, reports, blocks, moderation desk (0016; D4a).
+- `caede31` empty, error and offline states on every client and Pro screen (packages/ui
+  `StateView`, `ErrorState`, `OfflineBanner`).
+- `b588b9c` payouts for undelivered shoots, Pro paid transfers, client care and money endpoints,
+  admin Refund and Issue credit sheets (0017; D5a).
 
-**First thing in the new chat:**
+**Possibly uncommitted:** the client and Pro screens for the D5 endpoints (booking "Refunds &
+credits", "Report a problem with my photos", "Get help" tickets, Pro "Paid" transfers). An agent was
+building them when this was written. Run `git status`; if they are there, verify (typecheck, tests,
+biome) and commit them.
+
+**Not on GitHub:** the CI workflow sits on the local branch `ci-workflow`. The `darshil320` token has
+no `workflow` scope, so GitHub refuses it. Once the owner runs
+`gh auth refresh -h github.com -s workflow --user darshil320`, push it with
+`git checkout ci-workflow && git rebase main && git checkout main && git merge --ff-only ci-workflow`
+and the push command in section 6. Until then, never commit `.github/` on main, or every later
+push fails.
+
+**Checks:**
 ```bash
-cd /Users/darshillashkari/Desktop/documents/Clickco
-git status --short            # see what the two jobs left
+cd /Users/darshillashkari/Desktop/documents/Clickco && git status --short
 export PATH="$HOME/.nvm/versions/node/v22.19.0/bin:$HOME/.nvm/versions/node/v20.19.5/bin:$PATH"
-npx turbo run typecheck --output-logs=errors-only
+npx turbo run typecheck --output-logs=errors-only && npx biome check .
 cd apps/api && TEST_DATABASE_URL=postgres://clickco:clickco_local_only@localhost:5433/clickco npx vitest run --maxWorkers=2
 ```
-- Finish anything half-done: missing files, failing tests, migrations.test.ts listing 0014/0015,
-  byte-identical addenda in `docs/schema-addenda/`.
-- Then commit in concern-sized pieces (perf; notifications) and push (section 6).
+Last full run: API 1,668 tests green, typecheck 17/17.
 
-## 4. S11 — what is left (ADR-0027)
-- **D2 finish:** wire every lifecycle template to its domain event and close any gaps the
-  notifications job reports; e2e test `apps/api/src/notifications.e2e.test.ts`.
-- **Mobile push:** needs the **`expo-notifications`** dependency (asked, **not yet approved**).
-  Until then the server side exists and the apps don't register tokens.
-- **D3 masked calls:** finish the Exotel binding lifecycle (open at assignment, close 2 h after
-  check-out) and the call buttons in the client and Pro apps.
-- **D4 reviews and UGC:**
-  - 1–5 rating after delivery, editable 7 days, feeds photographer metrics;
-  - reporting of reviews, messages and users, with a moderation desk in admin (QM/support);
-  - a client can block a photographer from dispatch;
-  - links and phone numbers stripped from public text.
-- **D5 carry-overs:**
-  - in-app support ticket and quality-issue entry points;
-  - refunds and credits visible on the client booking;
-  - admin booking page Refund / Issue credit buttons;
-  - payouts for undelivered shoots (DATA_LOSS, ACCESS_DENIED, CLIENT_ABSENT);
-  - Pro earnings showing paid payouts with TDS;
-  - empty, error and offline states on every client and Pro screen.
-- **Security follow-ups (ADR-0027 D6a):**
-  - a page for `/d/:token`, which now returns a JSON file list;
-  - ranged downloads for big RAW files;
-  - check in a browser that a KYC PDF opens from the admin blob link;
-  - a Redis-backed throttler before running more than one API instance.
+## 4. S11 and S12 — what is left
+- **Mobile push and call buttons:** need **`expo-notifications`** (asked, **not yet approved**).
+  The server side is done. Then: register the push token on sign-in, and add call buttons in the
+  client booking and the Pro job screens (`calls.start`).
+- **Notification gaps:** no events or templates yet for ticket acknowledged/resolved, the Pro
+  assignment reminder, `ticket.raised`, `payout.withheld`/`payout.released`, and a WARN from
+  moderation. Expo push receipts are not checked yet.
+- **D4 left:** reporting a message (there is no in-app messaging); unhide; PRO_TO_CLIENT reviews;
+  the client rating screen and the report/block buttons in the apps.
+- **D5 left:** a staff route that confirms DATA_LOSS; a payout rule for ABANDONED bookings.
+- **Security follow-ups (ADR-0027 D6a/D6b):**
+  - a page for `/d/:token`, which messages link to and which still returns JSON;
+  - ranged downloads;
+  - check in a browser that a KYC PDF opens;
+  - a Redis-backed throttler before running a second API instance;
+  - an outbox delivery time limit plus a claim token;
+  - web CSP hashes instead of `unsafe-inline`;
+  - one full-history gitleaks scan.
+- **S12** (launch prep): EAS builds, store listings, Sentry/PostHog, load test, runbook, dry runs.
 
 ## 5. Local environment
 - **Node:** Node 22 is pinned. The default `node` on PATH is Zed's Node 24, so always prefix the
@@ -128,7 +122,7 @@ T=$(gh auth token --user darshil320) && git -c credential.helper= -c "credential
 - **Every money route:** idempotent.
 - **Every state change:** emits an outbox event in the same transaction.
 - **Specs:** `docs/clickco-*.md/.sql` are read-only. New tables go to `docs/schema-addenda/NNNN`
-  first, then a byte-identical migration. Next free number: **0016**.
+  first, then a byte-identical migration. Next free number: **0018**.
 - **Admin routes:** StaffGuard + `@Roles` + city scope + `@Audited` + `AuditService.record` in the
   same transaction. The desk list and role matrix live only in
   `packages/contracts/src/admin-desks.ts`.
@@ -144,6 +138,8 @@ T=$(gh auth token --user darshil320) && git -c credential.helper= -c "credential
 | Topic | Question |
 |---|---|
 | Mobile push | Approve `expo-notifications`. |
+| GitHub | `gh auth refresh -h github.com -s workflow --user darshil320` so the CI workflow can be pushed. |
+| Payouts | Confirm the undelivered-shoot payout amounts (ADR-0027 D5a) and the ABANDONED rule. |
 | Penalties | Amounts for no-show and late cancellation (flat per type?). Today they deduct nothing. |
 | CA | GST on credit notes issued after the s.34(2) deadline. |
 | CA | TDS on gross vs net. |
