@@ -41,6 +41,9 @@ Committed and pushed on `main`, in order:
   `StateView`, `ErrorState`, `OfflineBanner`).
 - `b588b9c` payouts for undelivered shoots, Pro paid transfers, client care and money endpoints,
   admin Refund and Issue credit sheets (0017; D5a).
+- `5052515` queue shutdown waits for repeatable-job registration (fixed a flaky full API run).
+- `f73383c` outbox delivery limit and claim token (0018), Redis throttler storage, ticket and
+  payout-hold messages.
 
 **Possibly uncommitted:** the client and Pro screens for the D5 endpoints (booking "Refunds &
 credits", "Report a problem with my photos", "Get help" tickets, Pro "Paid" transfers). An agent was
@@ -61,7 +64,7 @@ export PATH="$HOME/.nvm/versions/node/v22.19.0/bin:$HOME/.nvm/versions/node/v20.
 npx turbo run typecheck --output-logs=errors-only && npx biome check .
 cd apps/api && TEST_DATABASE_URL=postgres://clickco:clickco_local_only@localhost:5433/clickco npx vitest run --maxWorkers=2
 ```
-Last full run: API 1,668 tests green, typecheck 17/17.
+Last full run: API 1,700 tests green (3 runs in a row), typecheck 17/17.
 
 ## 4. S11 and S12 — what is left
 - **Mobile push and call buttons:** need **`expo-notifications`** (asked, **not yet approved**).
@@ -77,8 +80,6 @@ Last full run: API 1,668 tests green, typecheck 17/17.
   - a page for `/d/:token`, which messages link to and which still returns JSON;
   - ranged downloads;
   - check in a browser that a KYC PDF opens;
-  - a Redis-backed throttler before running a second API instance;
-  - an outbox delivery time limit plus a claim token;
   - web CSP hashes instead of `unsafe-inline`;
   - one full-history gitleaks scan.
 - **S12** (launch prep): EAS builds, store listings, Sentry/PostHog, load test, runbook, dry runs.
@@ -122,7 +123,7 @@ T=$(gh auth token --user darshil320) && git -c credential.helper= -c "credential
 - **Every money route:** idempotent.
 - **Every state change:** emits an outbox event in the same transaction.
 - **Specs:** `docs/clickco-*.md/.sql` are read-only. New tables go to `docs/schema-addenda/NNNN`
-  first, then a byte-identical migration. Next free number: **0018**.
+  first, then a byte-identical migration. Next free number: **0019**.
 - **Admin routes:** StaffGuard + `@Roles` + city scope + `@Audited` + `AuditService.record` in the
   same transaction. The desk list and role matrix live only in
   `packages/contracts/src/admin-desks.ts`.
