@@ -14,7 +14,7 @@ export function Categories() {
   return (
     <Section
       id="categories"
-      title="Seven kinds of shoot. One way to book."
+      title={['Seven kinds of shoot.', 'One way to book.']}
       lead="Each category is matched to photographers who know it. Prices below are 2-hour Basic shoots in Surat."
     >
       <ul className="grid grid-4 grid-feature">

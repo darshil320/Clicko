@@ -43,7 +43,7 @@ export function CitiesServed() {
   return (
     <Section
       id="cities"
-      title="Live in Surat and Mumbai. Piloting in Vadodara."
+      title={['Live in Surat and Mumbai.', 'Piloting in Vadodara.']}
       lead="The app works anywhere in India. Booking opens pincode by pincode, and the waitlist decides where we go next."
     >
       <CityCards />

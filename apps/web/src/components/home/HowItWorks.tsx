@@ -10,7 +10,7 @@ export function HowItWorks() {
   return (
     <Section
       id="how-it-works"
-      title="Booked like a ride. Delivered like a studio."
+      title={['Booked like a ride.', 'Delivered like a studio.']}
       lead="From booking to photos in four steps. No calls, no negotiating, no chasing a photographer for files."
     >
       <ol className="steps">

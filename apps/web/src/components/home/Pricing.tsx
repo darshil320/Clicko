@@ -19,7 +19,7 @@ export function Pricing() {
     <Section
       id="pricing"
       raised
-      title="Clear prices, before you book."
+      title={['Clear prices,', 'before you book.']}
       lead="Every plan starts at 2 hours. Prices are exclusive of 18% GST, and the GST-inclusive total is always shown right beside them."
     >
       <CityPriceTabs cities={CITY_PRICES} />

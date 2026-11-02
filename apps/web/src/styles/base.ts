@@ -48,7 +48,8 @@ h1,h2{font-family:${fontDisplay};font-weight:${webType.page.weight}}
 h1{${fluidType(webType.page)}}
 h2{${fluidType(webType.figure)}}
 h3{font-family:${fontBody};${fluidType(webType.title)}}
-.accent-phrase{font-weight:${daylightType.weight.accent};color:${v('accent-text')}}
+.accent-phrase{display:block;font-weight:${daylightType.weight.accent};color:${v('accent-text')}}
+.head-line{display:block}
 p{margin:0 0 ${px(S[4])};text-wrap:pretty}
 ul,ol{margin:0 0 ${px(S[4])};padding-left:${px(S[5])}}
 img,svg{display:block;max-width:100%;height:auto}

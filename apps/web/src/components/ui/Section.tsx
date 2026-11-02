@@ -2,8 +2,11 @@ import type { ReactNode } from 'react';
 
 export interface SectionProps {
   readonly id: string;
-  /** Plain text: one weight, one colour, no eyebrow above it (ADR-0028). */
-  readonly title: string;
+  /**
+   * Plain text: one weight, one colour, no eyebrow above it (ADR-0028). A two-part heading is
+   * a list of lines, so it breaks between its parts at every width.
+   */
+  readonly title: string | readonly string[];
   readonly lead?: ReactNode;
   /** Linen band (surface/raised): one per page (DESIGN-DAYLIGHT §Rules). */
   readonly raised?: boolean;
@@ -30,7 +33,15 @@ export function Section({
   const headingId = `${id}-title`;
   const head = (
     <div className={centered ? 'section-head section-head-center reveal' : 'section-head reveal'}>
-      <h2 id={headingId}>{title}</h2>
+      <h2 id={headingId}>
+        {typeof title === 'string'
+          ? title
+          : title.map((line) => (
+              <span key={line} className="head-line">
+                {line}
+              </span>
+            ))}
+      </h2>
       {lead ? <p className="lead">{lead}</p> : null}
     </div>
   );

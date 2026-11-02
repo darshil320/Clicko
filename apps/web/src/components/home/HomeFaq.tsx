@@ -7,7 +7,7 @@ export function HomeFaq() {
     <Section
       id="faq"
       split
-      title="Questions, answered."
+      title={['Questions,', 'answered.']}
       lead={
         <>
           Still stuck? Read the <a href="/terms/">Terms &amp; Conditions</a> and the{' '}
