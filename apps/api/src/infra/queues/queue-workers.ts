@@ -23,6 +23,8 @@ import { QUEUE_OF, type QueueName, WORKER_CONCURRENCY } from './queue-names';
 export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(QueueWorkers.name);
   private workers: readonly Worker[] = [];
+  /** The background registration; shutdown waits for it so no command is cut off mid-flight. */
+  private registration: Promise<void> = Promise.resolve();
 
   constructor(
     @Inject(ENV) private readonly env: Env,
@@ -40,7 +42,7 @@ export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdo
     this.workers = queuesFor(this.role, this.env.MEDIA_WORKER_ISOLATED).map((name) =>
       this.startWorker(name),
     );
-    void this.registerRepeatables().catch((error: unknown) =>
+    this.registration = this.registerRepeatables().catch((error: unknown) =>
       this.logger.error(
         `Could not register repeatable jobs: ${error instanceof Error ? error.message : String(error)}`,
       ),
@@ -56,6 +58,7 @@ export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdo
   }
 
   async onApplicationShutdown(): Promise<void> {
+    await this.registration;
     await Promise.all(this.workers.map((w) => w.close()));
   }
 
