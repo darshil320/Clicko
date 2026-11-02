@@ -110,8 +110,6 @@ describe('Daylight contrast (WCAG AA)', () => {
   it('reads text and captions on the darkroom band', () => {
     expect(contrast(x.darkroom.text, x.darkroom.default)).toBeGreaterThanOrEqual(7);
     expect(contrast(x.darkroom.muted, x.darkroom.default)).toBeGreaterThanOrEqual(AA);
-    // The italic accent word on darkroom is amber itself (DESIGN-DAYLIGHT §Rules).
-    expect(contrast(c.accent.default, x.darkroom.default)).toBeGreaterThanOrEqual(7);
   });
 
   it('keeps status and emergency colours readable as text on paper', () => {
@@ -142,7 +140,7 @@ describe('Daylight type, shape and depth', () => {
     expect(weight.accent).toBeLessThan(weight.display);
     expect(weight.label).toBeGreaterThanOrEqual(600);
     expect(daylightType.trackingEm.display).toBeLessThan(0);
-    expect(daylightType.trackingEm.label).toBeGreaterThan(0);
+    expect(daylightType.trackingEm.label).toBe(0);
     expect(DESIGN_DAYLIGHT_MD).toMatch(
       new RegExp(`^display\\s+${family.display} ${weight.display}\\b`, 'm'),
     );

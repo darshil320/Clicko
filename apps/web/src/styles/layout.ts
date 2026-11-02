@@ -124,9 +124,8 @@ function darkCss(): string {
   return `
 .section-dark{margin:0 ${px(S[2])};border-radius:${px(RD.photo)};background:${v('darkroom-default')};
   color:${v(on)};overflow:hidden;isolation:isolate}
-.section-dark .eyebrow,.section-dark .lead,.section-dark .muted,.section-dark .notice p{color:${v(muted)}}
+.section-dark .lead,.section-dark .muted,.section-dark .notice p{color:${v(muted)}}
 .section-dark h2,.section-dark h3,.section-dark .notice-title{color:${v(on)}}
-.section-dark h2 em{color:${v('accent-default')}}
 .section-dark a{color:${v(on)}}
 .section-dark .bands,.section-dark .bands-head,.section-dark .band-row{border-color:${tint(on, fx.darkRulePercent)}}
 .section-dark .band-row{background:${tint(on, fx.darkWellPercent)};border:${rule}}

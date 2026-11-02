@@ -2,9 +2,8 @@ import type { ReactNode } from 'react';
 
 export interface SectionProps {
   readonly id: string;
-  /** Plain text, or text with one <em> phrase in the accent (DESIGN-DAYLIGHT §Type). */
-  readonly title: ReactNode;
-  readonly eyebrow?: string;
+  /** Plain text: one weight, one colour, no eyebrow above it (ADR-0028). */
+  readonly title: string;
   readonly lead?: ReactNode;
   /** Linen band (surface/raised): one per page (DESIGN-DAYLIGHT §Rules). */
   readonly raised?: boolean;
@@ -21,7 +20,6 @@ export interface SectionProps {
 export function Section({
   id,
   title,
-  eyebrow,
   lead,
   raised = false,
   dark = false,
@@ -32,7 +30,6 @@ export function Section({
   const headingId = `${id}-title`;
   const head = (
     <div className={centered ? 'section-head section-head-center reveal' : 'section-head reveal'}>
-      {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
       <h2 id={headingId}>{title}</h2>
       {lead ? <p className="lead">{lead}</p> : null}
     </div>

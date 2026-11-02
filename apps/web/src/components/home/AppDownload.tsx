@@ -11,7 +11,6 @@ export function AppDownload() {
       <div className="wrap">
         <div className="cta-panel reveal">
           <div>
-            <p className="eyebrow">The Clickco app</p>
             <h2 id="app-title">Booking happens in the app</h2>
             <p className="lead">
               Choose a plan, see the full price with GST, pay securely and follow your booking from

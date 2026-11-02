@@ -10,7 +10,6 @@ import {
   hairline,
   headerOverlay,
   L,
-  label,
   measure,
   mq,
   palette,
@@ -49,7 +48,7 @@ h1,h2{font-family:${fontDisplay};font-weight:${webType.page.weight}}
 h1{${fluidType(webType.page)}}
 h2{${fluidType(webType.figure)}}
 h3{font-family:${fontBody};${fluidType(webType.title)}}
-h1 em,h2 em{font-style:normal;font-weight:${daylightType.weight.accent};color:${v('accent-text')}}
+.accent-phrase{font-weight:${daylightType.weight.accent};color:${v('accent-text')}}
 p{margin:0 0 ${px(S[4])};text-wrap:pretty}
 ul,ol{margin:0 0 ${px(S[4])};padding-left:${px(S[5])}}
 img,svg{display:block;max-width:100%;height:auto}
@@ -69,7 +68,6 @@ hr{border:0;border-top:${hairline()};margin:${px(S[8])} 0}
 table{border-collapse:collapse;width:100%}
 th,td{border-bottom:${hairline()};padding:${px(S[3])} ${px(S[3])};text-align:left;vertical-align:top}
 th{${type(T.bodyStrong)};color:${v('text-primary')}}
-.eyebrow{${label};color:${v('text-tertiary')};margin:0 0 ${px(S[4])}}
 .muted{color:${v('text-secondary')}}
 .num{font-variant-numeric:tabular-nums}
 ${legalCss()}`;

@@ -88,8 +88,7 @@ export default async function CityCategoryPage({ params }: Props) {
       </PageHero>
       <Section
         id="pricing"
-        eyebrow={`${category.label} shoots in ${city.name}`}
-        title="Prices for 2 hours"
+        title={`Prices for a 2-hour ${category.label.toLowerCase()} shoot in ${city.name}`}
         lead={
           category.upliftReason
             ? `${category.upliftReason} It is already included below.`
@@ -108,7 +107,6 @@ export default async function CityCategoryPage({ params }: Props) {
       <Section
         id="planning"
         raised
-        eyebrow="Planning"
         title={`Planning a ${category.label.toLowerCase()} shoot`}
       >
         <div className="split">
@@ -139,7 +137,6 @@ export default async function CityCategoryPage({ params }: Props) {
       </Section>
       <Section
         id="faq"
-        eyebrow="Help"
         title={`${category.label} photography in ${city.name}: FAQs`}
       >
         <FaqList faqs={content.faqs} />

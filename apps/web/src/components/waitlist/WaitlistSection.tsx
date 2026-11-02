@@ -8,7 +8,6 @@ export function WaitlistSection() {
   return (
     <Section
       id="waitlist"
-      eyebrow="Waitlist"
       title="Want Clickco in your city?"
       lead="Tell us where you need a photographer. We open new cities in order of waitlist demand, and we will message you when booking opens near you."
     >

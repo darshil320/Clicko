@@ -64,9 +64,9 @@ export const fontBody = `var(${fontVar.sans}),${quote(family.body)},${fallbacks}
 /** Headlines, prices and big numerals: the same face at display weight (ADR-0022). */
 export const fontDisplay = fontBody;
 
-/** Uppercase labels: eyebrows, chips, photo captions (DESIGN-DAYLIGHT §Type). */
-export const label = `font-family:${fontBody};font-size:${px(T.micro.size)};line-height:${px(T.micro.lineHeight)};
-  font-weight:${daylightType.weight.label};text-transform:uppercase;letter-spacing:${daylightType.trackingEm.label}em`;
+/** Labels: chips, photo captions, table heads, tier names (DESIGN-DAYLIGHT §Type, ADR-0028). */
+export const label = `font-family:${fontBody};${type(T.caption)};font-weight:${daylightType.weight.label};
+  letter-spacing:${daylightType.trackingEm.label}em`;
 
 /* ── Fluid web type ─────────────────────────────────────────────────────────────────────────
  * DESIGN.md defines a mobile scale only. The web display scale grows from those steps at a

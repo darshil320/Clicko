@@ -188,7 +188,7 @@ function panelCss(): string {
 .cta-panel{position:relative;overflow:hidden;isolation:isolate;display:grid;gap:${px(S[10])};align-items:center;
   padding:${px(rhythm.mobile)} ${px(S[5])};border-radius:${px(RD.photo)};background:${v('accent-default')};
   color:${v('text-on-accent')}}
-.cta-panel .eyebrow,.cta-panel .lead,.cta-panel h2{color:${v('text-on-accent')}}
+.cta-panel .lead,.cta-panel h2{color:${v('text-on-accent')}}
 .cta-panel h2{${fluidType(webType.section)};max-width:${px(measure.prose)};margin:0 0 ${px(S[4])}}
 .cta-panel .lead{max-width:${px(measure.prose)};margin:0}
 .cta-panel .photo{width:100%;max-width:${px(measure.stage)};justify-self:center;box-shadow:${shadow('photo')}}

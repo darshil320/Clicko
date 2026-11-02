@@ -87,9 +87,7 @@ function creatorsCss(): string {
   return `
 .creators{display:grid;gap:${px(S[6])};margin-top:${px(S[10])};padding:${px(S[6])};border-radius:${px(RD.photo)};
   background:${v('clay-default')};color:${v('text-primary')}}
-.creators .eyebrow{color:${v('clay-deep')};margin-bottom:${px(S[3])}}
 .creators h3{${fluidType(webType.figure)};margin:0 0 ${px(S[6])}}
-.creators h3 em{font-style:normal;color:${v('clay-deep')}}
 .creators .checklist{margin:0}
 .creators .checklist li{color:${v('text-primary')}}
 ${mq(bp.lg)}{

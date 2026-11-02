@@ -75,8 +75,7 @@ export default async function CityHub({ params }: Props) {
       </PageHero>
       <Section
         id="pricing"
-        eyebrow={`Prices in ${city.name}`}
-        title="Choose your tier"
+        title={`Prices in ${city.name}`}
         lead="Prices for a 2-hour portrait or event shoot, exclusive of 18% GST, with the GST-inclusive total beside each one."
       >
         <TierGrid cards={content.prices.map(toCardData)} label={`Prices in ${city.name}`} />
@@ -88,14 +87,13 @@ export default async function CityHub({ params }: Props) {
       <Section
         id="categories"
         raised
-        eyebrow="What we shoot"
         title={`Shoots in ${city.name}`}
         lead="Each category has its own photographers, planning notes and price."
       >
         <CategoryLinks city={city} />
       </Section>
       <HowItWorks />
-      <Section id="faq" eyebrow="Help" title={`Booking a photographer in ${city.name}`}>
+      <Section id="faq" title={`Booking a photographer in ${city.name}`}>
         <FaqList faqs={content.faqs} />
       </Section>
       <Section id="other-cities" title="Other cities">

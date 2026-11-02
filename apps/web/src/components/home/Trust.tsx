@@ -13,12 +13,7 @@ export function Trust() {
   return (
     <Section
       id="trust"
-      eyebrow="Why Clickco"
-      title={
-        <>
-          Built so you never <em>chase anyone.</em>
-        </>
-      }
+      title="Built so you never chase anyone."
       lead="Clickco sells the shoot and stands behind it: one company responsible for the photographer, the price and the delivery."
     >
       <ul className="bento">

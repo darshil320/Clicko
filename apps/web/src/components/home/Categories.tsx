@@ -14,12 +14,7 @@ export function Categories() {
   return (
     <Section
       id="categories"
-      eyebrow="What we shoot"
-      title={
-        <>
-          Seven kinds of shoot. <em>One way to book.</em>
-        </>
-      }
+      title="Seven kinds of shoot. One way to book."
       lead="Each category is matched to photographers who know it. Prices below are 2-hour Basic shoots in Surat."
     >
       <ul className="grid grid-4 grid-feature">

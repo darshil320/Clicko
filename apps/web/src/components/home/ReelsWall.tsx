@@ -9,12 +9,7 @@ export function ReelsWall() {
   return (
     <Section
       id="reels"
-      eyebrow="Photos + video"
-      title={
-        <>
-          Clips for your feed, <em>straight off the shoot.</em>
-        </>
-      }
+      title="Clips for your feed, straight off the shoot."
       lead="Licensed sample reels, to show the look. Book photos and video together and every clip comes back unedited and camera-original, ready for your own edit."
     >
       <ul className="reel-wall" aria-label="Sample reels">
@@ -29,9 +24,8 @@ export function ReelsWall() {
       </ul>
       <div className="creators reveal">
         <div className="creators-head">
-          <p className="eyebrow">For creators</p>
           <h3>
-            Stills for the grid. <em>Clips for the reels.</em>
+            Stills for the grid. Clips for the reels.
           </h3>
           <a className="btn btn-dark" href="#shoot-creator">
             Plan a content day

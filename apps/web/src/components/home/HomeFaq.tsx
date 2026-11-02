@@ -7,12 +7,7 @@ export function HomeFaq() {
     <Section
       id="faq"
       split
-      eyebrow="Help"
-      title={
-        <>
-          Questions, <em>answered.</em>
-        </>
-      }
+      title="Questions, answered."
       lead={
         <>
           Still stuck? Read the <a href="/terms/">Terms &amp; Conditions</a> and the{' '}

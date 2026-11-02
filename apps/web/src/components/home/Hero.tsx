@@ -105,7 +105,7 @@ export function Hero() {
         aside={<Proof />}
       >
         <h1 id="hero-title">
-          Pro photos and video. <em>No DMs, no haggling.</em>
+          Pro photos and video. <span className="accent-phrase">No DMs, no haggling.</span>
         </h1>
       </HeroPicker>
     </section>

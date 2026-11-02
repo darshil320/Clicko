@@ -95,7 +95,8 @@ export const daylightType = {
    */
   family: { display: 'Onest', body: 'Onest', accent: 'Onest' },
   weight: { display: 700, accent: 500, label: 600 },
-  trackingEm: { display: -0.04, label: 0.08 },
+  /** Labels are sentence case and untracked (ADR-0028). */
+  trackingEm: { display: -0.04, label: 0 },
   fluid: {
     hero: { min: 40, max: 80, leading: 1 },
     page: { min: 36, max: 64, leading: 1.04 },
