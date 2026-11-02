@@ -1,4 +1,21 @@
-import { bp, fx, hairline, L, mq, px, R, S, shadow, stroke, T, tint, type, v } from './tokens';
+import {
+  bp,
+  fx,
+  hairline,
+  inputMinPx,
+  L,
+  mq,
+  px,
+  R,
+  rem,
+  S,
+  shadow,
+  stroke,
+  T,
+  tint,
+  type,
+  v,
+} from './tokens';
 
 /** Waitlist form controls (DESIGN.md §Components: Input). */
 export function formsCss(): string {
@@ -15,6 +32,8 @@ ${mq(bp.sm)}{.form-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .input{width:100%;height:${px(L.inputHeight)};padding:0 ${px(S[4])};background:${v('surface-base')};
   border:${hairline('border-strong')};border-radius:${px(R.md)};color:${v('text-primary')};font:inherit;
   color-scheme:light;box-shadow:${shadow('sm')}}
+.input{font-size:${rem(inputMinPx)}}
+${mq(bp.lg)}{.input{font-size:inherit}}
 .input::placeholder{color:${v('text-tertiary')}}
 .input:hover{border-color:${v('text-tertiary')}}
 .input:focus-visible{outline:${px(stroke.thick)} solid ${v('text-primary')};outline-offset:0;

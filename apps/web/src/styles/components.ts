@@ -153,6 +153,7 @@ function disclosureCss(): string {
   return `
 .faq{display:grid;max-width:${px(measure.prose)};border-top:${hairline()}}
 .faq details{border-bottom:${hairline()}}
+.faq details p{max-width:${measure.textEm}em}
 .faq summary{display:flex;justify-content:space-between;align-items:center;gap:${px(S[6])};
   min-height:${px(L.minTapTarget)};padding:${px(S[5])} 0;${fluidType(webType.title)};font-weight:${T.bodyStrong.weight};
   cursor:pointer;list-style:none}
@@ -218,7 +219,7 @@ function controlsCss(): string {
   background:${v('surface-raised')}}
 .stepper button:is(:disabled,[aria-disabled="true"]){border-color:${v('border-subtle')};color:${v('text-tertiary')};
   cursor:not-allowed}
-.stepper output{min-width:${px(S[14] + S[6])};text-align:center;${type(T.bodyStrong)}}
+.stepper output{min-width:${px(S[14] + S[6])};text-align:center;${type(T.bodyStrong)};font-variant-numeric:tabular-nums}
 `;
 }
 
@@ -229,7 +230,7 @@ function noticeCss(): string {
 .notice>div>:last-child,.notice>:last-child{margin-bottom:0}
 .notice>svg{flex-shrink:0;width:${px(ICON.size)};height:${px(ICON.size)};margin-top:${px(stroke.thick)}}
 .gap-top{margin-top:${px(S[8])}}
-.notice p{max-width:${px(measure.prose)}}
+.notice p{max-width:${measure.textEm}em}
 .notice-title{${type(T.bodyStrong)};margin:0 0 ${px(S[1])}}
 .notice-success{background:${tint('success', fx.noticeTint)};border-color:${tint('success', fx.noticeEdge)}}
 .notice-error{background:${tint('danger', fx.noticeTint)};border-color:${tint('danger', fx.noticeEdge)}}

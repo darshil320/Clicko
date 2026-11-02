@@ -38,8 +38,26 @@ export const RD = daylightRadius;
 
 type Step = (typeof typography.scale)[keyof typeof typography.scale];
 
+/** The browser's default font size. Type is set in rem so a reader's own font setting applies. */
+const ROOT_FONT_PX = 16;
+export const rem = (sizePx: number): string => `${Number((sizePx / ROOT_FONT_PX).toFixed(4))}rem`;
+
+/** Text under 18px that can wrap three lines or more needs at least this leading. */
+const TEXT_LEADING_MIN = 1.4;
+const TEXT_SIZE_MAX_PX = 18;
+
+/** A step's leading as a unitless ratio, so it scales with the size it belongs to. */
+const leadingOf = (step: Step): number => {
+  const ratio = step.lineHeight / step.size;
+  const floored = step.size < TEXT_SIZE_MAX_PX ? Math.max(ratio, TEXT_LEADING_MIN) : ratio;
+  return Number(floored.toFixed(3));
+};
+
 export const type = (step: Step): string =>
-  `font-size:${px(step.size)};line-height:${px(step.lineHeight)};font-weight:${step.weight}`;
+  `font-size:${rem(step.size)};line-height:${leadingOf(step)};font-weight:${step.weight}`;
+
+/** iOS Safari zooms the page when an input's text is under 16px, so phone inputs never are. */
+export const inputMinPx = ROOT_FONT_PX;
 
 /** micro is uppercase with 0.06em tracking (DESIGN.md §Typography). */
 export const micro = `${type(T.micro)};text-transform:uppercase;letter-spacing:${typography.microTrackingEm}em`;
@@ -77,7 +95,7 @@ const FLUID_TO = sectionSpace.contentMax;
 
 /** `clamp()` from `min` px at a small phone to `max` px at the content max width. */
 export const fluid = (min: number, max: number): string =>
-  `clamp(${px(min)},calc(${px(min)} + ${max - min} * ((100vw - ${px(FLUID_FROM)}) / ${FLUID_TO - FLUID_FROM})),${px(max)})`;
+  `clamp(${rem(min)},calc(${rem(min)} + ${max - min} * ((100vw - ${px(FLUID_FROM)}) / ${FLUID_TO - FLUID_FROM})),${rem(max)})`;
 
 /** Unitless line heights: big type sits tight, reading text breathes. */
 export const leading = { display: 1.04, heading: 1.1, title: 1.3, lead: 1.55, prose: 1.7 } as const;
@@ -159,6 +177,11 @@ export const measure = {
   hero: (sectionSpace.readingMax * 3) / 2,
   /** The hero quote card. */
   stage: (sectionSpace.readingMax * 3) / 4,
+  /**
+   * The line length of running text inside the reading width: about 72 characters of Onest at
+   * any size. In em, because Onest's wide zero makes ch overshoot.
+   */
+  textEm: 34,
 } as const;
 /** sm = tablet, lg = desktop. */
 export const bp = { sm: 640, lg: 960 } as const;

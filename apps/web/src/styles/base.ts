@@ -16,6 +16,7 @@ import {
   prose,
   px,
   R,
+  rem,
   rhythm,
   S,
   shadow,
@@ -89,13 +90,13 @@ ${mq(bp.lg)}{
   main>:not(.page):last-child{margin-bottom:${px(rhythm.desktop)}}
 }
 main>:not(.page){font-size:${fluid(T.body.size, prose.size)};line-height:${prose.leading}}
-main>article p,main>article li,main>p{color:${v('text-secondary')}}
+main>article p,main>article li,main>p{color:${v('text-secondary')};max-width:${measure.textEm}em}
 main>article strong{color:${v('text-primary')}}
 main>article h1,main>h1{margin-bottom:${px(S[6])}}
 main>article h2{${fluidType(webType.title)};margin:${px(S[10])} 0 ${px(S[3])}}
 main>article h3{${type(T.bodyStrong)};font-family:${fontBody};margin:${px(S[8])} 0 ${px(S[2])}}
 main>article li+li{margin-top:${px(S[2])}}
-main>article table{margin:${px(S[6])} 0;font-size:${px(T.caption.size)};line-height:${prose.leading}}
+main>article table{margin:${px(S[6])} 0;font-size:${rem(T.caption.size)};line-height:${prose.leading}}
 main>.draft{width:calc(100% - ${px(L.screenPaddingX * 2)});max-width:${px(measure.prose)};margin-bottom:${px(S[8])}}
 main>.draft,.draft{background:${v('accent-subtle')};border:${hairline('border-strong')};border-radius:${px(R.md)};
   padding:${px(S[3])} ${px(S[4])};${type(T.caption)};color:${v('text-secondary')}}

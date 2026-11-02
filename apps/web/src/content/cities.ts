@@ -23,7 +23,7 @@ export interface LaunchCity {
 const COVERAGE_FAQ = (city: string): Faq => ({
   question: `Do you cover all of ${city}?`,
   answer:
-    `We serve pincodes across ${city}. The app checks your venue's pincode before you book — ` +
+    `We serve pincodes across ${city}. The app checks your venue’s pincode before you book — ` +
     'most carry no travel charge, and outer areas show any travel charge in your quote before you pay.',
 });
 

@@ -10,11 +10,13 @@ import {
   headerOverlay,
   L,
   label,
+  leading,
   measure,
   mq,
   px,
   R,
   RD,
+  rem,
   rhythm,
   S,
   shadow,
@@ -98,7 +100,7 @@ ${mq(bp.lg)}{
   .wrap:not(.section-split)>.section-head:not(.section-head-center)>*{grid-column:1}
   .wrap:not(.section-split)>.section-head:not(.section-head-center) h2{margin:0;max-width:${px((measure.hero * 2) / 3)}}
   .wrap:not(.section-split)>.section-head:not(.section-head-center) .lead{grid-column:2;grid-row:1/span 2;align-self:end;
-    ${type(T.body)};font-size:${px(T.h3.size)}}
+    font-size:${rem(T.h3.size)};line-height:${leading.lead};font-weight:${T.body.weight}}
   .section-split{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:${px(S[14])};align-items:start}
   .section-split .section-head{position:sticky;top:${px(headerHeight + S[14])}}
 }

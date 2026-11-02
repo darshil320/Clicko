@@ -73,7 +73,7 @@ describe('motion (DESIGN-LIGHT §Motion)', () => {
 describe('fluid type', () => {
   it('clamps between the mobile step and the wide step', () => {
     expect(fluid(24, 40)).toMatch(
-      /^clamp\(24px,calc\(24px \+ 16 \* \(\(100vw - \d+px\) \/ \d+\)\),40px\)$/,
+      /^clamp\(1\.5rem,calc\(1\.5rem \+ 16 \* \(\(100vw - \d+px\) \/ \d+\)\),2\.5rem\)$/,
     );
   });
 

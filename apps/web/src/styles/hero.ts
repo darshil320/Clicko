@@ -91,7 +91,6 @@ function pickerCss(): string {
 .picker-total p{margin:0}
 .picker-price{font-family:${fontDisplay};${fluidType(webType.figure)};color:${v('text-primary')}}
 .picker-price-text{${type(T.h1)}}
-.picker-price.num{font-variant-numeric:proportional-nums}
 .picker-controls>.picker-row:first-child{padding-top:0;margin-bottom:${px(S[4])}}
 .picker-break{${type(T.caption)};color:${v('text-secondary')};margin-top:${px(S[1])}}
 .picker-cta{display:grid;gap:${px(S[1])}}
@@ -131,7 +130,8 @@ function shootBarCss(): string {
 .shoot-bar-summary{flex:1;min-width:0;display:grid;color:${v('text-primary')};text-decoration:none}
 .shoot-bar-what{${type(T.caption)};color:${v('text-secondary')};white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-.shoot-bar-price{display:flex;align-items:baseline;gap:${px(S[2])};${type(T.bodyStrong)}}
+.shoot-bar-price{display:flex;align-items:baseline;gap:${px(S[2])};${type(T.bodyStrong)};
+  font-variant-numeric:tabular-nums}
 .shoot-bar-extra{${type(T.caption)};color:${v('text-secondary')};font-weight:${T.body.weight}}
 .shoot-bar-edit{${type(T.caption)};color:${v('accent-text')};text-decoration:underline}
 html{scroll-padding-bottom:${px(S[14] + S[8])}}
