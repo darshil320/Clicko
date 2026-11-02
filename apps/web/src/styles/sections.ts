@@ -107,7 +107,7 @@ ${dots}
   box-shadow:0 0 0 ${px(stroke.hairline)} ${v('accent-default')},${shadow('md')}}
 .price-line{font-family:${fontDisplay};${fluidType(webType.figure)};font-variant-numeric:tabular-nums;margin:0;
   padding-top:${px(S[4])};border-top:${hairline()}}
-.price-line small{${type(T.caption)};letter-spacing:0;color:${v('text-tertiary')};font-family:inherit}
+.price-line small{display:block;${type(T.caption)};letter-spacing:0;color:${v('text-tertiary')};font-family:inherit}
 .tier .price-note{padding-bottom:${px(S[4])};border-bottom:${hairline()}}
 .tier .checklist{margin-top:${px(S[2])}}
 .tier-signature{grid-column:1/-1;background:${v('text-primary')};border-color:${v('text-primary')}}
