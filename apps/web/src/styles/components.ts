@@ -50,6 +50,8 @@ function buttonsCss(): string {
 .btn-secondary:hover{border-color:${v('text-tertiary')};box-shadow:${shadow('sm')}}
 .btn-dark{background:${v('text-primary')};color:${v('surface-overlay')}}
 .btn-dark:hover{box-shadow:${shadow('md')}}
+.btn-primary:active,.btn-dark:active{box-shadow:none}
+.btn-secondary:active{background:${v('surface-raised')};box-shadow:none}
 .btn-sm{min-height:${px(L.minTapTarget)};padding:0 ${px(S[4])}}
 .btn-arrow{display:inline-grid;place-items:center;width:${px(S[6] + S[1])};height:${px(S[6] + S[1])};
   margin-right:${px(-S[3] - S[1] / 2)};border-radius:${px(R.full)};background:${v('text-on-accent')};
@@ -60,11 +62,12 @@ function buttonsCss(): string {
 .btn-sm .btn-arrow{width:${px(S[6])};height:${px(S[6])};margin-right:${px(-S[2] - S[1] / 2)}}
 .btn:focus-visible{outline-offset:${px(S[1])}}
 .btn[aria-busy="true"]{cursor:progress}
-.btn:disabled{opacity:${fx.disabledOpacity}}
+.btn:disabled{opacity:${fx.disabledOpacity};cursor:not-allowed}
 .actions{display:flex;flex-wrap:wrap;gap:${px(S[3])};margin-top:${px(S[8])}}
 .text-link{display:inline-flex;align-items:center;gap:${px(S[1])};min-height:${px(L.minTapTarget)};
   ${type(T.bodyStrong)};text-decoration:none}
 .text-link:hover{text-decoration:underline}
+.text-link:active{color:${v('text-primary')}}
 `;
 }
 
@@ -185,6 +188,7 @@ function navigationCss(): string {
   border-radius:${px(R.full)};background:transparent;color:${v('text-secondary')};font:inherit;
   ${type(T.bodyStrong)};cursor:pointer}
 .tab:hover{color:${v('text-primary')}}
+.tab:active:not([aria-selected="true"]){background:${v('surface-raised')};color:${v('text-primary')}}
 .tab[aria-selected="true"]{background:${v('surface-overlay')};border-color:${v('border-subtle')};
   color:${v('text-primary')};box-shadow:${shadow('sm')}}
 .link-list{display:flex;flex-wrap:wrap;gap:0 ${px(S[4])};list-style:none;margin:0;padding:0}
@@ -207,6 +211,7 @@ function controlsCss(): string {
   font-weight:${T.bodyStrong.weight};color:${v('text-secondary')};white-space:nowrap}
 .seg-wide .seg-opt>span{border-radius:${px(R.md)}}
 .seg-opt:hover>span{color:${v('text-primary')}}
+.seg-opt:active>span{background:${v('surface-overlay')};color:${v('text-primary')}}
 .seg-opt:has(:checked)>span{background:${v('surface-overlay')};color:${v('text-primary')};box-shadow:${shadow('sm')}}
 .seg-rec{width:${px(S[1] + stroke.thick)};height:${px(S[1] + stroke.thick)};border-radius:${px(R.full)};
   background:${v('accent-default')};flex-shrink:0}
@@ -216,6 +221,8 @@ function controlsCss(): string {
   color:${v('text-primary')};cursor:pointer}
 .stepper button svg{width:${px(S[5])};height:${px(S[5])}}
 .stepper button:hover:not(:disabled,[aria-disabled="true"]){border-color:${v('text-tertiary')}}
+.stepper button:active:not(:disabled,[aria-disabled="true"]){border-color:${v('text-primary')};
+  background:${v('surface-raised')}}
 .stepper button:is(:disabled,[aria-disabled="true"]){border-color:${v('border-subtle')};color:${v('text-tertiary')};
   cursor:not-allowed}
 .stepper output{min-width:${px(S[14] + S[6])};text-align:center;${type(T.bodyStrong)}}

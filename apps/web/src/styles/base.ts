@@ -41,8 +41,8 @@ export function baseCss(): string {
   return `
 :root{${rootVariables()}color-scheme:light}
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;text-rendering:optimizeLegibility}
-body{margin:0;background:${v('surface-base')};color:${v('text-primary')};font-family:${fontBody};
+html{-webkit-text-size-adjust:100%;text-rendering:optimizeLegibility;overflow-x:clip}
+body{margin:0;overflow-x:clip;background:${v('surface-base')};color:${v('text-primary')};font-family:${fontBody};
   ${type(T.body)};-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 h1,h2,h3{margin:0 0 ${px(S[3])};text-wrap:balance}
 h1,h2{font-family:${fontDisplay};font-weight:${webType.page.weight}}

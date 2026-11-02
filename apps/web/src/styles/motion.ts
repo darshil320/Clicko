@@ -50,6 +50,7 @@ ${heroStagger()}
 .lift:hover{transform:translateY(${px(-liftPx)})}
 .btn-primary:hover,.btn-dark:hover{transform:translateY(${px(-liftPx / 2)})}
 .lift:hover .card-arrow{transform:translateX(${px(liftPx)})}
+.lift:active,.btn:active{transform:none}
 .photo::before{transition:scale ${ms(motionMs.heroMs)} ${ease}}
 .lift:hover>.photo::before{scale:${photoZoom}}
 .faq summary::after{transition:transform ${ms(motionMs.revealMs)} ${ease}}
