@@ -21,6 +21,7 @@ import type {
 } from './modules/notifications/channels/console-channels';
 import { jobFor } from './modules/notifications/pipeline/notification-enqueuer';
 import { NotificationSender } from './modules/notifications/pipeline/notification-sender';
+import { formatIstWhen } from './modules/notifications/templates/variables';
 import { drainOutbox } from './test-support/dispatch-fixtures';
 import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
 import {
@@ -602,6 +603,85 @@ describe.runIf(TEST_DATABASE_URL)(
       expect((await sends('CREDIT_ISSUED')).map((r) => [r.channel, r.status])).toEqual([
         ['WHATSAPP', 'SENT'],
         ['PUSH', 'SENT'],
+      ]);
+    });
+
+    it('a raised ticket is acknowledged to the client, with the reply-by time from its deadline', async () => {
+      const raised = await e2e.call('POST', '/me/tickets', {
+        token: await client(),
+        idempotencyKey: idemKey('ticket'),
+        body: { category: 'APP_ISSUE', message: 'The app crashes when I open my photos.' },
+      });
+      expect(raised.status).toBe(201);
+      const ticket = raised.json.data as Json;
+      await drainOutbox(e2e);
+      await sendDue();
+      expect(lastWhatsApp()).toMatchObject({
+        templateCode: 'TICKET_RECEIVED',
+        variables: {
+          ticketRef: ticket.reference,
+          replyBy: formatIstWhen(new Date(ticket.ackDueAt as string)),
+        },
+      });
+      expect(lastWhatsApp()?.text).not.toContain('crashes'); // never the client's own words
+      // Muted above, but an acknowledgement is transactional: it still goes.
+      expect(
+        (await sends('TICKET_RECEIVED')).map((r) => [r.recipient_kind, r.channel, r.status]),
+      ).toEqual([
+        ['USER', 'WHATSAPP', 'SENT'],
+        ['USER', 'PUSH', 'SENT'],
+      ]);
+    });
+
+    it('a payout held back, then released, is told to the photographer (transactional)', async () => {
+      const payoutId = randomUUID();
+      const base = {
+        payout_id: payoutId,
+        booking_id: bookingId,
+        photographer_id: proId,
+        gross_paise: 510_000,
+      };
+      await e2e.db.sql.begin(async (tx) => {
+        await appendDomainEvent(tx, {
+          eventType: 'payout.withheld',
+          aggregateKind: 'payout',
+          aggregateId: payoutId,
+          occurredAt: e2e.now(),
+          payload: {
+            ...base,
+            basis: 'DATA_LOSS',
+            reason: 'Data loss number 3 for this photographer in 365 days',
+          },
+        });
+        await appendDomainEvent(tx, {
+          eventType: 'payout.released',
+          aggregateKind: 'payout',
+          aggregateId: payoutId,
+          occurredAt: e2e.now(),
+          payload: { ...base, released_by: randomUUID() },
+        });
+      });
+      const smsBefore = sms.sent.length;
+      await drainOutbox(e2e);
+      await sendDue();
+      const proTexts = sms.sent.slice(smsBefore);
+      expect(proTexts.map((m) => [m.templateCode, m.variables])).toEqual([
+        ['PRO_PAYOUT_ON_HOLD', { amount: '₹5,100', shootDate: '15 Nov 2026' }],
+        ['PRO_PAYOUT_RELEASED', { amount: '₹5,100', shootDate: '15 Nov 2026' }],
+      ]);
+      expect(JSON.stringify(proTexts)).not.toContain('Data loss');
+      expect(
+        (
+          await e2e.db.sql<SendRow[]>`
+            SELECT template_code, channel, status, recipient_kind, destination_masked, error_code
+            FROM notification_sends
+            WHERE template_code IN ('PRO_PAYOUT_ON_HOLD', 'PRO_PAYOUT_RELEASED') ORDER BY id`
+        ).map((r) => [r.template_code, r.recipient_kind, r.channel, r.status]),
+      ).toEqual([
+        ['PRO_PAYOUT_ON_HOLD', 'PHOTOGRAPHER', 'SMS', 'SENT'],
+        ['PRO_PAYOUT_ON_HOLD', 'PHOTOGRAPHER', 'PUSH', 'SENT'],
+        ['PRO_PAYOUT_RELEASED', 'PHOTOGRAPHER', 'SMS', 'SENT'],
+        ['PRO_PAYOUT_RELEASED', 'PHOTOGRAPHER', 'PUSH', 'SENT'],
       ]);
     });
 

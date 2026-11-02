@@ -1,4 +1,8 @@
+import { ThrottlerStorage } from '@nestjs/throttler';
+import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { RedisThrottlerStorage } from './common/http/redis-throttler-storage';
+import { REDIS } from './infra/queues/redis';
 import { STAFF_LOGIN_POLICY } from './modules/admin/auth/login-store';
 import { TokenService } from './modules/auth/token.service';
 import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
@@ -58,6 +62,20 @@ describe.runIf(TEST_DATABASE_URL)('identity and access hardening (e2e)', () => {
       }
       // Every unusable address shares one bucket: the 21st is refused.
       expect((await requestOtp("1.1.1.1'; --")).status).toBe(429);
+    });
+  });
+
+  describe('L4: the global per-IP throttle', () => {
+    it('L4: counts in Redis under QUEUE_PREFIX, shared by every API instance', async () => {
+      expect(e2e.get(ThrottlerStorage)).toBeInstanceOf(RedisThrottlerStorage);
+      const res = await e2e.call('GET', '/serviceability/395007', {
+        headers: { 'x-forwarded-for': '7.7.7.7' },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-ratelimit-limit')).toBe('120');
+      expect(res.headers.get('x-ratelimit-remaining')).toBe('119');
+      const keys = await e2e.get<Redis>(REDIS).keys(`${e2e.env.QUEUE_PREFIX}:throttle:*`);
+      expect(keys.length).toBeGreaterThan(0);
     });
   });
 

@@ -68,6 +68,12 @@ const strings = (event: PublishedEvent, key: string): string[] => {
 const before = (iso: string | null, now: Date): boolean =>
   iso !== null && now.getTime() < new Date(iso).getTime();
 
+/** An ISO instant from a payload as an IST "when"; null when it does not parse. */
+const istWhenOf = (iso: string | null): string | null => {
+  const at = iso === null ? Number.NaN : new Date(iso).getTime();
+  return Number.isNaN(at) ? null : formatIstWhen(new Date(at));
+};
+
 const user = (b: BookingContactFacts): Recipient => ({ kind: 'USER', id: b.userId });
 const subject = (b: BookingContactFacts): Recipient => ({ kind: 'SUBJECT', id: b.bookingId });
 
@@ -113,6 +119,28 @@ async function photographerOn(
   if (!current || current.assignmentId !== assignmentId) return undefined;
   const name = await ctx.photographerName(current.photographerId);
   return name ? firstNameOf(name) : null;
+}
+
+/**
+ * The photographer's message about one of their payouts: its gross and the IST date of the shoot
+ * it pays for (the Pro app lists jobs by date, not by booking reference). Never the withheld
+ * reason or who released it: those are staff-written or staff identities.
+ */
+function toPhotographerAboutPayout(code: TemplateCode): EventMapping['resolve'] {
+  return async (event, ctx) => {
+    const photographerId = str(event, 'photographer_id');
+    const bookingId = str(event, 'booking_id');
+    if (!photographerId || !bookingId) return [];
+    const b = await ctx.booking(bookingId);
+    if (!b) return [];
+    const gross = int(event, 'gross_paise');
+    return [
+      intent({ kind: 'PHOTOGRAPHER', id: photographerId }, code, b.bookingId, {
+        amount: gross === null ? null : formatRupees(gross),
+        shootDate: formatIstDate(b.scheduledStart),
+      }),
+    ];
+  };
 }
 
 /** Every lifecycle template of ADR-0027 D2 whose domain event exists. */
@@ -248,6 +276,22 @@ export const EVENT_MAP: readonly EventMapping[] = [
     },
   },
   {
+    // A client raised a ticket in the app (ADR-0027 D5). The reply-by time is the ticket's own
+    // acknowledgement deadline (48 h, T&C §12). Never the client's words or the category.
+    eventType: 'ticket.raised',
+    template: 'TICKET_RECEIVED',
+    resolve: async (event) => {
+      const userId = str(event, 'user_id');
+      if (str(event, 'raised_by_kind') !== 'USER' || !userId) return [];
+      return [
+        intent({ kind: 'USER', id: userId }, 'TICKET_RECEIVED', str(event, 'booking_id'), {
+          ticketRef: str(event, 'reference'),
+          replyBy: istWhenOf(str(event, 'ack_due_at')),
+        }),
+      ];
+    },
+  },
+  {
     // Push only: every photographer offered the wave, while the offer is open.
     eventType: 'dispatch.wave_opened',
     template: 'PRO_NEW_OFFER',
@@ -279,6 +323,18 @@ export const EVENT_MAP: readonly EventMapping[] = [
         }),
       ];
     },
+  },
+  {
+    // A data loss past the yearly cap (ADR-0027 D5a): written WITHHELD, the photographer told.
+    eventType: 'payout.withheld',
+    template: 'PRO_PAYOUT_ON_HOLD',
+    resolve: toPhotographerAboutPayout('PRO_PAYOUT_ON_HOLD'),
+  },
+  {
+    // Finance released a withheld payout: it joins the next batch it falls due for.
+    eventType: 'payout.released',
+    template: 'PRO_PAYOUT_RELEASED',
+    resolve: toPhotographerAboutPayout('PRO_PAYOUT_RELEASED'),
   },
 ];
 

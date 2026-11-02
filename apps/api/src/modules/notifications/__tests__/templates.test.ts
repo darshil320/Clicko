@@ -15,6 +15,7 @@ import {
   formatIstWhen,
   formatRupees,
   Rupees,
+  TicketRef,
   utrLast4,
 } from '../templates/variables';
 
@@ -112,6 +113,13 @@ describe('template variables', () => {
     expect(firstNameOf('98123 Shah')).toBeNull();
     expect(firstNameOf('Priya<script>')).toBeNull();
     expect(firstNameOf('')).toBeNull();
+  });
+
+  it('takes a support ticket reference only', () => {
+    expect(TicketRef.safeParse('TKT-1043').success).toBe(true);
+    for (const bad of ['TKT-12', 'CLK-1043', 'TKT-1043 call me', 'tkt-1043']) {
+      expect(TicketRef.safeParse(bad).success, bad).toBe(false);
+    }
   });
 
   it('keeps the last four characters of a UTR', () => {

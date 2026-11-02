@@ -12,10 +12,14 @@ export interface PublishedEvent {
 
 /**
  * Delivery is at-least-once: a handler can see the same event again (a crash before
- * published_at commits, or another subscriber of the same event failing). Handlers MUST be
- * idempotent — check state, don't assume first delivery.
+ * published_at commits, another subscriber of the same event failing, or a delivery that ran
+ * past its time limit). Handlers MUST be idempotent — check state, don't assume first delivery.
+ *
+ * `signal` aborts when the delivery runs past OutboxPublisher's time limit (DELIVERY_TIMEOUT_MS):
+ * the event is then retried on backoff, so a long handler should pass the signal to its I/O (or
+ * check it between steps) and stop. It is absent when a handler is called outside the publisher.
  */
-export type EventHandler = (event: PublishedEvent) => Promise<void>;
+export type EventHandler = (event: PublishedEvent, signal?: AbortSignal) => Promise<void>;
 
 interface Subscription {
   readonly name: string;

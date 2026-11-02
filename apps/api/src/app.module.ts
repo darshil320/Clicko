@@ -1,16 +1,19 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { CLOCK, systemClock } from './common/clock';
+import type { Redis } from 'ioredis';
+import { CLOCK, type Clock, systemClock } from './common/clock';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { UserGuardModule } from './common/guards/user-guard.module';
 import { IpThrottlerGuard } from './common/http/ip-throttler.guard';
-import { ENV, loadEnv } from './config/env';
+import { RedisThrottlerStorage } from './common/http/redis-throttler-storage';
+import { ENV, type Env, loadEnv } from './config/env';
 import { devOnlyModules } from './dev/dev-tools.module';
 import { HealthModule } from './health/health.module';
 import { DbModule } from './infra/db/db.module';
 import { OutboxModule } from './infra/outbox/outbox.module';
 import { QueuesModule } from './infra/queues/queues.module';
+import { REDIS } from './infra/queues/redis';
 import { JobsModule } from './jobs/jobs.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -38,12 +41,22 @@ import { UsersModule } from './modules/users/users.module';
 })
 class CoreModule {}
 
+/** The global per-IP backstop on every route: 120 requests a minute per route and IP bucket. */
+const GLOBAL_THROTTLE = { name: 'default', ttl: 60_000, limit: 120 } as const;
+
 @Module({
   imports: [
     CoreModule,
-    // Per-IP backstop for every route (in-memory: fine for one instance; move to Redis storage
-    // before scaling out). OTP and waitlist have their own per-phone limits on top.
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
+    // Per-IP backstop for every route, counted in the shared Redis so every instance enforces one
+    // limit (ADR-0027 D6; fails open if Redis is down). OTP and waitlist have their own
+    // per-phone limits on top.
+    ThrottlerModule.forRootAsync({
+      inject: [REDIS, ENV, CLOCK],
+      useFactory: (redis: Redis, env: Env, clock: Clock) => ({
+        throttlers: [GLOBAL_THROTTLE],
+        storage: new RedisThrottlerStorage(redis, env.QUEUE_PREFIX, clock),
+      }),
+    }),
     DbModule,
     UserGuardModule,
     QueuesModule,

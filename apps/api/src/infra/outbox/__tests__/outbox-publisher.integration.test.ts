@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createScratchDb,
   type ScratchDb,
@@ -10,6 +10,7 @@ import { appendDomainEvent } from '../outbox';
 import {
   backoffMs,
   CLAIM_LEASE_MS,
+  DELIVERY_TIMEOUT_MS,
   MAX_PUBLISH_ATTEMPTS,
   OutboxPublisher,
   TICK_DEADLINE_MS,
@@ -17,6 +18,11 @@ import {
 import { OutboxSubscribers, type PublishedEvent } from '../outbox-subscribers';
 
 const NOW = new Date('2026-11-10T06:30:00.000Z');
+
+/** The real publisher with a delivery time limit a test can wait out. */
+class QuickPublisher extends OutboxPublisher {
+  protected override readonly deliveryTimeoutMs = 50;
+}
 
 describe.runIf(TEST_DATABASE_URL)('OutboxPublisher in Postgres', () => {
   let db: ScratchDb;
@@ -276,6 +282,218 @@ describe.runIf(TEST_DATABASE_URL)('OutboxPublisher in Postgres', () => {
     expect(await publisher.tick()).toEqual({ published: 1, failed: 0 });
     expect(await publisher.tick()).toEqual({ published: 1, failed: 0 });
     expect(seen).toEqual(['1', '2', '3']);
+  });
+
+  /** Everything a settle could touch. */
+  const state = async () => {
+    const [row] = await db.sql<
+      {
+        published_at: Date | null;
+        publish_attempts: number;
+        last_error: string | null;
+        next_attempt_at: Date | null;
+        claim_token: string | null;
+      }[]
+    >`SELECT published_at, publish_attempts, last_error, next_attempt_at, claim_token
+        FROM domain_events ORDER BY id LIMIT 1`;
+    if (!row) throw new Error('no event');
+    return row;
+  };
+
+  it('a delivery past its time limit fails as DeliveryTimeout, is aborted, and retries on backoff once its handler returns', async () => {
+    // Well under the lease: the last delivery a tick starts still settles inside it.
+    expect(TICK_DEADLINE_MS + DELIVERY_TIMEOUT_MS).toBeLessThan(CLAIM_LEASE_MS);
+    const subs = new OutboxSubscribers();
+    const never = gate();
+    let signal: AbortSignal | undefined;
+    let calls = 0;
+    let laterCalls = 0;
+    subs.subscribe('test.hang', 'hang', async (_e, s) => {
+      calls += 1;
+      if (calls === 1) {
+        signal = s;
+        await never.wait; // hangs past the limit
+      }
+    });
+    subs.subscribe('test.hang', 'later', async () => {
+      laterCalls += 1;
+    });
+    await append('test.hang');
+    let now = NOW;
+    const publisher = new QuickPublisher(db.sql, subs, () => now);
+
+    expect(await publisher.tick()).toEqual({ published: 0, failed: 1 });
+    expect(signal?.aborted).toBe(true);
+    expect((signal?.reason as Error | undefined)?.name).toBe('DeliveryTimeout');
+    expect(laterCalls).toBe(0); // the event's later subscribers wait for the retry
+    const held = await state();
+    expect(held).toMatchObject({
+      published_at: null,
+      publish_attempts: 1,
+      last_error: 'hang: DeliveryTimeout',
+      // Its handler is still running: the tick keeps the claim for a lease, not a 2 s backoff.
+      next_attempt_at: new Date(NOW.getTime() + CLAIM_LEASE_MS),
+    });
+    expect(held.claim_token).not.toBeNull();
+
+    now = new Date(NOW.getTime() + backoffMs(1));
+    expect(await publisher.tick()).toEqual({ published: 0, failed: 0 }); // no second copy
+    expect(calls).toBe(1);
+
+    // The abandoned handler returns: the event is handed back and retries on its backoff.
+    never.open();
+    await vi.waitFor(async () => expect((await state()).claim_token).toBeNull());
+    const retryAt = new Date(now.getTime() + backoffMs(1));
+    expect((await state()).next_attempt_at).toEqual(retryAt);
+    expect(laterCalls).toBe(0); // the abandoned delivery started no later subscriber
+    now = retryAt;
+    expect(await publisher.tick()).toEqual({ published: 1, failed: 0 });
+    expect([calls, laterCalls]).toEqual([2, 1]);
+  });
+
+  it('a delivery whose handler never returns is retried once the lease has passed', async () => {
+    const subs = new OutboxSubscribers();
+    const never = gate();
+    let calls = 0;
+    subs.subscribe('test.stuck', 'stuck', async () => {
+      calls += 1;
+      if (calls === 1) await never.wait;
+    });
+    await append('test.stuck');
+    let now = NOW;
+    const publisher = new QuickPublisher(db.sql, subs, () => now);
+    expect(await publisher.tick()).toEqual({ published: 0, failed: 1 });
+
+    now = new Date(NOW.getTime() + CLAIM_LEASE_MS - 1);
+    expect(await publisher.tick()).toEqual({ published: 0, failed: 0 });
+    now = new Date(NOW.getTime() + CLAIM_LEASE_MS);
+    expect(await publisher.tick()).toEqual({ published: 1, failed: 0 });
+    expect(calls).toBe(2);
+
+    // When the first handler finally returns, its hand-back finds the claim gone: no change.
+    const published = await state();
+    never.open();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await state()).toEqual(published);
+  });
+
+  it('a timed-out delivery at the attempt limit is dead-lettered, not held', async () => {
+    const subs = new OutboxSubscribers();
+    const never = gate();
+    subs.subscribe('test.hang', 'hang', async () => {
+      await never.wait;
+    });
+    await append('test.hang');
+    await db.sql`UPDATE domain_events SET publish_attempts = ${MAX_PUBLISH_ATTEMPTS - 1}`;
+    expect(await new QuickPublisher(db.sql, subs, () => NOW).tick()).toEqual({
+      published: 0,
+      failed: 1,
+    });
+    const [poisoned] = await db.sql<{ next_attempt_at: Date | null; claim_token: string | null }[]>`
+      SELECT next_attempt_at::text AS next_attempt_at, claim_token FROM domain_events
+      WHERE event_type = 'test.hang'`;
+    expect(poisoned).toEqual({ next_attempt_at: 'infinity', claim_token: null });
+    never.open();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const [after] = await db.sql<{ next_attempt_at: string }[]>`
+      SELECT next_attempt_at::text AS next_attempt_at FROM domain_events
+      WHERE event_type = 'test.hang'`;
+    expect(after?.next_attempt_at).toBe('infinity'); // never resurrected by the hand-back
+  });
+
+  it('a delivery inside its time limit is never aborted', async () => {
+    const subs = new OutboxSubscribers();
+    let signal: AbortSignal | undefined;
+    subs.subscribe('test.quick', 'quick', async (_e, s) => {
+      signal = s;
+    });
+    await append('test.quick');
+    expect(await new QuickPublisher(db.sql, subs, () => NOW).tick()).toEqual({
+      published: 1,
+      failed: 0,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80)); // past the 50 ms limit
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it('claims carry a token, and a tick that lost its claim cannot mark the event published', async () => {
+    const subs = new OutboxSubscribers();
+    const held = gate();
+    const entered = gate();
+    let calls = 0;
+    subs.subscribe('test.stale', 'stale', async () => {
+      calls += 1;
+      if (calls === 1) {
+        entered.open();
+        await held.wait; // outlives the lease
+        return;
+      }
+      throw new TypeError('the newer claim fails');
+    });
+    await append('test.stale');
+    const stale = new OutboxPublisher(db.sql, subs, () => NOW).tick();
+    await entered.wait;
+    const claimed = await state();
+    expect(claimed.claim_token).toMatch(/^[0-9a-f-]{36}$/);
+    expect(claimed.next_attempt_at).toEqual(new Date(NOW.getTime() + CLAIM_LEASE_MS));
+
+    const afterLease = new Date(NOW.getTime() + CLAIM_LEASE_MS);
+    expect(await new OutboxPublisher(db.sql, subs, () => afterLease).tick()).toEqual({
+      published: 0,
+      failed: 1,
+    });
+    const settled = await state();
+    expect(settled).toMatchObject({
+      published_at: null,
+      publish_attempts: 1,
+      last_error: 'stale: TypeError',
+      next_attempt_at: new Date(afterLease.getTime() + backoffMs(1)),
+      claim_token: null,
+    });
+
+    held.open();
+    expect(await stale).toEqual({ published: 0, failed: 0 });
+    expect(await state()).toEqual(settled); // the late success changed nothing
+  });
+
+  it("a tick that lost its claim cannot record a failure over the newer tick's lease", async () => {
+    const subs = new OutboxSubscribers();
+    const heldFirst = gate();
+    const enteredFirst = gate();
+    const heldSecond = gate();
+    const enteredSecond = gate();
+    let calls = 0;
+    subs.subscribe('test.stale', 'stale', async () => {
+      calls += 1;
+      if (calls === 1) {
+        enteredFirst.open();
+        await heldFirst.wait;
+        throw new TypeError('the stale delivery fails late');
+      }
+      enteredSecond.open();
+      await heldSecond.wait;
+    });
+    await append('test.stale');
+    const stale = new OutboxPublisher(db.sql, subs, () => NOW).tick();
+    await enteredFirst.wait;
+    const afterLease = new Date(NOW.getTime() + CLAIM_LEASE_MS);
+    const fresh = new OutboxPublisher(db.sql, subs, () => afterLease).tick();
+    await enteredSecond.wait;
+    const newerClaim = await state();
+    expect(newerClaim).toMatchObject({
+      publish_attempts: 0,
+      next_attempt_at: new Date(afterLease.getTime() + CLAIM_LEASE_MS),
+    });
+    expect(newerClaim.claim_token).not.toBeNull();
+
+    heldFirst.open();
+    expect(await stale).toEqual({ published: 0, failed: 0 });
+    expect(await state()).toEqual(newerClaim); // lease, token and attempts untouched
+
+    heldSecond.open();
+    expect(await fresh).toEqual({ published: 1, failed: 0 });
+    expect(await state()).toMatchObject({ publish_attempts: 0, claim_token: null });
+    expect((await state()).published_at).not.toBeNull();
   });
 
   it('refuses a second subscriber with the same name for one event type', () => {

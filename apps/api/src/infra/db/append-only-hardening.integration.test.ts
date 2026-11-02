@@ -113,7 +113,8 @@ describe.runIf(TEST_DATABASE_URL)(
           await tx`SELECT id FROM domain_events WHERE false FOR UPDATE SKIP LOCKED`;
           await tx`UPDATE domain_events
                     SET published_at = now(), publish_attempts = 1,
-                        last_error = 'x', next_attempt_at = now()
+                        last_error = 'x', next_attempt_at = now(),
+                        claim_token = gen_random_uuid()
                   WHERE false`;
         }),
       ).resolves.toBeUndefined();
@@ -123,6 +124,21 @@ describe.runIf(TEST_DATABASE_URL)(
       await expect(asApp((tx) => tx`DELETE FROM domain_events WHERE false`)).rejects.toThrow(
         PERMISSION_DENIED,
       );
+    });
+
+    it('0018: the app may update only the outbox delivery columns, the claim token among them', async () => {
+      const updatable = await db.sql<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'domain_events'
+          AND has_column_privilege(${APP_ROLE}, 'public.domain_events', column_name, 'UPDATE')
+        ORDER BY column_name`;
+      expect(updatable.map((c) => c.column_name)).toEqual([
+        'claim_token',
+        'last_error',
+        'next_attempt_at',
+        'publish_attempts',
+        'published_at',
+      ]);
     });
 
     it('M4: invoices can be locked and cancelled but never re-priced or deleted', async () => {

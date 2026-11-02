@@ -8,6 +8,9 @@ import { z } from 'zod';
  */
 export const BookingRef = z.string().regex(/^CLK-\d{4,10}$/, 'booking reference');
 
+/** A support ticket's reference (support_tickets.reference, 0002): "TKT-1043". */
+export const TicketRef = z.string().regex(/^TKT-\d{4,10}$/, 'ticket reference');
+
 /** formatIstWhen(): "Sat 14 Nov, 4:30 pm". */
 export const IstWhen = z
   .string()

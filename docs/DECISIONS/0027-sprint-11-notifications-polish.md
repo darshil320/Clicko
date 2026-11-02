@@ -74,11 +74,30 @@ fixed or recorded here with an owner. Recurring checks go into CI:
 - a secret scan;
 - the audited-routes and guard-coverage tests.
 
-Recorded (identity and access audit, L4 — owner: API): the global per-IP throttler
-(`IpThrottlerGuard`, @nestjs/throttler) keeps its counters in process memory. That is correct for
-the single launch instance only; before the API runs as more than one instance, its storage moves
-to Redis (a ThrottlerStorage backed by the shared REDIS client), or each instance would allow the
-full limit. The OTP limits (Postgres + Redis) and the staff lockouts (Redis) are already shared.
+Recorded (identity and access audit, L4 — owner: API), **done 2 Nov 2026:** the global per-IP
+throttler (`IpThrottlerGuard`, @nestjs/throttler) used to keep its counters in process memory, so
+each instance would have allowed the full limit. Its storage is now the shared Redis
+(`RedisThrottlerStorage`, `common/http/redis-throttler-storage.ts`, on the REDIS client):
+- One Lua script per request does the INCR, the window's PEXPIRE and the block, atomically on every
+  instance. It is a fixed window (120 a minute per route and IP bucket): past the limit the caller
+  is refused for the block duration (the window, by default) and nothing is counted meanwhile. A
+  fixed window can let up to twice the limit through across a window boundary; it is a backstop.
+- Keys: `{QUEUE_PREFIX}:throttle:{sha256(throttler name, guard key)}:hits|block`. No address
+  lands in Redis, and both keys share one cluster slot.
+- **Fails open.** The request is allowed when Redis errors, has not answered within 1 s, or the
+  client is already known to be disconnected. A warning is logged at most once a minute per
+  process.
+  - After a failure, requests skip Redis for 5 s, so an outage neither builds a queue of commands
+    in the shared client nor slows every request.
+  - The OTP limits (Postgres + Redis) and the staff lockouts (Redis) are separate and enforced on
+    their own.
+- Now that the limit is shared, it is effectively stricter than before for any route that had more
+  than one instance behind it.
+- **Accepted LOWs** (security review, 2 Nov):
+  - While it fails open, `X-RateLimit-Remaining` shows the full limit.
+  - `EVAL` sends the script on every request.
+  - Rotating IPv6 /64s, which already get past a per-/64 limit, also add keys. Each expires within
+    a window. A coarser /48 limit is a launch-checklist item.
 
 ### D6a — Money and files audit (31 Oct 2026): what was done
 Each item has a regression test. Migration/addendum **0012** carries the schema side.
@@ -173,8 +192,26 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
   `@expo/cli`, which is build tooling and is never fed untrusted input. No patched 3.x exists, and
   Clickco's own zod is 4.6.7. It is ignored in `pnpm-workspace.yaml`. Review at each Expo SDK bump.
 - **Recorded LOWs (owner: API, before S12 launch):**
-  - Give each outbox delivery a time limit under the lease, plus a claim token that the settle
-    updates must match.
+  - **Done 2 Nov 2026:** each outbox delivery has a time limit under the lease, and a claim token
+    that the settle updates must match.
+    - One event's delivery (its subscribers, in order) may run 2 minutes (`DELIVERY_TIMEOUT_MS`).
+      A tick starts none after 5 minutes, so its last one settles inside the 10-minute lease.
+    - Past the limit, the subscriber still running is recorded as failed (`DeliveryTimeout`).
+      Later subscribers wait for the retry. Each handler gets an AbortSignal, aborted at the limit.
+    - JavaScript cannot stop a handler that ignores the signal. So the tick keeps its claim (token
+      and a fresh lease) until that handler returns, then hands the event back on its backoff.
+    - A handler that never returns loses the claim when the lease ends. Either way, no second copy
+      starts while the first is known to be running.
+    - Addendum/migration **0018** adds `domain_events.claim_token`, a random uuid written with each
+      claim. Marking an event published, recording a failure and handing a claim back all match
+      the token and clear it. A tick that outlived its lease, once another tick has claimed the
+      event, changes nothing. clickco_app gets UPDATE on the new column only.
+    - During a rolling deploy, old instances neither write nor check the token. The guarantee holds
+      once they are gone.
+    - Not yet:
+      - No subscriber passes the signal on to its own I/O.
+      - If a settle query itself throws, the tick's unstarted claims wait out the lease instead of
+        being handed back (LOW).
   - Replace `script-src 'unsafe-inline'` on the web CSP with build hashes.
   - Run one full-history gitleaks scan of the public repo.
 
@@ -183,7 +220,8 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
 - The link in messages is `PUBLIC_API_URL/d/<token>`. Until the delivery page exists (D6a), it
   returns the JSON file list.
 - Ticket acknowledged/resolved and the Pro assignment reminder have no domain event yet, so they
-  have no template either. They wait for those events.
+  have no template either. They wait for those events. (2 Nov: a raised ticket now has one;
+  see D5a.)
 - Masked calls are their own `CallsModule`. A binding opens only for the booking's current
   assignment. An access-denied or unsafe-site ending closes it 2 h later, like a check-out. Calls
   are reserved under a lock before the provider is asked, with per-window and per-day caps.
@@ -252,9 +290,16 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
     request is resent with the same key, so a credit is never issued twice.
   - Both appear only for the roles and cities the API accepts.
   - The ticket Resolve dialog now says the client reads the summary in the app.
+- **Notifications (2 Nov 2026):** three more versioned templates, all transactional, on WhatsApp,
+  SMS and push. Their variables are strict, and none is free text:
+  - `ticket.raised` → **TICKET_RECEIVED** to the client: the ticket reference and a reply-by time,
+    which is the ticket's own acknowledgement deadline (48 h).
+  - `payout.withheld` → **PRO_PAYOUT_ON_HOLD** to the photographer: the gross and the shoot date.
+  - `payout.released` → **PRO_PAYOUT_RELEASED** to the photographer: the gross and the shoot date.
+  - Never in a message: the withheld reason (staff-written), who released it, or the client's words.
+  - Still missing: **TICKET_RESOLVED** (`TicketsService.resolve` emits no event), a message when
+    staff acknowledge a ticket (no event either), and the Pro assignment reminder.
 - **Not done here:**
-  - Notifications are not wired: `ticket.raised`, `payout.withheld` and `payout.released` to the
-    photographer, and ticket acknowledged/resolved (still no event).
   - Tickets raised without a booking are visible only to all-city support.
   - A refund that failed and was then abandoned still shows the client "processing".
   - The co-approver check returns different errors for finance and non-finance emails, which lets

@@ -15,6 +15,9 @@ const USER = '22222222-2222-4222-8222-222222222222';
 const PRO = '33333333-3333-4333-8333-333333333333';
 const PRO_2 = '44444444-4444-4444-8444-444444444444';
 const ASSIGNMENT = '55555555-5555-4555-8555-555555555555';
+const TICKET = '77777777-7777-4777-8777-777777777777';
+const PAYOUT = '88888888-8888-4888-8888-888888888888';
+const STAFF = '99999999-9999-4999-8999-999999999999';
 const NOW = new Date('2026-11-14T06:30:00Z'); // 12:00 IST
 const TOKEN = 'c'.repeat(43);
 
@@ -240,6 +243,84 @@ describe('event map (ADR-0027 D2)', () => {
     expect(i.recipient).toEqual({ kind: 'PHOTOGRAPHER', id: PRO });
     expect(i.variables).toEqual({ amount: '₹12,345', utrLast4: '5678' });
     expect(i.bookingId).toBeNull();
+  });
+
+  it('ticket raised → the client, with the reference and the reply-by time from its deadline', async () => {
+    const raised = event(
+      'ticket.raised',
+      {
+        ticket_id: TICKET,
+        reference: 'TKT-1043',
+        raised_by_kind: 'USER',
+        user_id: USER,
+        booking_id: null,
+        category: 'APP_ISSUE',
+        is_grievance: false,
+        ack_due_at: '2026-11-16T06:30:00.000Z', // NOW + 48 h: Mon 16 Nov, 12:00 IST
+        resolve_due_at: '2026-12-14T06:30:00.000Z',
+      },
+      TICKET,
+    );
+    const i = await only('ticket.raised', raised);
+    expect(i.recipient).toEqual({ kind: 'USER', id: USER });
+    expect(i.variables).toEqual({ ticketRef: 'TKT-1043', replyBy: 'Mon 16 Nov, 12:00 pm' });
+    expect(i.bookingId).toBeNull();
+    expect(i.data).toEqual({ template: 'TICKET_RECEIVED' });
+
+    // About a booking: carried for the send record and the push deep link.
+    const aboutBooking = event('ticket.raised', { ...raised.payload, booking_id: BOOKING }, TICKET);
+    expect((await only('ticket.raised', aboutBooking)).data).toEqual({
+      template: 'TICKET_RECEIVED',
+      bookingId: BOOKING,
+    });
+    // A deadline that does not parse leaves a null variable: the send is skipped, not guessed.
+    const [odd] = await resolve(
+      'ticket.raised',
+      event('ticket.raised', { ...raised.payload, ack_due_at: 'soon' }, TICKET),
+    );
+    expect(odd?.variables.replyBy).toBeNull();
+    // Not raised by a client account: nobody to acknowledge to.
+    const byStaff = event(
+      'ticket.raised',
+      { ...raised.payload, raised_by_kind: 'PHOTOGRAPHER', user_id: null },
+      TICKET,
+    );
+    expect(await resolve('ticket.raised', byStaff)).toEqual([]);
+  });
+
+  it('payout withheld and released → the photographer, with the gross and the shoot date only', async () => {
+    const held = event(
+      'payout.withheld',
+      {
+        payout_id: PAYOUT,
+        photographer_id: PRO,
+        basis: 'DATA_LOSS',
+        gross_paise: 510_000,
+        reason: 'Data loss number 3 for this photographer in 365 days',
+      },
+      PAYOUT,
+    );
+    const onHold = await only('payout.withheld', held);
+    expect(onHold.recipient).toEqual({ kind: 'PHOTOGRAPHER', id: PRO });
+    expect(onHold.variables).toEqual({ amount: '₹5,100', shootDate: '15 Nov 2026' });
+    expect(onHold.data).toEqual({ template: 'PRO_PAYOUT_ON_HOLD', bookingId: BOOKING });
+    // The staff-written reason is free text: it never reaches a message.
+    expect(JSON.stringify(onHold)).not.toContain('Data loss');
+
+    const released = event(
+      'payout.released',
+      { payout_id: PAYOUT, photographer_id: PRO, gross_paise: 510_000, released_by: STAFF },
+      PAYOUT,
+    );
+    const paid = await only('payout.released', released);
+    expect(paid.recipient).toEqual({ kind: 'PHOTOGRAPHER', id: PRO });
+    expect(paid.variables).toEqual({ amount: '₹5,100', shootDate: '15 Nov 2026' });
+    expect(JSON.stringify(paid)).not.toContain(STAFF);
+
+    // No photographer, or a booking that no longer resolves: nothing.
+    const nobody = event('payout.released', { ...released.payload, photographer_id: null }, PAYOUT);
+    expect(await resolve('payout.released', nobody)).toEqual([]);
+    expect(await resolve('payout.withheld', held, ctx({ booking: null }))).toEqual([]);
   });
 
   it('a booking that no longer exists resolves to nothing', async () => {
