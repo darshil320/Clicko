@@ -141,7 +141,7 @@ export function HeroPicker({
       </div>
       <ShootBar
         visible={barVisible}
-        summary={`${media} · ${category.label} · ${city.name} · ${shoot.hours} h`}
+        summary={`${category.label} in ${city.name}, ${shoot.hours} h, ${media.toLowerCase()}`}
         copy={copy}
         extra={shoot.media === 'BOTH' ? '+ video in app' : undefined}
         pickerHref={`#${PICKER_ID}`}

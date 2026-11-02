@@ -1,6 +1,5 @@
 import { CREATOR_POINTS } from '../../content/moments';
 import { REEL_WALL, REELS } from '../../content/reels';
-import { ButtonArrow } from '../ui/ButtonArrow';
 import { ReelVideo } from '../ui/ReelVideo';
 import { Section } from '../ui/Section';
 
@@ -24,12 +23,9 @@ export function ReelsWall() {
       </ul>
       <div className="creators reveal">
         <div className="creators-head">
-          <h3>
-            Stills for the grid. Clips for the reels.
-          </h3>
+          <h3>Stills for the grid. Clips for the reels.</h3>
           <a className="btn btn-dark" href="#shoot-creator">
             Plan a content day
-            <ButtonArrow />
           </a>
         </div>
         <ul className="checklist">

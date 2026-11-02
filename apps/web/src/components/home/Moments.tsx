@@ -2,7 +2,6 @@ import { MEDIA_OPTIONS, MOMENTS } from '../../content/moments';
 import { REELS } from '../../content/reels';
 import { TIERS } from '../../content/tiers';
 import { quoteFor } from '../../lib/pricing';
-import { ButtonArrow } from '../ui/ButtonArrow';
 import { ReelVideo } from '../ui/ReelVideo';
 import { Section } from '../ui/Section';
 
@@ -34,14 +33,13 @@ export function Moments() {
                 <h3>{moment.title}</h3>
                 <p className="muted">{moment.body}</p>
                 <p className="moment-meta">
-                  {TIERS[tier].label} · {hours} h · {mediaLabel}
+                  {TIERS[tier].label} for {hours} h, {mediaLabel?.toLowerCase()}
                 </p>
                 <p className="moment-price num">
                   Photos from <strong>{price.base}</strong> + GST
                 </p>
                 <a className="btn btn-dark btn-sm" href={`#shoot-${moment.id}`}>
                   Book this
-                  <ButtonArrow />
                 </a>
               </div>
             </li>

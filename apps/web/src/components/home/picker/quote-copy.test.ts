@@ -10,7 +10,7 @@ describe('describeQuote (ADR-0023)', () => {
     expect(describeQuote('PHOTO', quote)).toEqual({
       label: 'You pay',
       price: '₹10,030',
-      lines: ['₹8,500 + ₹1,530 GST · 120 delivered photos'],
+      lines: ['₹8,500 + ₹1,530 GST, 120 delivered photos'],
       priced: true,
     });
   });
@@ -20,7 +20,7 @@ describe('describeQuote (ADR-0023)', () => {
     expect(copy.label).toBe('Photos');
     expect(copy.price).toBe('₹10,030');
     expect(copy.lines).toEqual([
-      '₹8,500 + ₹1,530 GST · 120 delivered photos',
+      '₹8,500 + ₹1,530 GST, 120 delivered photos',
       `+ video, ${VIDEO_PRICE_NOTE}`,
     ]);
   });

@@ -8,7 +8,7 @@ import { formatRupees } from '../../lib/money';
 import { fromPrice } from '../../lib/pricing';
 import { paths } from '../../lib/routes';
 import { Breadcrumbs } from '../ui/Breadcrumbs';
-import { Icon, IconChip } from '../ui/Icon';
+import { IconChip } from '../ui/Icon';
 import { CATEGORY_MOOD, PhotoFrame, type PhotoMood } from '../ui/PhotoFrame';
 
 export function StatusBadge({ city }: { readonly city: LaunchCity }) {
@@ -103,9 +103,6 @@ export function CategoryLinks({
               </h3>
               <p className="muted">{category.summary}</p>
               <p className="price-note push">From {formatRupees(price.basePaise)} + GST</p>
-              <span className="card-arrow" aria-hidden="true">
-                <Icon name="arrowRight" />
-              </span>
             </div>
           </li>
         );

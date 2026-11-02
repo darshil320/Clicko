@@ -104,11 +104,7 @@ export default async function CityCategoryPage({ params }: Props) {
           <CityNotes city={city} />
         </div>
       </Section>
-      <Section
-        id="planning"
-        raised
-        title={`Planning a ${category.label.toLowerCase()} shoot`}
-      >
+      <Section id="planning" raised title={`Planning a ${category.label.toLowerCase()} shoot`}>
         <div className="split">
           <div>
             <ul className="checklist">
@@ -126,19 +122,13 @@ export default async function CityCategoryPage({ params }: Props) {
             </ul>
           </div>
           <div className={`card tier recommend tone-${recommended.edge}`}>
-            <p className="tier-name">
-              <span className="tier-dot" aria-hidden="true" />
-              Our recommendation
-            </p>
+            <p className="tier-name">Our recommendation</p>
             <h3>{recommended.label}</h3>
             <p className="muted">{category.recommended.why}</p>
           </div>
         </div>
       </Section>
-      <Section
-        id="faq"
-        title={`${category.label} photography in ${city.name}: FAQs`}
-      >
+      <Section id="faq" title={`${category.label} photography in ${city.name}: FAQs`}>
         <FaqList faqs={content.faqs} />
       </Section>
       <Section id="related" title={`More shoots in ${city.name}`}>

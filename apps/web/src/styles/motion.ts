@@ -45,11 +45,10 @@ ${heroStagger()}
   .grid>li,.bento>li,.steps>li,.bands-list>li,.tiers>li,.faq>details,.moment{animation:fade-up linear both;
     animation-timeline:view();animation-range:entry ${revealRange.from}% entry ${revealRange.to}%}
 }
-.lift,.btn,.tab,.input,.nav-list a,.card-arrow,.cat-tile,.seg-opt>span,.stepper button{transition:transform ${quick},box-shadow ${quick},
+.lift,.btn,.tab,.input,.nav-list a,.cat-tile,.seg-opt>span,.stepper button{transition:transform ${quick},box-shadow ${quick},
   border-color ${quick},background-color ${quick},color ${quick}}
 .lift:hover{transform:translateY(${px(-liftPx)})}
 .btn-primary:hover,.btn-dark:hover{transform:translateY(${px(-liftPx / 2)})}
-.lift:hover .card-arrow{transform:translateX(${px(liftPx)})}
 .lift:active,.btn:active{transform:none}
 .photo::before{transition:scale ${ms(motionMs.heroMs)} ${ease}}
 .lift:hover>.photo::before{scale:${photoZoom}}

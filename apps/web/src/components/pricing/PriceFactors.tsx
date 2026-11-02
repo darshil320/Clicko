@@ -11,7 +11,7 @@ export function PriceFactors() {
     (c) => `${c.label} ${percentAbove(CATEGORY_UPLIFT_BPS[c.code])}`,
   );
   const rows: ReadonlyArray<readonly [string, string]> = [
-    ['Category', categoryLines.join(' · ')],
+    ['Category', categoryLines.join(', ')],
     ['Weekend (Sat, Sun)', percentAbove(PRICE_FACTORS.weekendBps)],
     ['Night start (10 pm – 6 am)', percentAbove(PRICE_FACTORS.nightBps)],
     [

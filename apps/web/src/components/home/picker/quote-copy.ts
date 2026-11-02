@@ -14,7 +14,7 @@ export interface QuoteCopy {
  * card; video has no rate yet, so it is never given a figure.
  */
 export function describeQuote(media: ShootMedia, quote: Quote): QuoteCopy {
-  const photoLine = `${quote.base} + ${quote.gst} GST · ${quote.frames} delivered photos`;
+  const photoLine = `${quote.base} + ${quote.gst} GST, ${quote.frames} delivered photos`;
   if (media === 'VIDEO') {
     return { label: 'Video', price: 'Priced in the app', lines: [VIDEO_DELIVERY], priced: false };
   }

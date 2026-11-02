@@ -43,7 +43,6 @@ export function Trust() {
                 <p className={wide && point.facts ? undefined : 'push'}>
                   <a className="text-link" href={point.link.href}>
                     {point.link.label}
-                    <Icon name="arrowRight" />
                   </a>
                 </p>
               ) : null}

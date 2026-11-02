@@ -30,11 +30,8 @@ export function CityCards() {
             <p className="muted">{city.summary}</p>
             <p className="city-areas push">
               <Icon name="mapPin" />
-              {city.areas.slice(0, AREAS_SHOWN).join(' · ')}
+              {city.areas.slice(0, AREAS_SHOWN).join(', ')}
             </p>
-            <span className="card-arrow" aria-hidden="true">
-              <Icon name="arrowRight" />
-            </span>
           </div>
         </li>
       ))}
@@ -69,7 +66,6 @@ export function CitiesServed() {
         <div>
           <a className="btn btn-secondary" href="#waitlist">
             Join the waitlist
-            <Icon name="arrowRight" />
           </a>
         </div>
       </div>

@@ -1,5 +1,4 @@
 import { ButtonArrow } from '../../ui/ButtonArrow';
-import { Icon } from '../../ui/Icon';
 import type { QuoteCopy } from './quote-copy';
 
 export function QuoteTotal({
@@ -33,7 +32,6 @@ export function QuoteTotal({
         </a>
         <a className="text-link" href={pageHref}>
           {pageLabel}
-          <Icon name="arrowRight" />
         </a>
       </div>
     </div>

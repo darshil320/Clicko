@@ -24,7 +24,7 @@ interface DeliveryFilesProps {
 export function DeliveryFiles({ folder, apiBase, token, now }: DeliveryFilesProps) {
   const copy = KIND_COPY[folder.kind];
   const left = timeLeft(folder.expiresAt, now);
-  const total = `${fileCount(folder.fileCount)} · ${formatBytes(folder.totalBytes)}`;
+  const total = `${fileCount(folder.fileCount)}, ${formatBytes(folder.totalBytes)}`;
   return (
     <>
       <div className="hero-copy">

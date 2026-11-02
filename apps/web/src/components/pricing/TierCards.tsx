@@ -2,15 +2,9 @@ import { SIGNATURE_MIN_HOURS } from '../../content/rate-card';
 import { CONTACT } from '../../content/site';
 import { TIERS, type TierCopy } from '../../content/tiers';
 import type { PriceCardData } from '../../lib/pricing';
-import { Icon } from '../ui/Icon';
 
 function TierName({ tier }: { readonly tier: TierCopy }) {
-  return (
-    <p className="tier-name">
-      <span className="tier-dot" aria-hidden="true" />
-      {tier.label}
-    </p>
-  );
+  return <p className="tier-name">{tier.label}</p>;
 }
 
 /** Plain presentational markup: rendered on the server, and inside the city switcher. */
@@ -58,7 +52,6 @@ export function SignatureCard() {
       <p className="push">
         <a className="text-link" href={CONTACT.signatureEnquiry}>
           Enquire about Signature
-          <Icon name="arrowRight" />
         </a>
       </p>
     </li>

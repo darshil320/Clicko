@@ -23,8 +23,6 @@ import {
   webType,
 } from './tokens';
 
-const TIER_TONES = ['tertiary', 'secondary', 'primary'] as const;
-
 /** Photo cards, steps, trust tiles, tier cards, lead-time table, city cards, CTA panel. */
 export function sectionsCss(): string {
   return [
@@ -46,10 +44,6 @@ function photoCardsCss(): string {
 .card-photo .card-body{display:flex;flex-direction:column;flex:1;padding:${px(S[5])} ${px(S[3])} ${px(S[3])}}
 .card-photo .card-body>:last-child{margin-bottom:0}
 .card-photo h3{font-family:${fontDisplay};${fluidType(webType.figure)};margin-bottom:${px(S[2])}}
-.card-photo .card-arrow{top:auto;bottom:${px(S[5])};right:${px(S[5])};display:grid;place-items:center;
-  width:${px(S[8] + S[1])};height:${px(S[8] + S[1])};border-radius:${px(R.full)};background:${v('text-primary')};
-  color:${v('surface-overlay')}}
-.lift.card-photo:hover .card-arrow{color:${v('surface-overlay')}}
 .card-photo .photo .badge{position:absolute;z-index:1;top:${px(S[3])};left:${px(S[3])};margin:0}
 `;
 }
@@ -92,17 +86,9 @@ ${mq(bp.sm)}{.grid-feature>:nth-child(5){grid-column:span 2}}
 }
 
 function tiersCss(): string {
-  const dots = TIER_TONES.map(
-    (tone) => `.tone-${tone} .tier-dot{background:${v(`text-${tone}`)}}`,
-  ).join('');
   return `
-.tier-name{display:flex;align-items:center;gap:${px(S[2])};${label};color:${v('text-secondary')};
+.tier-name{${label};color:${v('text-secondary')};
   margin:0 0 ${px(S[5])}}
-.tier-dot{width:${px(S[2])};height:${px(S[2])};border-radius:${px(R.full)};background:${v('border-strong')}}
-${dots}
-.tone-accent .tier-dot{background:${v('accent-default')};box-shadow:0 0 0 ${px(S[1] - stroke.hairline)}
-  ${v('surface-overlay')}}
-.tone-strong .tier-dot{background:${v('text-primary')}}
 .tier.tone-accent{background:${v('accent-subtle')};border-color:${v('accent-default')};
   box-shadow:0 0 0 ${px(stroke.hairline)} ${v('accent-default')},${shadow('md')}}
 .price-line{font-family:${fontDisplay};${fluidType(webType.figure)};font-variant-numeric:tabular-nums;margin:0;
@@ -114,7 +100,6 @@ ${dots}
 .tier-signature,.tier-signature .price-line{color:${v('surface-overlay')}}
 .tier-signature .tier-name,.tier-signature .muted,.tier-signature .price-note,.tier-signature .price-line small,
 .tier-signature .checklist li{color:${v('border-strong')}}
-.tier-signature .tier-dot{background:${v('accent-default')}}
 .tier-signature .price-line,.tier-signature .price-note{border-color:${v('text-secondary')}}
 .tier-signature .checklist li::before{background:transparent;border-color:${v('text-secondary')}}
 .tier-signature .checklist li::after{border-color:${v('accent-default')}}

@@ -95,9 +95,7 @@ ${mq(bp.lg)}{
 }
 .card .push{margin-top:auto;padding-top:${px(S[4])}}
 .lift:hover{box-shadow:${shadow('md')};border-color:${v('border-strong')}}
-.card-arrow{position:absolute;top:${px(S[5])};right:${px(S[5])};color:${v('text-tertiary')}}
-.lift:hover .card-arrow{color:${v('text-primary')}}
-${mq(bp.lg)}{.card{padding:${px(S[6])}}.card-arrow{top:${px(S[6])};right:${px(S[6])}}}
+${mq(bp.lg)}{.card{padding:${px(S[6])}}}
 .icon-chip{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
   width:${px(S[10])};height:${px(S[10])};margin-bottom:${px(S[5])};border-radius:${px(R.md)};
   background:${v('surface-raised')};color:${v('text-primary')}}

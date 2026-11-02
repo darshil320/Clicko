@@ -13,7 +13,7 @@ export const MEDIA_OPTIONS: readonly { readonly value: ShootMedia; readonly labe
 ];
 
 /** Terms §4.3: video is delivered unedited and camera-original; edits are a separate paid service. */
-export const VIDEO_DELIVERY = 'Unedited camera-original clips · reel edits are a paid add-on';
+export const VIDEO_DELIVERY = 'Unedited camera-original clips; reel edits are a paid add-on';
 export const VIDEO_PRICE_NOTE = 'priced in the app at launch';
 
 /** A real reason people book, mapped onto a bookable rate-card shoot so its price is exact. */
