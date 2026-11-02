@@ -14,9 +14,9 @@ import CalendarDays from 'lucide-react-native/icons/calendar-days';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { type Control, Controller, useForm, useWatch } from 'react-hook-form';
 import { View } from 'react-native';
-import { userMessage } from '@/shared/errors';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { useNow } from '@/shared/hooks/useNow';
+import { screenState } from '@/shared/screen-state';
 import { useQuote } from '../hooks';
 import { addonProbeRequest, type BookingDraft, quoteRequest, VenueForm } from '../lib/draft';
 import { stepHours } from '../lib/duration';
@@ -71,6 +71,8 @@ function PriceFooter({ draft, onReview }: { draft: BookingDraft; onReview: () =>
   );
   const quote = useQuote(request);
   const priced = quote.data?.kind === 'QUOTE' ? quote.data : null;
+  const state = screenState(quote);
+  const failure = state.kind === 'offline' || state.kind === 'error' ? state : null;
 
   return (
     <>
@@ -79,9 +81,9 @@ function PriceFooter({ draft, onReview }: { draft: BookingDraft; onReview: () =>
           <Text variant="micro" tone="tertiary">
             Running total
           </Text>
-          {quote.isError ? (
+          {failure ? (
             <Text tone="danger" variant="caption" accessibilityLiveRegion="polite">
-              {userMessage(quote.error)}
+              {failure.message}
             </Text>
           ) : priced ? (
             <Text variant="h2" tabular testID="running-total">
@@ -100,8 +102,13 @@ function PriceFooter({ draft, onReview }: { draft: BookingDraft; onReview: () =>
           </Text>
         ) : null}
       </View>
-      {quote.isError ? (
-        <Button label="Retry price" variant="secondary" onPress={() => void quote.refetch()} />
+      {failure ? (
+        <Button
+          label="Retry price"
+          variant="secondary"
+          loading={failure.retrying}
+          onPress={() => void quote.refetch()}
+        />
       ) : (
         <Button
           label="Review"

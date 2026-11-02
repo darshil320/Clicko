@@ -4,9 +4,12 @@ import { QueryClient } from '@tanstack/react-query';
 const MAX_RETRIES = 2;
 const STALE_MS = 30_000;
 
-/** A 4xx will fail the same way again; network blips and 5xx get two quiet retries. */
+/**
+ * A 4xx will fail the same way again, and so will an id the api-client refused before sending
+ * (INVALID_ID); network blips and 5xx get two quiet retries.
+ */
 export function shouldRetry(failureCount: number, error: unknown): boolean {
-  if (isApiError(error) && error.isClientError) return false;
+  if (isApiError(error) && (error.isClientError || error.code === 'INVALID_ID')) return false;
   return failureCount < MAX_RETRIES;
 }
 

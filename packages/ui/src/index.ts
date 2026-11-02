@@ -8,7 +8,9 @@ export { Card, type CardPadding, type CardProps, type CardTone } from './Card';
 export { Checkbox, type CheckboxProps } from './Checkbox';
 export { Chip, type ChipProps } from './Chip';
 export { cx } from './cx';
-export { EmptyState, type EmptyStateProps } from './EmptyState';
+export { EmptyState, type EmptyStateAction, type EmptyStateProps } from './EmptyState';
+// S11 D5: empty, error and offline states (shared by the client and Pro apps).
+export { ErrorState, type ErrorStateProps } from './ErrorState';
 // White theme (ADR-0017): elevation, motion and the light palette.
 export { type ElevationLevel, type ElevationStyle, elevationStyle } from './elevation';
 export { FONT_FACES, fontFaceFor } from './fonts';
@@ -22,14 +24,52 @@ export {
 } from './IconTile';
 export { Input, type InputProps } from './Input';
 export { ListRow, type ListRowProps } from './ListRow';
+export {
+  NetworkStatusProvider,
+  type NetworkStatusProviderProps,
+  type NetworkStatusValue,
+  useNetworkStatus,
+} from './NetworkStatus';
+export {
+  type CacheActionLike,
+  isOfflineState,
+  type NetworkSignal,
+  type NetworkState,
+  nextNetworkState,
+  ONLINE,
+  signalFromAction,
+  signalFromError,
+} from './network-status';
+export { OfflineBanner, type OfflineBannerProps } from './OfflineBanner';
 export { palette } from './palette';
 export { Reveal, type RevealProps } from './Reveal';
 export { Screen, type ScreenProps } from './Screen';
 export { Section, type SectionProps } from './Section';
 export { type Segment, SegmentedControl, type SegmentedControlProps } from './SegmentedControl';
 export { Skeleton, type SkeletonProps } from './Skeleton';
+export { StateView, type StateViewProps } from './StateView';
 export { type BadgeTone, StatusBadge, type StatusBadgeProps } from './StatusBadge';
 export { Switch, type SwitchProps } from './Switch';
+export {
+  type Failure,
+  type FailureKind,
+  type FetchStatus,
+  isEmptyData,
+  PAUSED_MESSAGE,
+  pickScreenState,
+  type QueryLike,
+  type QueryStatus,
+  type ScreenState,
+  type ScreenStateOptions,
+} from './screen-state';
+export {
+  type BannerContent,
+  type BannerKind,
+  bannerContent,
+  errorBody,
+  STATE_COPY,
+  type StateVariant,
+} from './states.copy';
 export { Text, type TextProps, type TextVariant } from './Text';
 export { TierBadge, type TierBadgeProps } from './TierBadge';
 export { type EdgeTone, TIER_LABEL, TIER_TONE, type Tone } from './tones';

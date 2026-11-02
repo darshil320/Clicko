@@ -1,7 +1,7 @@
 import {
   Button,
   Card,
-  EmptyState,
+  ErrorState,
   IconTile,
   Screen,
   Section,
@@ -11,27 +11,38 @@ import {
   TIER_LABEL,
 } from '@clickco/ui';
 import Check from 'lucide-react-native/icons/check';
-import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import Hourglass from 'lucide-react-native/icons/hourglass';
 import { Share, View } from 'react-native';
 import { awaitingPayment, journey, statusPresentation } from '@/shared/booking-status';
 import { categoryLabel } from '@/shared/catalogue';
-import { userMessage } from '@/shared/errors';
+import { isNotFound } from '@/shared/errors';
 import { formatShootWindow } from '@/shared/format/datetime';
+import { screenState } from '@/shared/screen-state';
 import { useBooking } from '../hooks';
 import { venueArea } from '../lib/venue';
+import { BookingMissing } from './BookingMissing';
 import { JourneyTimeline } from './JourneyTimeline';
 
 export interface ConfirmedViewProps {
-  readonly bookingId: string;
+  readonly bookingId: string | undefined;
   readonly onViewBooking: (bookingId: string) => void;
+  /** The way out when the booking does not exist (or is not this client's). */
+  readonly onBackToBookings: () => void;
 }
 
 /** Screen 5 — "You're booked." A soft amber success mark, the reference, and what happens next. */
-export function ConfirmedView({ bookingId, onViewBooking }: ConfirmedViewProps) {
+export function ConfirmedView({ bookingId, onViewBooking, onBackToBookings }: ConfirmedViewProps) {
   const detail = useBooking(bookingId);
+  const state = screenState(detail);
 
-  if (detail.isPending) {
+  if (!bookingId || (detail.data === undefined && isNotFound(detail.error))) {
+    return (
+      <Screen>
+        <BookingMissing onBackToBookings={onBackToBookings} />
+      </Screen>
+    );
+  }
+  if (state.kind === 'loading') {
     return (
       <Screen>
         <View className="items-center gap-4 pt-12">
@@ -42,20 +53,21 @@ export function ConfirmedView({ bookingId, onViewBooking }: ConfirmedViewProps) 
       </Screen>
     );
   }
-  if (detail.isError) {
+  if (state.kind === 'offline' || state.kind === 'error') {
     return (
       <Screen>
-        <EmptyState
-          icon={CircleAlert}
+        <ErrorState
+          offline={state.kind === 'offline'}
           title="We couldn't load your booking"
-          body={userMessage(detail.error)}
-          action={{ label: 'Try again', onPress: () => void detail.refetch() }}
+          body={state.message}
+          retrying={state.retrying}
+          onRetry={() => void detail.refetch()}
         />
       </Screen>
     );
   }
 
-  const { booking } = detail.data;
+  const { booking } = state.data;
   const when = formatShootWindow(booking.scheduledStart, booking.scheduledHours);
   const what = `${TIER_LABEL[booking.tier]} · ${categoryLabel(booking.categoryCode)}`;
   const where = venueArea(booking.venueAddress, booking.cityName);

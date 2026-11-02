@@ -1,5 +1,5 @@
 import '../global.css';
-import { FONT_FACES, fontFaceFor, palette } from '@clickco/ui';
+import { FONT_FACES, fontFaceFor, NetworkStatusProvider, palette } from '@clickco/ui';
 // Per-weight subpaths: the package index requires all 18 faces, which Metro would bundle.
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
@@ -13,7 +13,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { onOnsiteSettled } from '@/shared/offline/runner';
+import { useNetworkWatch } from '@/shared/network/use-network-watch';
+import { flushQueue, onOnsiteSettled } from '@/shared/offline/runner';
+import { useOnsiteQueue } from '@/shared/offline/store';
 import { useQueueRunner } from '@/shared/offline/use-queue-runner';
 import { createQueryClient } from '@/shared/query';
 import { onSessionEnd } from '@/shared/session/reset';
@@ -77,6 +79,12 @@ function useRefreshOnSync(queryClient: QueryClientT): void {
   useEffect(() => onOnsiteSettled(() => void queryClient.invalidateQueries()), [queryClient]);
 }
 
+/** The offline banner's Retry also sends the on-site actions saved on this phone. */
+function sendSavedActions(): void {
+  useOnsiteQueue.getState().retryAll();
+  void flushQueue();
+}
+
 export default function RootLayout() {
   const [queryClient] = useState(createQueryClient);
   useSessionEndResets(queryClient);
@@ -85,6 +93,7 @@ export default function RootLayout() {
   useQueueRunner();
   const [fontsLoaded, fontError] = useFonts(FONT_FILES);
   const signedIn = useIsSignedIn();
+  const network = useNetworkWatch(queryClient, sendSavedActions);
   useAppFocus();
 
   if (!fontsLoaded && !fontError) return null;
@@ -92,19 +101,21 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider value={navigationTheme}>
-          <StatusBar style="dark" />
-          <Stack screenOptions={screenOptions}>
-            <Stack.Protected guard={signedIn}>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Jobs' }} />
-              <Stack.Screen name="offers/[attemptId]" options={{ title: 'New job' }} />
-              <Stack.Screen name="jobs/[assignmentId]" options={{ title: 'Job' }} />
-            </Stack.Protected>
-            <Stack.Protected guard={!signedIn}>
-              <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-            </Stack.Protected>
-          </Stack>
-        </ThemeProvider>
+        <NetworkStatusProvider value={network}>
+          <ThemeProvider value={navigationTheme}>
+            <StatusBar style="dark" />
+            <Stack screenOptions={screenOptions}>
+              <Stack.Protected guard={signedIn}>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Jobs' }} />
+                <Stack.Screen name="offers/[attemptId]" options={{ title: 'New job' }} />
+                <Stack.Screen name="jobs/[assignmentId]" options={{ title: 'Job' }} />
+              </Stack.Protected>
+              <Stack.Protected guard={!signedIn}>
+                <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+              </Stack.Protected>
+            </Stack>
+          </ThemeProvider>
+        </NetworkStatusProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

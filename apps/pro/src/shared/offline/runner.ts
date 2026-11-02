@@ -1,5 +1,6 @@
 import { newIdempotencyKey } from '@clickco/api-client';
 import { api } from '../api';
+import { reportAnswered, reportRequestError } from '../network/store';
 import { useSession } from '../session/store';
 import {
   canSendAhead,
@@ -16,8 +17,27 @@ import { useOnsiteQueue } from './store';
 /** Upper bound on sends per flush, so a bug can never spin the radio. */
 const MAX_SENDS_PER_FLUSH = 50;
 
+/**
+ * Sends one on-site action and tells the app's network status what happened: an answer of any
+ * kind means Clickco is reachable; no answer means offline (the offline banner).
+ */
+async function send(
+  assignmentId: string,
+  action: OnsiteAction,
+  idempotencyKey: string,
+): Promise<unknown> {
+  try {
+    const result = await sendOnce(assignmentId, action, idempotencyKey);
+    reportAnswered();
+    return result;
+  } catch (error) {
+    reportRequestError(error);
+    throw error;
+  }
+}
+
 /** Sends one on-site action. Every route is @Idempotent; the key is fixed per action. */
-function send(
+function sendOnce(
   assignmentId: string,
   action: OnsiteAction,
   idempotencyKey: string,

@@ -1,10 +1,9 @@
-import { EmptyState, palette, Reveal, Screen, SegmentedControl, Skeleton, Text } from '@clickco/ui';
+import { palette, Reveal, Screen, SegmentedControl, Skeleton, StateView, Text } from '@clickco/ui';
 import CalendarCheck from 'lucide-react-native/icons/calendar-check';
-import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import { useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 import { splitBookings } from '@/shared/booking-status';
-import { userMessage } from '@/shared/errors';
+import { screenState } from '@/shared/screen-state';
 import { useBookings } from '../hooks';
 import { BookingCard } from './BookingCard';
 
@@ -20,7 +19,6 @@ export function BookingsListView({ onOpen, onBook }: BookingsListViewProps) {
   const [segment, setSegment] = useState<Segment>('upcoming');
   const bookings = useBookings();
   const split = splitBookings(bookings.data ?? []);
-  const shown = split[segment];
   const count = (n: number) => (bookings.data ? ` (${n})` : '');
 
   return (
@@ -54,40 +52,38 @@ export function BookingsListView({ onOpen, onBook }: BookingsListViewProps) {
         />
       }
     >
-      {bookings.isPending ? (
-        <View className="gap-4">
-          <Skeleton className="h-40 w-full rounded-lg" />
-          <Skeleton className="h-40 w-full rounded-lg" />
-          <Skeleton className="h-40 w-full rounded-lg" />
-        </View>
-      ) : bookings.isError ? (
-        <EmptyState
-          icon={CircleAlert}
-          title="We couldn't load your bookings"
-          body={userMessage(bookings.error)}
-          action={{ label: 'Try again', onPress: () => void bookings.refetch() }}
-        />
-      ) : shown.length === 0 ? (
-        <EmptyState
-          key={segment}
-          icon={CalendarCheck}
-          title={segment === 'upcoming' ? 'No upcoming shoots' : 'No past shoots yet'}
-          body={
+      <StateView
+        state={screenState(bookings, () => split[segment].length === 0)}
+        loading={
+          <View className="gap-4">
+            <Skeleton className="h-40 w-full rounded-lg" />
+            <Skeleton className="h-40 w-full rounded-lg" />
+            <Skeleton className="h-40 w-full rounded-lg" />
+          </View>
+        }
+        errorTitle="We couldn't load your bookings"
+        onRetry={() => void bookings.refetch()}
+        empty={{
+          icon: CalendarCheck,
+          title: segment === 'upcoming' ? 'No upcoming shoots' : 'No past shoots yet',
+          body:
             segment === 'upcoming'
               ? 'Book a photographer and your shoot will show up here.'
-              : 'Delivered and cancelled shoots appear here.'
-          }
-          action={{ label: 'Book a shoot', onPress: onBook }}
-        />
-      ) : (
-        <View key={segment} className="gap-4">
-          {shown.map((booking, i) => (
-            <Reveal key={booking.id} index={i}>
-              <BookingCard booking={booking} onPress={() => onOpen(booking.id)} />
-            </Reveal>
-          ))}
-        </View>
-      )}
+              : 'Delivered and cancelled shoots appear here.',
+          action: { label: 'Book a shoot', onPress: onBook },
+          testID: `bookings-empty-${segment}`,
+        }}
+      >
+        {() => (
+          <View key={segment} className="gap-4">
+            {split[segment].map((booking, i) => (
+              <Reveal key={booking.id} index={i}>
+                <BookingCard booking={booking} onPress={() => onOpen(booking.id)} />
+              </Reveal>
+            ))}
+          </View>
+        )}
+      </StateView>
     </Screen>
   );
 }

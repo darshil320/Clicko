@@ -3,6 +3,7 @@ import {
   BottomSheet,
   Button,
   Card,
+  ErrorState,
   Icon,
   IconTile,
   ListRow,
@@ -21,7 +22,7 @@ import X from 'lucide-react-native/icons/x';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { type BookableTier, isBookableTier, NOT_INCLUDED, TIER_COPY } from '@/shared/catalogue';
-import { userMessage } from '@/shared/errors';
+import { screenState } from '@/shared/screen-state';
 import { useReferenceQuote, useTierPrices } from '../hooks';
 import { fromPricePaise, hourlyRatePaise, rupees } from '../lib/quote-view';
 
@@ -59,7 +60,8 @@ function CompareSheet({
 
 function PriceBlock({ tier, pincode }: { tier: BookableTier; pincode: string }) {
   const quote = useReferenceQuote(tier, pincode);
-  if (quote.isPending) {
+  const state = screenState(quote);
+  if (state.kind === 'loading') {
     return (
       <View className="gap-2">
         <Skeleton className="h-8 w-full" />
@@ -67,25 +69,27 @@ function PriceBlock({ tier, pincode }: { tier: BookableTier; pincode: string }) 
       </View>
     );
   }
-  if (quote.isError || quote.data?.kind !== 'QUOTE') {
+  if (state.kind === 'offline' || state.kind === 'error') {
     return (
-      <View className="gap-2">
-        <Text tone="danger">{quote.isError ? userMessage(quote.error) : 'Price unavailable'}</Text>
-        <Button
-          label="Try again"
-          variant="secondary"
-          size="compact"
-          onPress={() => void quote.refetch()}
-        />
-      </View>
+      <ErrorState
+        variant="card"
+        offline={state.kind === 'offline'}
+        title="The price didn't load"
+        body={state.message}
+        retrying={state.retrying}
+        onRetry={() => void quote.refetch()}
+        testID="plan-price-error"
+      />
     );
   }
-  const hourly = hourlyRatePaise(quote.data);
+  if (state.data.kind !== 'QUOTE') return <Text variant="h1">On request</Text>;
+  const priced = state.data;
+  const hourly = hourlyRatePaise(priced);
   return (
     <View className="gap-1">
       <View className="flex-row flex-wrap items-baseline gap-2">
         <Text variant="display" tabular>
-          {rupees(quote.data.subtotalPaise)}
+          {rupees(priced.subtotalPaise)}
         </Text>
         <Text tone="secondary">for 2 hours</Text>
       </View>

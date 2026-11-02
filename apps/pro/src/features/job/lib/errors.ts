@@ -1,6 +1,6 @@
 import { isApiError } from '@clickco/api-client';
 import { z } from 'zod';
-import { userMessage } from '@/shared/errors';
+import { humanMessage, userMessage } from '@/shared/errors';
 import { formatDateTime } from '@/shared/format/datetime';
 import type { OnsiteActionKind } from '@/shared/offline/queue';
 import { formatClock } from './timing';
@@ -106,7 +106,8 @@ const DESCRIBE: Readonly<Record<string, Describer>> = {
 export function describeRefusal(refusal: Refusal, action: JobAction): string {
   const plain = PLAIN[refusal.code];
   if (plain) return plain;
-  return DESCRIBE[refusal.code]?.(refusal, action) ?? refusal.message;
+  // Unknown codes keep the server's sentence; generic codes and framework text get plain words.
+  return DESCRIBE[refusal.code]?.(refusal, action) ?? humanMessage(refusal);
 }
 
 /** Any error from a job action: the server's 4xx mapped; transport and 5xx in the shared words. */

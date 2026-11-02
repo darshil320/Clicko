@@ -3,24 +3,25 @@ import {
   BottomSheet,
   Button,
   Card,
-  EmptyState,
   ListRow,
   Screen,
   Section,
   Skeleton,
+  StateView,
   StatusBadge,
   Text,
   TierBadge,
 } from '@clickco/ui';
-import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { canCancel, isHalted, journey, statusPresentation } from '@/shared/booking-status';
 import { categoryLabel } from '@/shared/catalogue';
-import { userMessage } from '@/shared/errors';
+import { isNotFound, userMessage } from '@/shared/errors';
 import { formatDateTime, formatHours, formatShootWindow } from '@/shared/format/datetime';
 import { rupees } from '@/shared/format/money';
+import { screenState } from '@/shared/screen-state';
 import { useBooking, useCancelBooking } from '../hooks';
+import { BookingMissing } from './BookingMissing';
 import { JourneyTimeline } from './JourneyTimeline';
 
 const POLL_MS = 15_000;
@@ -206,32 +207,41 @@ function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) 
 }
 
 export interface BookingDetailViewProps {
-  readonly bookingId: string;
+  readonly bookingId: string | undefined;
   readonly onPay: (bookingId: string) => void;
+  /** The way out when the booking does not exist (or is not this client's). */
+  readonly onBackToBookings: () => void;
+}
+
+function DetailSkeleton() {
+  return (
+    <View className="gap-4">
+      <Skeleton className="h-6 w-32 rounded-full" />
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-24 w-full rounded-lg" />
+      <Skeleton className="h-40 w-full rounded-lg" />
+    </View>
+  );
 }
 
 /** Booking detail: status, journey and history from GET /bookings/:id (polled while live). */
-export function BookingDetailView({ bookingId, onPay }: BookingDetailViewProps) {
+export function BookingDetailView({ bookingId, onPay, onBackToBookings }: BookingDetailViewProps) {
   const detail = useBooking(bookingId, POLL_MS);
+  const missing = !bookingId || (detail.data === undefined && isNotFound(detail.error));
 
   return (
     <Screen topInset={false}>
-      {detail.isPending ? (
-        <View className="gap-4">
-          <Skeleton className="h-6 w-32 rounded-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-24 w-full rounded-lg" />
-          <Skeleton className="h-40 w-full rounded-lg" />
-        </View>
-      ) : detail.isError ? (
-        <EmptyState
-          icon={CircleAlert}
-          title="We couldn't load this booking"
-          body={userMessage(detail.error)}
-          action={{ label: 'Try again', onPress: () => void detail.refetch() }}
-        />
+      {missing ? (
+        <BookingMissing onBackToBookings={onBackToBookings} />
       ) : (
-        <Loaded detail={detail.data} onPay={onPay} />
+        <StateView
+          state={screenState(detail)}
+          loading={<DetailSkeleton />}
+          errorTitle="We couldn't load this booking"
+          onRetry={() => void detail.refetch()}
+        >
+          {(data) => <Loaded detail={data} onPay={onPay} />}
+        </StateView>
       )}
     </Screen>
   );

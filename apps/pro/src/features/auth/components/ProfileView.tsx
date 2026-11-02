@@ -4,6 +4,7 @@ import CloudOff from 'lucide-react-native/icons/cloud-off';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { API_URL, IS_DEV } from '@/shared/config';
+import { humanMessage } from '@/shared/errors';
 import { formatDateTime } from '@/shared/format/datetime';
 import { formatPhone } from '@/shared/format/phone';
 import { ACTION_LABEL } from '@/shared/offline/queue';
@@ -63,7 +64,7 @@ function SyncSection({ photographerId }: { photographerId: string }) {
             icon={CircleAlert}
             iconTone="danger"
             title={`${ACTION_LABEL[item.kind]} was not accepted`}
-            subtitle={item.message}
+            subtitle={humanMessage(item)}
           />
           <Button label="Dismiss" variant="ghost" size="compact" onPress={() => dismiss(item.id)} />
         </Card>

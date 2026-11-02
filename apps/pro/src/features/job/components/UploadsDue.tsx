@@ -1,12 +1,12 @@
 import type { ProUploadJob } from '@clickco/contracts';
-import { Button, Card, Section, StatusBadge, Text } from '@clickco/ui';
+import { Card, Section, StateView, StatusBadge, Text } from '@clickco/ui';
 import { useMemo } from 'react';
 import { View } from 'react-native';
 import { categoryLabel } from '@/shared/catalogue';
 import { UPLOAD_PORTAL_URL } from '@/shared/config';
-import { userMessage } from '@/shared/errors';
 import { formatDateTime } from '@/shared/format/datetime';
 import { useNow } from '@/shared/hooks/useNow';
+import { screenState } from '@/shared/screen-state';
 import { useUploadJobs } from '../hooks';
 import { dueUploads, uploadDue } from '../lib/lists';
 
@@ -43,30 +43,26 @@ export function UploadsDue() {
   const now = useNow(COUNTDOWN_TICK_MS);
   const due = useMemo(() => (query.data ? dueUploads(query.data) : []), [query.data]);
 
-  if (query.isError && !query.data) {
-    return (
-      <Section title="Uploads due">
-        <Card className="gap-2">
-          <Text variant="caption" tone="danger" accessibilityLiveRegion="polite">
-            {userMessage(query.error)}
-          </Text>
-          <Button
-            label="Try again"
-            variant="ghost"
-            size="compact"
-            onPress={() => void query.refetch()}
-          />
-        </Card>
-      </Section>
-    );
-  }
-  if (due.length === 0) return null;
+  const state = screenState(query, () => due.length === 0);
+  // Quiet until there is something due (or a failure to say): the Jobs tab leads with jobs.
+  if (state.kind === 'loading' || state.kind === 'empty') return null;
 
   return (
-    <Section title="Uploads due" subtitle={`Upload from a computer at ${UPLOAD_PORTAL_URL}`}>
-      {due.map((job) => (
-        <UploadCard key={job.bookingId} job={job} now={now} />
-      ))}
+    <Section
+      title="Uploads due"
+      subtitle={
+        state.kind === 'ready' ? `Upload from a computer at ${UPLOAD_PORTAL_URL}` : undefined
+      }
+    >
+      <StateView
+        variant="card"
+        state={state}
+        loading={null}
+        errorTitle="We couldn't load uploads due"
+        onRetry={() => void query.refetch()}
+      >
+        {() => due.map((job) => <UploadCard key={job.bookingId} job={job} now={now} />)}
+      </StateView>
     </Section>
   );
 }

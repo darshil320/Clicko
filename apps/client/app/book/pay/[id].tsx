@@ -18,6 +18,10 @@ export default function PayRoute() {
       onViewBooking={(bookingId) =>
         router.push({ pathname: '/bookings/[id]', params: { id: bookingId } })
       }
+      onBackToBookings={() => {
+        router.dismissAll();
+        router.navigate('/bookings');
+      }}
     />
   );
 }

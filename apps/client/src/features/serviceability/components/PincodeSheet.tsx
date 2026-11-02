@@ -1,5 +1,14 @@
 import type { ServiceabilityResult } from '@clickco/contracts';
-import { BottomSheet, Button, Card, IconTile, Input, Skeleton, Text } from '@clickco/ui';
+import {
+  BottomSheet,
+  Button,
+  Card,
+  ErrorState,
+  IconTile,
+  Input,
+  Skeleton,
+  Text,
+} from '@clickco/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import BellRing from 'lucide-react-native/icons/bell-ring';
 import MapPin from 'lucide-react-native/icons/map-pin';
@@ -8,6 +17,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { View } from 'react-native';
 import { userMessage } from '@/shared/errors';
 import { formatPhone } from '@/shared/format/phone';
+import { screenState } from '@/shared/screen-state';
 import { useSession } from '@/shared/session/store';
 import { useJoinWaitlist, useServiceability } from '../hooks';
 import {
@@ -128,6 +138,7 @@ export function PincodeSheet({ visible, onClose }: PincodeSheetProps) {
   const setLocation = useLocation((s) => s.setLocation);
   const [checking, setChecking] = useState<string | null>(null);
   const check = useServiceability(checking);
+  const state = checking === null ? null : screenState(check);
   const form = useForm<PincodeForm>({
     resolver: zodResolver(PincodeForm),
     defaultValues: { pincode: current ?? '' },
@@ -169,20 +180,25 @@ export function PincodeSheet({ visible, onClose }: PincodeSheetProps) {
             />
           )}
         />
-        {checking === null ? (
+        {state === null ? (
           <Button
             label="Check pincode"
             variant="secondary"
             onPress={submit}
             testID="check-pincode"
           />
-        ) : check.isPending ? (
+        ) : state.kind === 'loading' ? (
           <Skeleton className="h-20 w-full rounded-lg" />
-        ) : check.isError ? (
-          <View className="gap-3">
-            <Text tone="danger">{userMessage(check.error)}</Text>
-            <Button label="Try again" variant="secondary" onPress={() => check.refetch()} />
-          </View>
+        ) : state.kind === 'offline' || state.kind === 'error' ? (
+          <ErrorState
+            variant="card"
+            offline={state.kind === 'offline'}
+            title="We couldn't check this pincode"
+            body={state.message}
+            retrying={state.retrying}
+            onRetry={() => void check.refetch()}
+            testID="pincode-error"
+          />
         ) : check.data?.bookable ? (
           <ServedResult
             result={check.data}

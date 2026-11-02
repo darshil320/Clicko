@@ -1,7 +1,7 @@
-import { Avatar, Button, Card, ListRow, Screen, Section, Text } from '@clickco/ui';
+import { Avatar, Button, Card, ListRow, OfflineBanner, Screen, Section, Text } from '@clickco/ui';
 import { View } from 'react-native';
 import { API_URL, IS_DEV } from '@/shared/config';
-import { userMessage } from '@/shared/errors';
+import { isOffline } from '@/shared/errors';
 import { formatPhone } from '@/shared/format/phone';
 import { useSession } from '@/shared/session/store';
 import { useMe, useSignOut } from '../hooks';
@@ -24,10 +24,15 @@ export function ProfileView() {
           </Text>
         </View>
       </Card>
-      {me.isError ? (
-        <Text variant="caption" tone="danger">
-          {userMessage(me.error)}
-        </Text>
+      {/* Offline is already said by Screen's banner; the saved details still show. */}
+      {me.isError && !isOffline(me.error) ? (
+        <OfflineBanner
+          kind="stale"
+          title="Couldn't refresh your profile"
+          body="Showing the details saved on this phone."
+          retrying={me.isFetching}
+          onRetry={() => void me.refetch()}
+        />
       ) : null}
       {IS_DEV ? (
         <Section title="Developer">

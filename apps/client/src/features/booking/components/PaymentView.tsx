@@ -1,7 +1,9 @@
+import type { BookingDetail } from '@clickco/contracts';
 import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   IconTile,
   ListRow,
   Screen,
@@ -9,40 +11,89 @@ import {
   StatusBadge,
   Text,
 } from '@clickco/ui';
-import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import FlaskConical from 'lucide-react-native/icons/flask-conical';
+import SearchX from 'lucide-react-native/icons/search-x';
 import Wallet from 'lucide-react-native/icons/wallet';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { awaitingPayment, isHalted, statusPresentation } from '@/shared/booking-status';
 import { useBookingDetail } from '@/shared/bookings-query';
 import { IS_DEV } from '@/shared/config';
-import { userMessage } from '@/shared/errors';
+import { isNotFound, userMessage } from '@/shared/errors';
 import { formatDateTime, formatShootWindow } from '@/shared/format/datetime';
+import { screenState } from '@/shared/screen-state';
 import { useOpenPayment, useSimulatePayment } from '../hooks';
 import { rupees } from '../lib/quote-view';
 import { useBookingDraft } from '../store';
 
 export interface PaymentViewProps {
-  readonly bookingId: string;
+  readonly bookingId: string | undefined;
   readonly onConfirmed: (bookingId: string) => void;
   readonly onViewBooking: (bookingId: string) => void;
+  /** The way out when the booking does not exist (or is not this client's). */
+  readonly onBackToBookings: () => void;
 }
 
 /**
  * Step 4 — pay the advance. Razorpay checkout lands before launch; development builds use
  * the API's sandbox gateway, whose "Simulate payment" goes through the real signed-webhook path.
  */
-export function PaymentView({ bookingId, onConfirmed, onViewBooking }: PaymentViewProps) {
+export function PaymentView(props: PaymentViewProps) {
+  const { bookingId, onBackToBookings } = props;
   const detail = useBookingDetail(bookingId);
+  const state = screenState(detail);
+
+  if (!bookingId || (detail.data === undefined && isNotFound(detail.error))) {
+    return (
+      <Screen topInset={false}>
+        <EmptyState
+          icon={SearchX}
+          title="We can't find this booking"
+          body="It may have been removed, or it was made from another account."
+          action={{ label: 'Go to bookings', onPress: onBackToBookings }}
+          testID="booking-missing"
+        />
+      </Screen>
+    );
+  }
+  if (state.kind === 'loading') {
+    return (
+      <Screen topInset={false}>
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-48 w-full rounded-lg" />
+      </Screen>
+    );
+  }
+  if (state.kind === 'offline' || state.kind === 'error') {
+    return (
+      <Screen topInset={false}>
+        <ErrorState
+          offline={state.kind === 'offline'}
+          title="We couldn't load this booking"
+          body={state.message}
+          retrying={state.retrying}
+          onRetry={() => void detail.refetch()}
+        />
+      </Screen>
+    );
+  }
+  return <Payment {...props} bookingId={bookingId} booking={state.data.booking} />;
+}
+
+function Payment({
+  bookingId,
+  booking,
+  onConfirmed,
+  onViewBooking,
+}: PaymentViewProps & { readonly bookingId: string; readonly booking: BookingDetail['booking'] }) {
   const stored = useBookingDraft((s) =>
     s.payment?.bookingId === bookingId ? s.payment.payment : null,
   );
   const open = useOpenPayment(bookingId);
   const simulate = useSimulatePayment(bookingId);
-  const booking = detail.data?.booking;
   const payment = stored ?? open.data ?? null;
-  const paid = booking !== undefined && !awaitingPayment(booking.status);
+  const paid = !awaitingPayment(booking.status);
 
   const confirmed = paid && !isHalted(booking.status);
   useEffect(() => {
@@ -52,28 +103,6 @@ export function PaymentView({ bookingId, onConfirmed, onViewBooking }: PaymentVi
       useBookingDraft.getState().clear();
     onConfirmed(bookingId);
   }, [confirmed, bookingId, onConfirmed]);
-
-  if (detail.isPending) {
-    return (
-      <Screen topInset={false}>
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-48 w-full rounded-lg" />
-      </Screen>
-    );
-  }
-  if (detail.isError || !booking) {
-    return (
-      <Screen topInset={false}>
-        <EmptyState
-          icon={CircleAlert}
-          title="We couldn't load this booking"
-          body={detail.isError ? userMessage(detail.error) : undefined}
-          action={{ label: 'Try again', onPress: () => void detail.refetch() }}
-        />
-      </Screen>
-    );
-  }
 
   const status = statusPresentation(booking.status);
   const sandbox = payment?.gateway === 'SANDBOX';

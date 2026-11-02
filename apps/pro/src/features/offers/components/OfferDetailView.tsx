@@ -1,11 +1,11 @@
 import type { ProOffer } from '@clickco/contracts';
-import { Button, EmptyState, Screen, Skeleton, Text } from '@clickco/ui';
+import { Button, EmptyState, ErrorState, Screen, Skeleton, Text } from '@clickco/ui';
 import { useRouter } from 'expo-router';
-import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import TimerOff from 'lucide-react-native/icons/timer-off';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { userMessage } from '@/shared/errors';
+import { screenState } from '@/shared/screen-state';
 import { useExpiryClock } from '../clock';
 import { useAcceptOffer, useDeclineOffer, useOffer } from '../hooks';
 import { secondsLeft } from '../lib/countdown';
@@ -66,16 +66,18 @@ function OfferDetail({ attemptId }: OfferDetailViewProps) {
   const shown: ProOffer | undefined = answering ?? live;
 
   if (!shown) {
+    const state = screenState(offer);
     return (
       <Screen topInset={false}>
-        {offer.isPending ? (
+        {state.kind === 'loading' ? (
           <LoadingBody />
-        ) : offer.isError && offer.data === undefined ? (
-          <EmptyState
-            icon={CircleAlert}
+        ) : state.kind === 'offline' || state.kind === 'error' ? (
+          <ErrorState
+            offline={state.kind === 'offline'}
             title="We couldn't load this offer"
-            body={userMessage(offer.error)}
-            action={{ label: 'Try again', onPress: () => void offer.refetch() }}
+            body={state.message}
+            retrying={state.retrying}
+            onRetry={() => void offer.refetch()}
           />
         ) : (
           <EmptyState

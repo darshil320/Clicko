@@ -1,14 +1,14 @@
 import type { ProAssignment } from '@clickco/contracts';
-import { Button, Card, Section, Skeleton, StatusBadge, Text, TierBadge } from '@clickco/ui';
+import { Card, Section, Skeleton, StateView, StatusBadge, Text, TierBadge } from '@clickco/ui';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { View } from 'react-native';
 import { categoryLabel } from '@/shared/catalogue';
-import { userMessage } from '@/shared/errors';
 import { formatShootWindow } from '@/shared/format/datetime';
 import { rupees } from '@/shared/format/money';
 import type { OnsiteActionKind } from '@/shared/offline/queue';
 import { useOnsiteQueue } from '@/shared/offline/store';
+import { screenState } from '@/shared/screen-state';
 import { useActiveJobs } from '../hooks';
 import { listLabel } from '../lib/labels';
 import { soonestFirst } from '../lib/lists';
@@ -54,56 +54,46 @@ function JobCard({ job, queued, onOpen }: JobCardProps) {
   );
 }
 
-/** Jobs tab: what you are booked for, soonest first. Nothing at all when there is nothing. */
+/**
+ * Jobs tab: what you are booked for, soonest first. Nothing at all when there is nothing (the
+ * offer feed below carries the empty state and its next step); a failed load says so and retries.
+ */
 export function ActiveJobs() {
   const router = useRouter();
   const query = useActiveJobs();
   const pending = useOnsiteQueue((s) => s.pending);
   const jobs = useMemo(() => (query.data ? soonestFirst(query.data) : []), [query.data]);
 
-  if (query.isPending) {
-    return (
-      <Section title="Your jobs">
-        <Skeleton className="h-24 w-full rounded-lg" />
-      </Section>
-    );
-  }
-  if (query.isError && !query.data) {
-    return (
-      <Section title="Your jobs">
-        <Card className="gap-2">
-          <Text variant="caption" tone="danger" accessibilityLiveRegion="polite">
-            {userMessage(query.error)}
-          </Text>
-          <Button
-            label="Try again"
-            variant="ghost"
-            size="compact"
-            onPress={() => void query.refetch()}
-          />
-        </Card>
-      </Section>
-    );
-  }
-  if (jobs.length === 0) return null;
+  const state = screenState(query);
+  if (state.kind === 'empty') return null;
 
   return (
     <Section title="Your jobs">
-      {jobs.map((job) => (
-        <JobCard
-          key={job.assignmentId}
-          job={job}
-          queued={pending
-            .filter((p) => p.assignmentId === job.assignmentId)
-            .map((p) => p.action.kind)}
-          onOpen={() =>
-            router.push({
-              pathname: '/jobs/[assignmentId]',
-              params: { assignmentId: job.assignmentId },
-            })
-          }
-        />
-      ))}
+      <StateView
+        variant="card"
+        state={state}
+        loading={<Skeleton className="h-24 w-full rounded-lg" />}
+        errorTitle="We couldn't load your jobs"
+        onRetry={() => void query.refetch()}
+      >
+        {() =>
+          jobs.map((job) => (
+            <JobCard
+              key={job.assignmentId}
+              job={job}
+              queued={pending
+                .filter((p) => p.assignmentId === job.assignmentId)
+                .map((p) => p.action.kind)}
+              onOpen={() =>
+                router.push({
+                  pathname: '/jobs/[assignmentId]',
+                  params: { assignmentId: job.assignmentId },
+                })
+              }
+            />
+          ))
+        }
+      </StateView>
     </Section>
   );
 }

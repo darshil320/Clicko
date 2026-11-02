@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { cx } from './cx';
+import { useNetworkStatus } from './NetworkStatus';
+import { OfflineBanner } from './OfflineBanner';
 import { Reveal } from './Reveal';
 import { Text } from './Text';
 
@@ -57,9 +59,21 @@ function TitleBlock({
   );
 }
 
+/** The app-wide offline banner (NetworkStatusProvider), pinned above the header. */
+function NetworkBanner() {
+  const network = useNetworkStatus();
+  if (!network.offline) return null;
+  return (
+    <Reveal className="px-5 pt-3">
+      <OfflineBanner onRetry={network.onRetry} retrying={network.retrying} />
+    </Reveal>
+  );
+}
+
 /**
  * Safe-area screen frame (DESIGN-LIGHT §Whitespace): white, 20px sides, 24px between groups,
  * an optional title block, and an optional pinned footer. The body fades and rises in once.
+ * While the app is offline a calm banner sits at the top (it does not scroll away).
  */
 export function Screen({
   children,
@@ -90,6 +104,7 @@ export function Screen({
       style={{ paddingTop: topInset ? insets.top : 0 }}
       testID={testID}
     >
+      <NetworkBanner />
       {header ? <View className="px-5 pt-3 pb-2">{header}</View> : null}
       {scroll ? (
         <ScrollView

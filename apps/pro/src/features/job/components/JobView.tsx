@@ -1,12 +1,12 @@
-import { isApiError } from '@clickco/api-client';
 import type { ProAssignmentDetail } from '@clickco/contracts';
-import { EmptyState, palette, Screen, Skeleton, Text } from '@clickco/ui';
+import { EmptyState, ErrorState, palette, Screen, Skeleton, Text } from '@clickco/ui';
 import { useRouter } from 'expo-router';
-import CircleAlert from 'lucide-react-native/icons/circle-alert';
+import SearchX from 'lucide-react-native/icons/search-x';
 import { useMemo } from 'react';
 import { RefreshControl, View } from 'react-native';
-import { userMessage } from '@/shared/errors';
+import { isNotFound } from '@/shared/errors';
 import { useNow } from '@/shared/hooks/useNow';
+import { type ScreenState, screenState } from '@/shared/screen-state';
 import { useJob, useJobQueue } from '../hooks';
 import { projectJob } from '../lib/project';
 import { formatAt } from '../lib/timing';
@@ -67,27 +67,39 @@ function JobSkeleton() {
   );
 }
 
-function JobError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+type JobFailure = Extract<ScreenState<ProAssignmentDetail>, { kind: 'offline' | 'error' }>;
+
+function JobError({
+  failure,
+  missing,
+  onRetry,
+}: {
+  failure: JobFailure;
+  missing: boolean;
+  onRetry: () => void;
+}) {
   const router = useRouter();
-  if (isApiError(error) && error.code === 'ASSIGNMENT_NOT_FOUND') {
+  if (missing) {
     return (
       <EmptyState
-        icon={CircleAlert}
+        icon={SearchX}
         title="This job isn't on your account"
         body="It may have been cancelled or passed to another photographer."
         action={{
           label: 'Back to jobs',
           onPress: () => (router.canGoBack() ? router.back() : router.replace('/')),
         }}
+        testID="job-missing"
       />
     );
   }
   return (
-    <EmptyState
-      icon={CircleAlert}
+    <ErrorState
+      offline={failure.kind === 'offline'}
       title="We couldn't load this job"
-      body={userMessage(error)}
-      action={{ label: 'Try again', onPress: onRetry }}
+      body={failure.message}
+      retrying={failure.retrying}
+      onRetry={onRetry}
     />
   );
 }
@@ -99,14 +111,15 @@ function JobError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
 export function JobView({ assignmentId }: { assignmentId: string }) {
   const query = useJob(assignmentId);
   const refresh = () => void query.refetch();
+  const state = screenState(query);
 
   // Data first: an offline refetch failure must not replace a job the photographer is working.
-  if (query.data) {
+  if (state.kind === 'ready' || state.kind === 'empty') {
     return (
       <LoadedJob
-        detail={query.data}
+        detail={state.data}
         refreshing={query.isRefetching}
-        stale={query.isError}
+        stale={state.stale !== null}
         updatedAt={query.dataUpdatedAt}
         onRefresh={refresh}
       />
@@ -114,7 +127,11 @@ export function JobView({ assignmentId }: { assignmentId: string }) {
   }
   return (
     <Screen topInset={false}>
-      {query.isError ? <JobError error={query.error} onRetry={refresh} /> : <JobSkeleton />}
+      {state.kind === 'loading' ? (
+        <JobSkeleton />
+      ) : (
+        <JobError failure={state} missing={isNotFound(query.error)} onRetry={refresh} />
+      )}
     </Screen>
   );
 }

@@ -1,5 +1,5 @@
 import '../global.css';
-import { FONT_FACES, fontFaceFor, palette } from '@clickco/ui';
+import { FONT_FACES, fontFaceFor, NetworkStatusProvider, palette } from '@clickco/ui';
 // Per-weight subpaths: the package index requires all 18 faces, which Metro would bundle.
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { clearBookingDraft } from '@/features/booking';
+import { useNetworkWatch } from '@/shared/network/use-network-watch';
 import { createQueryClient } from '@/shared/query';
 import { onSessionEnd } from '@/shared/session/reset';
 import { useIsSignedIn } from '@/shared/session/store';
@@ -82,6 +83,7 @@ export default function RootLayout() {
   useEffect(syncSessionAcrossTabs, []);
   const [fontsLoaded, fontError] = useFonts(FONT_FILES);
   const signedIn = useIsSignedIn();
+  const network = useNetworkWatch(queryClient);
   useAppFocus();
 
   if (!fontsLoaded && !fontError) return null;
@@ -89,26 +91,28 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider value={navigationTheme}>
-          <StatusBar style="dark" />
-          <Stack screenOptions={screenOptions}>
-            <Stack.Protected guard={signedIn}>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="plan/[tier]" options={{ title: 'Plan' }} />
-              <Stack.Screen name="book/configure" options={{ title: 'Your shoot' }} />
-              <Stack.Screen name="book/review" options={{ title: 'Review' }} />
-              <Stack.Screen name="book/pay/[id]" options={{ title: 'Payment' }} />
-              <Stack.Screen
-                name="book/confirmed/[id]"
-                options={{ headerShown: false, gestureEnabled: false }}
-              />
-              <Stack.Screen name="bookings/[id]" options={{ title: 'Booking' }} />
-            </Stack.Protected>
-            <Stack.Protected guard={!signedIn}>
-              <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-            </Stack.Protected>
-          </Stack>
-        </ThemeProvider>
+        <NetworkStatusProvider value={network}>
+          <ThemeProvider value={navigationTheme}>
+            <StatusBar style="dark" />
+            <Stack screenOptions={screenOptions}>
+              <Stack.Protected guard={signedIn}>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="plan/[tier]" options={{ title: 'Plan' }} />
+                <Stack.Screen name="book/configure" options={{ title: 'Your shoot' }} />
+                <Stack.Screen name="book/review" options={{ title: 'Review' }} />
+                <Stack.Screen name="book/pay/[id]" options={{ title: 'Payment' }} />
+                <Stack.Screen
+                  name="book/confirmed/[id]"
+                  options={{ headerShown: false, gestureEnabled: false }}
+                />
+                <Stack.Screen name="bookings/[id]" options={{ title: 'Booking' }} />
+              </Stack.Protected>
+              <Stack.Protected guard={!signedIn}>
+                <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+              </Stack.Protected>
+            </Stack>
+          </ThemeProvider>
+        </NetworkStatusProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

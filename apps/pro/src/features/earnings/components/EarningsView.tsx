@@ -1,8 +1,7 @@
-import { EmptyState, palette, Screen, Skeleton } from '@clickco/ui';
+import { palette, Screen, Skeleton, StateView } from '@clickco/ui';
 import { useRouter } from 'expo-router';
-import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import { RefreshControl, View } from 'react-native';
-import { userMessage } from '@/shared/errors';
+import { screenState } from '@/shared/screen-state';
 import { useEarnings } from '../hooks';
 import { EarningsJobList } from './EarningsJobList';
 import { EarningsSummary } from './EarningsSummary';
@@ -38,25 +37,23 @@ export function EarningsView() {
         />
       }
     >
-      {earnings.data !== undefined ? (
-        <>
-          <EarningsSummary earnings={earnings.data} />
-          <EarningsJobList
-            jobs={earnings.data.jobs}
-            asOf={new Date(earnings.data.asOf)}
-            onFindJobs={() => router.navigate('/')}
-          />
-        </>
-      ) : earnings.isError ? (
-        <EmptyState
-          icon={CircleAlert}
-          title="We couldn't load your earnings"
-          body={userMessage(earnings.error)}
-          action={{ label: 'Try again', onPress: () => void earnings.refetch() }}
-        />
-      ) : (
-        <LoadingBody />
-      )}
+      <StateView
+        state={screenState(earnings)}
+        loading={<LoadingBody />}
+        errorTitle="We couldn't load your earnings"
+        onRetry={() => void earnings.refetch()}
+      >
+        {(data) => (
+          <>
+            <EarningsSummary earnings={data} />
+            <EarningsJobList
+              jobs={data.jobs}
+              asOf={new Date(data.asOf)}
+              onFindJobs={() => router.navigate('/')}
+            />
+          </>
+        )}
+      </StateView>
     </Screen>
   );
 }

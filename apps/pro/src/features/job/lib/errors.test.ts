@@ -131,6 +131,18 @@ describe('describeRefusal — once-only and stage rules', () => {
       'Server says no',
     );
   });
+
+  it('never shows framework text for a generic code or the rate limiter', () => {
+    expect(describeRefusal({ code: 'FORBIDDEN', message: 'Forbidden resource' }, 'START')).toBe(
+      "You don't have access to this.",
+    );
+    expect(
+      describeRefusal(
+        { code: 'RATE_LIMITED', message: 'ThrottlerException: Too Many Requests' },
+        'CHECK_IN',
+      ),
+    ).toBe('Too many tries. Please wait a minute and try again.');
+  });
 });
 
 describe('jobErrorMessage', () => {

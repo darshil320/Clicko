@@ -9,6 +9,7 @@ export default function BookingRoute() {
     <BookingDetailView
       bookingId={id}
       onPay={(bookingId) => router.push({ pathname: '/book/pay/[id]', params: { id: bookingId } })}
+      onBackToBookings={() => router.navigate('/bookings')}
     />
   );
 }

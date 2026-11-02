@@ -5,6 +5,7 @@ import {
   Card,
   Checkbox,
   EmptyState,
+  ErrorState,
   IconTile,
   Input,
   ListRow,
@@ -25,6 +26,7 @@ import { categoryLabel } from '@/shared/catalogue';
 import { userMessage } from '@/shared/errors';
 import { formatDayMonth, formatTimeRange } from '@/shared/format/datetime';
 import { formatPhone } from '@/shared/format/phone';
+import { screenState } from '@/shared/screen-state';
 import { useSession } from '@/shared/session/store';
 import { useCheckout, useQuote } from '../hooks';
 import { CheckoutForm, quoteRequest } from '../lib/draft';
@@ -72,6 +74,47 @@ function Breakdown({ quote }: { quote: PriceQuote }) {
       </Card>
     </Section>
   );
+}
+
+/** The itemised price, or why it is missing and the one thing to do about it. */
+function QuoteBlock({
+  quote,
+  priced,
+  onRetry,
+  onStartOver,
+}: {
+  quote: ReturnType<typeof useQuote>;
+  priced: PriceQuote | null;
+  onRetry: () => void;
+  onStartOver: () => void;
+}) {
+  const state = screenState(quote);
+  if (state.kind === 'loading') return <Skeleton className="h-56 w-full rounded-lg" />;
+  if (state.kind === 'offline' || state.kind === 'error') {
+    return (
+      <ErrorState
+        variant="card"
+        offline={state.kind === 'offline'}
+        title="The price didn't load"
+        body={state.message}
+        retrying={state.retrying}
+        onRetry={onRetry}
+        testID="quote-error"
+      />
+    );
+  }
+  if (!priced) {
+    return (
+      <EmptyState
+        variant="card"
+        icon={Receipt}
+        title="This plan is quoted on request"
+        body="Pick another plan to book and pay online now."
+        action={{ label: 'Start over', onPress: onStartOver }}
+      />
+    );
+  }
+  return <Breakdown quote={priced} />;
 }
 
 function TermsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -175,18 +218,12 @@ export function ReviewView({ locationLabel, onPaymentOpened, onStartOver }: Revi
         </View>
       </Card>
 
-      {quote.isPending ? (
-        <Skeleton className="h-56 w-full rounded-lg" />
-      ) : quote.isError || !priced ? (
-        <Card className="gap-4">
-          <Text tone="danger">
-            {quote.isError ? userMessage(quote.error) : 'This tier is quoted on request.'}
-          </Text>
-          <Button label="Try again" variant="secondary" onPress={() => void quote.refetch()} />
-        </Card>
-      ) : (
-        <Breakdown quote={priced} />
-      )}
+      <QuoteBlock
+        quote={quote}
+        priced={priced}
+        onRetry={() => void quote.refetch()}
+        onStartOver={onStartOver}
+      />
 
       <Section title="Your details">
         <Controller
