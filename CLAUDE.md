@@ -35,6 +35,37 @@ Monorepo: Turborepo + pnpm. Four surfaces + API. See docs/clickco-02-repo-archit
 - One concern per commit. Conventional commits.
 - Definition of done: docs/PLAN.md §4. A green typecheck is not a working feature.
 
+## Design
+
+Sources of truth, in this order. A design skill never overrides them:
+1. @clickco/design-tokens — every colour, size, radius, shadow and duration. tokens.test.ts pins it to the docs.
+2. docs/DESIGN.md — base rules every surface keeps: type, spacing, radius, components, content, accessibility.
+3. docs/DESIGN-LIGHT.md (ADR-0017) — client, pro, portal and admin. docs/DESIGN-DAYLIGHT.md (ADR-0018) — apps/web only.
+4. packages/ui (client, pro) and packages/ui-web (admin) — the only component sources.
+
+Design skills (~/.claude/skills), by job:
+- interface-design — app screens in client, pro, admin, portal. The docs above are its system.md:
+  never create `.interface-design/`, never rename tokens. Mobile screens still follow clickco-screen.
+- hallmark — apps/web only, and only when named: `/hallmark audit <path>`, then `/hallmark redesign <path>`.
+  DESIGN-DAYLIGHT.md is its locked DESIGN.md. Map its picks onto design-tokens; never write its own
+  tokens.css. Never run imagegen.mjs or ship a generated photo: real or licensed photos only.
+  Lint the running page: `node ~/.claude/skills/hallmark/scripts/sloplint.mjs <url> --render`.
+- better-typography — review pass on every surface after layout work. Tabular numbers on prices, timers,
+  SLA countdowns and counts (React Native: `fontVariant: ['tabular-nums']`). It never picks a typeface:
+  type is fixed by DESIGN.md (apps) and ADR-0022 (web).
+- hue — generates design-language skills. Feed it the local codebase only (tokens + the docs above):
+  extract, never invent. Output to .claude/skills/clickco-<theme>/, then `node ~/.claude/skills/hue/scripts/validate.mjs <folder>`.
+- clickco-design-pass — runs the above, in order, for one surface. Start design improvement work there.
+
+Skill-vs-doc conflicts: the doc wins until an ADR changes it; propose the ADR, never diverge silently.
+ADR-0028 settled the website's: no eyebrows, sentence-case labels, one accent phrase (home hero only),
+arrow disc on the amber primary only, no middle-dot meta strings, each proof fact once per page.
+Hallmark's dash ban and section budget were not adopted.
+
+Never ship these generated-site tropes: painted gradient "photos", pulsing-dot chips, image pills inside
+headlines, floating glass status cards, camera-spec mono captions, corner marks, blurry radial glows, word
+marquees, invented metrics, testimonials or logos.
+
 ## Stop and ask when
 
 - A spec is ambiguous or two docs disagree
