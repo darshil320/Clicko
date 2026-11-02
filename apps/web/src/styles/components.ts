@@ -96,13 +96,8 @@ ${mq(bp.lg)}{
 .card .push{margin-top:auto;padding-top:${px(S[4])}}
 .lift:hover{box-shadow:${shadow('md')};border-color:${v('border-strong')}}
 ${mq(bp.lg)}{.card{padding:${px(S[6])}}}
-.icon-chip{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
-  width:${px(S[10])};height:${px(S[10])};margin-bottom:${px(S[5])};border-radius:${px(R.md)};
-  background:${v('surface-raised')};color:${v('text-primary')}}
-.icon-chip svg{width:${px(ICON.size)};height:${px(ICON.size)}}
 ${TONES.map(
   (tone) => `.tone-${tone}{background:${v(`${tone}-default`)};border-color:transparent}
-.tone-${tone} .icon-chip{background:${v('surface-overlay')};color:${v(`${tone}-deep`)}}
 .tone-${tone} .muted,.tone-${tone} .chip{color:${v('text-secondary')}}`,
 ).join('\n')}
 .price-note{${type(T.caption)};color:${v('text-secondary')};font-variant-numeric:tabular-nums;

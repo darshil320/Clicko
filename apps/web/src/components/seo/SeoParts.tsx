@@ -8,7 +8,6 @@ import { formatRupees } from '../../lib/money';
 import { fromPrice } from '../../lib/pricing';
 import { paths } from '../../lib/routes';
 import { Breadcrumbs } from '../ui/Breadcrumbs';
-import { IconChip } from '../ui/Icon';
 import { CATEGORY_MOOD, PhotoFrame, type PhotoMood } from '../ui/PhotoFrame';
 
 export function StatusBadge({ city }: { readonly city: LaunchCity }) {
@@ -57,7 +56,6 @@ export function PageHero({
 export function CityNotes({ city }: { readonly city: LaunchCity }) {
   return (
     <div className="card">
-      <IconChip name="mapPin" />
       <h3>Good to know in {city.name}</h3>
       <p className="muted">
         Areas we shoot in include {city.areas.slice(0, -1).join(', ')} and {city.areas.at(-1)}.

@@ -151,12 +151,3 @@ export function Icon({ name, label }: { readonly name: IconName; readonly label?
     </svg>
   );
 }
-
-/** An icon in a small rounded tile, for card and bento headers. */
-export function IconChip({ name }: { readonly name: IconName }) {
-  return (
-    <span className="icon-chip" aria-hidden="true">
-      <Icon name={name} />
-    </span>
-  );
-}

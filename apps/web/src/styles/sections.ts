@@ -80,7 +80,6 @@ ${mq(bp.sm)}{
 ${mq(bp.lg)}{
   .bento{grid-template-columns:repeat(3,minmax(0,1fr))}
   .tile{min-height:${px(S[14] * 5)};padding:${px(S[8])}}
-  .tile .icon-chip{margin-bottom:${px(S[10])}}
 }
 ${mq(bp.sm)}{.grid-feature>:nth-child(5){grid-column:span 2}}
 `;

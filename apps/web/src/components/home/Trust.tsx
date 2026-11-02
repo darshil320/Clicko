@@ -1,13 +1,12 @@
 import { TRUST_POINTS } from '../../content/home';
-import { Icon, IconChip, type IconName } from '../ui/Icon';
+import { Icon } from '../ui/Icon';
 import { Section } from '../ui/Section';
 
-/** Glyphs in TRUST_POINTS order: verification, dual-card backup, GST invoices, grievance. */
-const GLYPHS: readonly IconName[] = ['shield', 'layers', 'receipt', 'message'];
 /** Daylight tints by meaning: trust, the shoot itself, money and files; the last stays white. */
 const TONES = ['tone-sage', 'tone-clay', 'tone-haze', ''] as const;
 
-/** Tinted bento (Magic UI bento-grid in token CSS): the first and last tiles run wide. */
+/** Tinted bento (Magic UI bento-grid in token CSS): the first and last tiles run wide. No icon
+ * tiles above the headings (ADR-0028 D7): the tint carries the grouping. */
 export function Trust() {
   const last = TRUST_POINTS.length - 1;
   return (
@@ -26,7 +25,6 @@ export function Trust() {
                 .filter(Boolean)
                 .join(' ')}
             >
-              <IconChip name={GLYPHS[index % GLYPHS.length] ?? 'check'} />
               <h3>{point.title}</h3>
               <p className="muted">{point.body}</p>
               {wide && point.facts ? (
