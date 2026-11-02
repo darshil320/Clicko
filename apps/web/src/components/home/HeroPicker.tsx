@@ -26,10 +26,8 @@ interface HeroPickerProps {
   /** The hero reel and every moment's reel, by name. */
   readonly reels: Readonly<Record<string, SiteReel>>;
   readonly waitlistHref: string;
-  /** Kicker and headline, rendered on the server above the picker. */
+  /** The headline, rendered on the server above the picker. */
   readonly children: ReactNode;
-  /** Proof points under the photo. */
-  readonly aside: ReactNode;
 }
 
 /**
@@ -130,14 +128,12 @@ export function HeroPicker({
           pageLabel={`${category.label} shoots in ${city.name}`}
         />
         <p className="picker-note">
-          Photo prices: weekday daytime, booked 2+ days ahead. 50% to book, the rest after the
-          shoot.
+          Photo prices: weekday daytime, booked 2+ days ahead.
           {city.pilot ? ` ${city.name} is a pilot city: book a few days ahead.` : null}
         </p>
       </form>
       <div className="hero-visual">
         <HeroVisual shoot={shoot} category={category} reels={rest.reels} fallback={initial.reel} />
-        {rest.aside}
       </div>
       <ShootBar
         visible={barVisible}

@@ -4,8 +4,6 @@ import type { Faq } from './types';
 export interface Step {
   readonly title: string;
   readonly body: string;
-  /** One proof point from the body, shown as a chip on the step card. */
-  readonly fact: string;
 }
 
 /** Book → photographer assigned → shoot → photos in 48 h (v0.2 §6, T&C §2, §5). */
@@ -13,30 +11,26 @@ export const HOW_IT_WORKS: readonly Step[] = [
   {
     title: 'Book in the app',
     body:
-      'Pick a tier, a category, the date and the venue. You see the full price with GST before ' +
-      'you pay — 50% to book, or 100% when the shoot is within 24 hours.',
-    fact: '50% to book',
+      'Pick a tier, a category, the date and the venue, then pay 50% to book, or 100% when the ' +
+      'shoot is within 24 hours.',
   },
   {
     title: 'A photographer is assigned',
     body:
-      'A verified photographer of your tier and category accepts the job. You see who is coming, ' +
-      'and the app tells you when they are on the way.',
-    fact: 'Verified',
+      'A photographer of your tier and category accepts the job. You see who is coming, and the ' +
+      'app tells you when they are on the way.',
   },
   {
     title: 'The shoot',
     body:
       'Your photographer checks in on arrival and shoots for the hours you booked. Running over? ' +
       'Extensions happen only after you approve them in the app.',
-    fact: 'Check-in on arrival',
   },
   {
     title: 'Photos in 48 hours',
     body:
       'Every delivered frame as camera RAW plus a full-resolution JPEG, by secure link, within ' +
       '48 hours of the shoot ending and the balance being paid.',
-    fact: 'RAW + JPEG',
   },
 ];
 
@@ -44,8 +38,6 @@ export interface TrustPoint {
   readonly title: string;
   readonly body: string;
   readonly link?: { readonly label: string; readonly href: string };
-  /** Short proof points, shown as chips on the wide bento tiles. */
-  readonly facts?: readonly string[];
 }
 
 export const TRUST_POINTS: readonly TrustPoint[] = [
@@ -54,7 +46,6 @@ export const TRUST_POINTS: readonly TrustPoint[] = [
     body:
       'Every photographer passes KYC, police verification and a portfolio review by our team ' +
       'before their first booking. We never store Aadhaar numbers.',
-    facts: ['KYC', 'Police verification', 'Portfolio review'],
   },
   {
     title: 'Dual-card backup',
@@ -63,10 +54,8 @@ export const TRUST_POINTS: readonly TrustPoint[] = [
       'failure does not lose your shoot. Signature adds on-site backup.',
   },
   {
-    title: 'GST invoices, no surprises',
-    body:
-      'Prices are shown with GST in the same place, never revealed at checkout. You get a tax ' +
-      'invoice for every payment.',
+    title: 'GST invoices',
+    body: 'You get a tax invoice for every payment.',
   },
   {
     title: 'A named Grievance Officer',
@@ -74,7 +63,6 @@ export const TRUST_POINTS: readonly TrustPoint[] = [
       'Complaints are acknowledged within 48 hours and resolved within 30 days, as the Consumer ' +
       'Protection (E-Commerce) Rules require.',
     link: { label: 'Grievance redressal', href: '/grievance/' },
-    facts: ['Acknowledged within 48 hours', 'Resolved within 30 days'],
   },
 ];
 

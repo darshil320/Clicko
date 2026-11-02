@@ -7,7 +7,6 @@ import { BOOKABLE_TIERS, type CategoryCode, MIN_HOURS } from '../../content/rate
 import { CATEGORY_REEL, REELS } from '../../content/reels';
 import { TIERS } from '../../content/tiers';
 import { paths } from '../../lib/routes';
-import { Icon } from '../ui/Icon';
 import { HeroPicker } from './HeroPicker';
 import type { PickerCategory, PickerCity, PickerTier, Shoot, ShootPreset } from './picker/types';
 
@@ -50,31 +49,6 @@ const reels = Object.fromEntries(
   ),
 );
 
-function Proof() {
-  return (
-    <ul className="facts hero-facts">
-      <li>
-        <Icon name="check" />
-        <span>
-          <strong>Photos in 48 h</strong> RAW + JPEG, clips unedited
-        </span>
-      </li>
-      <li>
-        <Icon name="check" />
-        <span>
-          <strong>KYC &amp; police verified</strong> every photographer
-        </span>
-      </li>
-      <li>
-        <Icon name="check" />
-        <span>
-          <strong>Yours to post</strong> personal and commercial use, once paid
-        </span>
-      </li>
-    </ul>
-  );
-}
-
 /**
  * Product-led hero (ADR-0019, ADR-0023): the headline, then the shoot picker (photos, video or
  * both) with the live photo price, beside a sample reel or photo of the chosen shoot.
@@ -102,7 +76,6 @@ export function Hero() {
         presets={presets}
         reels={reels}
         waitlistHref="#waitlist"
-        aside={<Proof />}
       >
         <h1 id="hero-title">
           Pro photos and video. <span className="accent-phrase">No DMs, no haggling.</span>

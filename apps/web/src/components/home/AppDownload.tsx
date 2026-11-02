@@ -13,8 +13,8 @@ export function AppDownload() {
           <div>
             <h2 id="app-title">Booking happens in the app</h2>
             <p className="lead">
-              Choose a plan, see the full price with GST, pay securely and follow your booking from
-              confirmation to delivery. The app is on its way to the stores.
+              Choose a plan, pay securely and follow your booking from confirmation to delivery. The
+              app is on its way to the stores.
             </p>
             <ul className="store-badges" aria-label="App downloads">
               {STORES.map((store) => (

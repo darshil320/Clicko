@@ -58,9 +58,7 @@ export const MOMENTS: readonly Moment[] = [
     id: 'creator',
     tag: 'Creators',
     title: 'A content day for your feed',
-    body:
-      'A few outfits, a few locations, one booking. Stills for the grid and camera-original clips ' +
-      'for your reels, usable in brand deals.',
+    body: 'A few outfits, a few locations, one booking: stills for the grid and clips for your reels.',
     preset: { category: 'PORTRAIT', tier: 'PROFESSIONAL', hours: 3, media: 'BOTH' },
     reel: 'creator',
   },
@@ -99,7 +97,5 @@ export const MOMENTS: readonly Moment[] = [
 /** The "For creators" points (Terms §4.3 for video, §9.2–9.3 for usage). */
 export const CREATOR_POINTS: readonly string[] = [
   'Photos and video in one booking, by the hour from 2 hours.',
-  'Every clip comes unedited and camera-original, ready for your own edit, or add a paid reel edit.',
   'Personal and commercial use once paid: posts, ads and brand deals. Reselling as stock is not.',
-  'KYC and police-verified photographers, and the price with GST before you pay.',
 ];

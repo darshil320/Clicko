@@ -1,5 +1,4 @@
 import { TRUST_POINTS } from '../../content/home';
-import { Icon } from '../ui/Icon';
 import { Section } from '../ui/Section';
 
 /** Daylight tints by meaning: trust, the shoot itself, money and files; the last stays white. */
@@ -27,18 +26,8 @@ export function Trust() {
             >
               <h3>{point.title}</h3>
               <p className="muted">{point.body}</p>
-              {wide && point.facts ? (
-                <ul className="chips push" aria-label={`${point.title}: key facts`}>
-                  {point.facts.map((fact) => (
-                    <li key={fact} className="chip">
-                      <Icon name="check" />
-                      {fact}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
               {point.link ? (
-                <p className={wide && point.facts ? undefined : 'push'}>
+                <p className="push">
                   <a className="text-link" href={point.link.href}>
                     {point.link.label}
                   </a>

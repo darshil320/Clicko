@@ -141,7 +141,6 @@ function visualCss(): string {
 .hero-photo{width:100%;aspect-ratio:4/3}
 .hero-photo img{object-position:50% 35%}
 .hero-visual .reel.hero-photo{aspect-ratio:4/5}
-.facts.hero-facts{display:grid;gap:${px(S[2])};margin:0;padding:0;border:0}
 ${mq(bp.lg)}{
   .hero-photo{flex:1 1 auto;aspect-ratio:auto;min-height:${px(picker.photoMin)}}
   .hero-visual .reel.hero-photo{aspect-ratio:9/16;width:auto;max-width:100%;align-self:center}

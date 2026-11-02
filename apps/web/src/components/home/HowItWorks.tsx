@@ -5,8 +5,6 @@ import { Section } from '../ui/Section';
 
 /** Each step's light while its photo loads, in HOW_IT_WORKS order. */
 const MOODS: readonly PhotoMood[] = ['golden', 'garden', 'night', 'coast'];
-/** Fact chip tones by meaning: payment, verification, people, files (DESIGN-DAYLIGHT §Colour). */
-const TONES = ['badge-accent', 'badge-sage', 'badge-clay', 'badge-haze'] as const;
 
 export function HowItWorks() {
   return (
@@ -31,7 +29,6 @@ export function HowItWorks() {
                 {step.title}
               </h3>
               <p className="muted">{step.body}</p>
-              <span className={`badge ${TONES[index % TONES.length]}`}>{step.fact}</span>
             </div>
           </li>
         ))}

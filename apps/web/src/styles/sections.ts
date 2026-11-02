@@ -59,7 +59,6 @@ function stepsCss(): string {
   box-shadow:${shadow('md')};font-variant-numeric:tabular-nums}
 .step h3{${fluidType(webType.title)};font-family:inherit}
 .step p{margin:0}
-.step .badge{margin:${px(S[4])} 0 0}
 ${mq(bp.sm)}{.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 ${mq(bp.lg)}{.steps{grid-template-columns:repeat(4,minmax(0,1fr))}}
 `;
