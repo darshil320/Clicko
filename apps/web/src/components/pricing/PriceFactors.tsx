@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { CATEGORIES } from '../../content/categories';
 import { CATEGORY_UPLIFT_BPS, LEAD_TIME_BANDS, PRICE_FACTORS } from '../../content/rate-card';
 import { percentAbove } from '../../lib/pricing';
@@ -7,11 +8,16 @@ const nextDay = LEAD_TIME_BANDS[1];
 
 /** Everything that moves a quote away from the "from" price, stated up front. */
 export function PriceFactors() {
-  const categoryLines = CATEGORIES.filter((c) => CATEGORY_UPLIFT_BPS[c.code] > 10_000).map(
-    (c) => `${c.label} ${percentAbove(CATEGORY_UPLIFT_BPS[c.code])}`,
-  );
-  const rows: ReadonlyArray<readonly [string, string]> = [
-    ['Category', categoryLines.join(', ')],
+  const uplifted = CATEGORIES.filter((c) => CATEGORY_UPLIFT_BPS[c.code] > 10_000);
+  // Each category keeps its uplift on the same line: "Real Estate +10%" never splits.
+  const categoryLines = uplifted.flatMap((c, index) => [
+    index > 0 ? ', ' : null,
+    <span key={c.code} className="factor-pair">
+      {c.label} {percentAbove(CATEGORY_UPLIFT_BPS[c.code])}
+    </span>,
+  ]);
+  const rows: ReadonlyArray<readonly [string, ReactNode]> = [
+    ['Category', categoryLines],
     ['Weekend (Sat, Sun)', percentAbove(PRICE_FACTORS.weekendBps)],
     ['Night start (10 pm – 6 am)', percentAbove(PRICE_FACTORS.nightBps)],
     [

@@ -167,7 +167,7 @@ function HeroVisual({
         mood={CATEGORY_MOOD[category.code]}
         src={category.photo.src}
         alt={category.photo.alt}
-        caption={`${category.label} · sample photo`}
+        caption={`${category.label} (sample photo)`}
         className="hero-photo"
         priority
       />

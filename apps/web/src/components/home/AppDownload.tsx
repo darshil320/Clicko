@@ -32,7 +32,7 @@ export function AppDownload() {
             mood="golden"
             src={PRE_WEDDING_PHOTO.src}
             alt={PRE_WEDDING_PHOTO.alt}
-            caption="Pre-wedding · sample photo"
+            caption="Pre-wedding (sample photo)"
           />
         </div>
       </div>

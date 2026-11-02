@@ -43,7 +43,7 @@ export default function CitiesPage() {
             mood="coast"
             src={CITY_PHOTOS.mumbai?.src}
             alt={CITY_PHOTOS.mumbai?.alt}
-            caption="Mumbai · sample photo"
+            caption="Mumbai (sample photo)"
             priority
           />
         </div>

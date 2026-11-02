@@ -81,7 +81,7 @@ export default async function CityCategoryPage({ params }: Props) {
         title={content.h1}
         mood={CATEGORY_MOOD[category.code]}
         photo={CATEGORY_PHOTOS[category.code]}
-        caption={`${category.label} · sample photo`}
+        caption={`${category.label} (sample photo)`}
       >
         <p className="lead">{category.summary}</p>
         <p className="muted">{angle}</p>

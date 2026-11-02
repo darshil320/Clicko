@@ -78,7 +78,7 @@ ${mq(bp.sm)}{
 }
 ${mq(bp.lg)}{
   .bento{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .tile{min-height:${px(S[14] * 5)};padding:${px(S[8])}}
+  .tile{padding:${px(S[8])}}
 }
 ${mq(bp.sm)}{.grid-feature>:nth-child(5){grid-column:span 2}}
 `;
@@ -148,7 +148,8 @@ function cardsExtraCss(): string {
 .factor-list{display:grid;margin:0;padding:0;list-style:none;border-top:${hairline()}}
 .factor-list li{display:flex;justify-content:space-between;gap:${px(S[4])};padding:${px(S[4])} 0;
   border-bottom:${hairline()};font-variant-numeric:tabular-nums}
-.factor-list li span:last-child{color:${v('text-secondary')};text-align:right}
+.factor-pair{white-space:nowrap}
+.factor-list li>span:last-child{color:${v('text-secondary')};text-align:right}
 .split{display:grid;gap:${px(S[10])}}
 .split>.card{align-self:start}
 .split-gap{margin-top:${px(rhythm.mobile)}}

@@ -87,6 +87,8 @@ ${mq(bp.lg)}{
 .card h3{margin-bottom:${px(S[2])}}
 .card .muted{margin-bottom:${px(S[3])}}
 .card-link{color:inherit;text-decoration:none}
+.card:hover .card-link{text-decoration:underline;text-decoration-thickness:${px(stroke.hairline)};
+  text-underline-offset:${px(S[1])}}
 .card-link::after{content:"";position:absolute;inset:0;border-radius:inherit}
 @supports selector(:has(a)){
   .card-link:focus-visible{outline:none}

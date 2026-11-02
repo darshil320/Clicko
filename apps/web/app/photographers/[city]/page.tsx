@@ -69,7 +69,7 @@ export default async function CityHub({ params }: Props) {
         title={content.h1}
         mood={CITY_MOOD[city.slug] ?? 'golden'}
         photo={CITY_PHOTOS[city.slug]}
-        caption={`${city.name} · sample photo`}
+        caption={`${city.name} (sample photo)`}
       >
         <p className="lead">{city.intro}</p>
       </PageHero>

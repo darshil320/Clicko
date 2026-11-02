@@ -26,7 +26,7 @@ export interface PhotoFrameProps {
   /** A real photograph. Without one the frame paints its mood and is hidden from assistive tech. */
   readonly src?: string;
   readonly alt?: string;
-  /** What belongs in the frame, e.g. "Wedding · Surat". */
+  /** What belongs in the frame, e.g. "Wedding (sample photo)". */
   readonly caption?: string;
   readonly shape?: 'portrait' | 'wide' | 'square' | 'fill';
   readonly className?: string;
