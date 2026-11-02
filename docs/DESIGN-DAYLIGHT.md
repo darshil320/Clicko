@@ -54,11 +54,12 @@ photo/sea             #7FA3BF
 photo/cream           #F6EBD9
 photo/dusk            #3B3330
 
-## Type (ADR-0022)
+## Type (ADR-0022, ADR-0028)
 display   Onest 700 — headlines, prices, big numerals. Tracking -0.04em.
 body      Onest 400–600 — all UI and running text.
-accent    Onest 500 in accent/text — the one accent phrase in a headline. Never italic.
-labels    Onest 600, uppercase, 0.08em tracking — eyebrows, chips, photo captions.
+accent    Onest 500 in accent/text — one phrase per page, in the home hero headline. Never italic.
+labels    Onest 600 at the caption step, sentence case, untracked — chips, photo captions, table
+          heads, tier names, footer heads. No eyebrows: a section opens with its heading.
 Fluid web steps, phone → 1120 wide:
 hero      40 → 80   leading 1.0
 page      36 → 64   leading 1.04
@@ -75,7 +76,12 @@ shadow/photo   0 40px 80px -32px rgba(20,18,16,0.35)   photos floating in the he
 ## Rules
 - Photos are the hero: every section carries a photo frame; never set body copy on a photo.
 - One accent-filled element per viewport. Amber is a fill with text/on-accent; amber as text is
-  accent/text. The one exception: on darkroom, the italic accent word is amber itself (≥ 7:1).
+  accent/text, on paper only.
+- Section headings are one weight and one colour (ADR-0028).
+- The arrow disc sits on the amber primary button only; no arrow is glued to link text. A dot
+  marks live state only. Facts in a meta line break onto lines or run as commas, never middle dots.
+- No icon in a tinted tile above a heading; an icon sits inline with its text.
+- Each proof fact appears once per page, where it does the most work (ADR-0028 D6).
 - Text colours sit only on the grounds named above. On sage, clay and haze use text/primary,
   text/secondary or the tint's own deep colour — never text/tertiary.
 - One linen band, one darkroom band and one amber panel per page, never two of a kind in a row.
