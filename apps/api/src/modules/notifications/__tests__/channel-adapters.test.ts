@@ -19,7 +19,8 @@ import { FIXTURES, fixtureFetch } from './provider-fixtures';
 
 const PHONE = '+919812345678';
 const TOKEN = 'b'.repeat(43);
-const LINK_BASE = 'https://api.clickco.in';
+/** The website's origin (PUBLIC_WEB_URL): messages link to its delivery page (ADR-0027 D6c). */
+const LINK_BASE = 'https://clickco.in';
 
 function message(code: string, variables: Record<string, string>): TemplatedMessage {
   const template = templateOf(code);

@@ -35,6 +35,17 @@ const PUBLISHED_SANDBOX_SECRET = 'clickco-sandbox-webhook-secret-dev-only';
 const unsetIfEmpty = <S extends z.ZodType>(schema: S) =>
   z.preprocess((v) => (v === '' ? undefined : v), schema);
 
+/** The local web dev server (apps/web `next dev`): PUBLIC_WEB_URL in development and test. */
+export const LOCAL_WEB_URL = 'http://localhost:3000';
+
+/** Scheme, host and port only: no path, query, fragment or credentials. */
+const isOrigin = (value: string): boolean => {
+  // Zod runs refinements after a failed z.url() too: an unparsable value is simply not an origin.
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return url.pathname === '/' && !url.search && !url.hash && !url.username && !url.password;
+};
+
 export const EnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'staging', 'production']),
@@ -207,6 +218,16 @@ export const EnvSchema = z
     // Public https base of this API; Exotel posts call status (duration) to
     // <base>/webhooks/exotel/call-status/<EXOTEL_WEBHOOK_SECRET>.
     PUBLIC_API_URL: unsetIfEmpty(z.url({ protocol: /^https?$/ }).optional()),
+    // Public origin of the website (apps/web, ADR-0027 D6c). WhatsApp and SMS link to
+    // <PUBLIC_WEB_URL>/d/<token>, the page that lists a delivery link's files, and GET /d/:token
+    // allows this origin (CORS, http-app.ts). Required with a real messaging adapter and when
+    // deployed (https); development and test default to LOCAL_WEB_URL.
+    PUBLIC_WEB_URL: unsetIfEmpty(
+      z
+        .url({ protocol: /^https?$/ })
+        .refine(isOrigin, 'must be an origin: no path, query or fragment')
+        .optional(),
+    ),
     EXOTEL_WEBHOOK_SECRET: unsetIfEmpty(
       z
         .string()
@@ -434,8 +455,26 @@ export const EnvSchema = z
       path: ['PUBLIC_API_URL'],
     },
   )
+  .refine(
+    (e) =>
+      (e.WHATSAPP_ADAPTER === 'console' && e.NOTIFY_SMS_ADAPTER === 'console') ||
+      e.PUBLIC_WEB_URL !== undefined,
+    {
+      message: 'WhatsApp and SMS link to <PUBLIC_WEB_URL>/d/<token>: set it with a real adapter',
+      path: ['PUBLIC_WEB_URL'],
+    },
+  )
+  .refine(
+    (e) => !DEPLOYED.includes(e.NODE_ENV) || e.PUBLIC_WEB_URL?.startsWith('https://') === true,
+    {
+      message: 'staging and production must set an https PUBLIC_WEB_URL',
+      path: ['PUBLIC_WEB_URL'],
+    },
+  )
   .transform((e) => ({
     ...e,
+    // An origin has no trailing slash: links are `${PUBLIC_WEB_URL}/d/<token>`.
+    PUBLIC_WEB_URL: new URL(e.PUBLIC_WEB_URL ?? LOCAL_WEB_URL).origin,
     QUEUE_PREFIX: e.QUEUE_PREFIX ?? 'clickco',
     TRUST_PROXY_HOPS: e.TRUST_PROXY_HOPS ?? 0,
     STAFF_TOTP_KEY: e.STAFF_TOTP_KEY ?? DEV_STAFF_TOTP_KEY,
@@ -496,6 +535,7 @@ const WORKER_NO_CHANNELS = {
   EXOTEL_CALLER_ID: '0000000000',
   EXOTEL_WEBHOOK_SECRET: randomBytes(32).toString('hex'),
   PUBLIC_API_URL: 'https://media-worker.invalid',
+  PUBLIC_WEB_URL: 'https://media-worker.invalid',
 } as const;
 
 /**

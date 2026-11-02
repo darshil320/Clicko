@@ -99,9 +99,12 @@ export class NotificationSender {
     @Inject(PUSH_PORT) private readonly push: PushPort,
   ) {}
 
-  /** Where `{link}` points: Clickco's own /d/<token> route (never a provider URL). */
+  /**
+   * Where `{link}` points: Clickco's own delivery page, `<PUBLIC_WEB_URL>/d/<token>` (ADR-0027
+   * D6c), which lists the files from the API's /d/<token> route. Never a provider URL.
+   */
   private get linkBase(): string {
-    return (this.env.PUBLIC_API_URL ?? `http://localhost:${this.env.PORT}`).replace(/\/+$/, '');
+    return this.env.PUBLIC_WEB_URL.replace(/\/+$/, '');
   }
 
   async process(data: JobData): Promise<void> {

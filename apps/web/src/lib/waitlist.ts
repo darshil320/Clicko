@@ -1,9 +1,14 @@
 /**
  * Waitlist request/response handling for POST /waitlist.
  * The body mirrors `JoinWaitlistBody` in packages/contracts/src/serviceability.ts and the
- * response follows the API envelope (apps/api/src/common/envelope.ts). apps/web does not depend
- * on @clickco/contracts, so the shape is restated here — keep the two in step.
+ * response follows the API envelope (apps/api/src/common/envelope.ts). apps/web imports only the
+ * delivery contracts (`@clickco/contracts/delivery`, kept small for the browser), so this shape is
+ * restated here — keep the two in step.
  */
+
+import { LOCAL_API, resolveApiBase } from './api-base';
+
+export { isDeployBuild, isProductionBuild } from './api-base';
 
 export interface WaitlistRequest {
   readonly phone: string;
@@ -32,55 +37,19 @@ const NAME_MAX = 120;
 
 type BuildEnv = Readonly<Record<string, string | undefined>>;
 
-const LOCAL_API = 'http://localhost:4000';
-
-/** Built on Vercel (any environment), with CLICKCO_DEPLOY=1, or with `build:production`. */
-export function isDeployBuild(env: BuildEnv): boolean {
-  return env.VERCEL === '1' || isProductionBuild(env);
-}
-
-/** The production site: Vercel production, CLICKCO_DEPLOY=1, or `build:production`. */
-export function isProductionBuild(env: BuildEnv): boolean {
-  return env.VERCEL_ENV === 'production' || env.CLICKCO_DEPLOY === '1' || env.LEGAL_STRICT === '1';
-}
-
 /** Where the form posts, or why it is switched off. */
 export type WaitlistConfig =
   | { readonly kind: 'live'; readonly endpoint: string }
   | { readonly kind: 'unavailable' };
 
 /**
- * Decides at build time where the waitlist form posts (audit M1). Vercel builds with plain
- * `build`, so this cannot rely on `build:production`:
- * - local builds fall back to the local API;
- * - a deploy build never posts to localhost: with no API URL the site shows "Waitlist opens soon";
- * - a production build with an API URL that is not https fails, as does `build:production`
- *   (LEGAL_STRICT=1) with none at all.
- * Throws with the problem; the build must stop.
+ * Decides at build time where the waitlist form posts (audit M1), from the shared API base
+ * (api-base.ts): local builds post to the local API, a deploy build never posts to localhost (with
+ * no API URL the site shows "Waitlist opens soon"), and a bad production URL stops the build.
  */
 export function resolveWaitlist(env: BuildEnv): WaitlistConfig {
-  const configured = env.NEXT_PUBLIC_API_URL?.trim();
-  if (!configured) {
-    if (env.LEGAL_STRICT === '1') {
-      throw new Error('NEXT_PUBLIC_API_URL must be set for a production build (waitlist form).');
-    }
-    return isDeployBuild(env)
-      ? { kind: 'unavailable' }
-      : { kind: 'live', endpoint: waitlistEndpoint(LOCAL_API) };
-  }
-  let url: URL;
-  try {
-    url = new URL(configured);
-  } catch {
-    throw new Error(`NEXT_PUBLIC_API_URL is not a valid URL: ${configured}`);
-  }
-  if (isDeployBuild(env) && url.protocol !== 'https:') {
-    if (isProductionBuild(env)) {
-      throw new Error('NEXT_PUBLIC_API_URL must be an https:// URL in production.');
-    }
-    return { kind: 'unavailable' };
-  }
-  return { kind: 'live', endpoint: waitlistEndpoint(configured) };
+  const api = resolveApiBase(env);
+  return api.kind === 'live' ? { kind: 'live', endpoint: waitlistEndpoint(api.base) } : api;
 }
 
 export function waitlistEndpoint(base: string | undefined): string {

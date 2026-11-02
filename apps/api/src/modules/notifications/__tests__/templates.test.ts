@@ -75,16 +75,16 @@ describe('template catalogue (ADR-0027 D2)', () => {
     ).toThrow(/never carries a link/);
   });
 
-  it('renders the text and the DLT placeholders, the link from the token', () => {
+  it('renders the text and the DLT placeholders, the link to the web delivery page (D6c)', () => {
     const def = templateOf('DELIVERED');
     if (!def) throw new Error('missing');
     const vars = { bookingRef: 'CLK-1001', linkToken: TOKEN };
-    expect(renderText(def, vars, 'https://api.clickco.in')).toBe(
-      `Your photos for CLK-1001 are ready: https://api.clickco.in/d/${TOKEN}`,
+    expect(renderText(def, vars, 'https://clickco.in')).toBe(
+      `Your photos for CLK-1001 are ready: https://clickco.in/d/${TOKEN}`,
     );
-    expect(placeholderValues(def, vars, 'https://api.clickco.in')).toEqual({
+    expect(placeholderValues(def, vars, 'https://clickco.in')).toEqual({
       bookingRef: 'CLK-1001',
-      link: `https://api.clickco.in/d/${TOKEN}`,
+      link: `https://clickco.in/d/${TOKEN}`,
     });
   });
 });

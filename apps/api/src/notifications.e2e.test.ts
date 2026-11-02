@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { MaskedCallResponse, NotificationPreferencesView } from '@clickco/contracts';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { appendDomainEvent } from './infra/outbox/outbox';
 import { OutboxSubscribers, type PublishedEvent } from './infra/outbox/outbox-subscribers';
 import { JobRegistry } from './infra/queues/job-registry';
@@ -9,6 +9,7 @@ import { BookingsService } from './modules/bookings/bookings.service';
 import { ConsoleCallsAdapter } from './modules/calls/adapters/console-calls.adapter';
 import { CALLS_CONFIG } from './modules/calls/calls.config';
 import { CALLS_PORT } from './modules/calls/calls.port';
+import { ReleaseService } from './modules/delivery/release.service';
 import {
   NOTIFICATION_SMS_PORT,
   PUSH_PORT,
@@ -47,6 +48,9 @@ const OTHER_CLIENT_PHONE = '+919999210802';
 const PRO_PHONE = '+919999110801';
 const SECRET = 'e2e-exotel-webhook-secret-0123456789abcdef';
 const PUBLIC_API_URL = 'https://api.clickco.test';
+/** The website: messages link to its delivery page, `<PUBLIC_WEB_URL>/d/<token>` (D6c). */
+const PUBLIC_WEB_URL = 'https://clickco.test';
+const LINK_TOKEN = 'L'.repeat(43);
 const CLIENT_TOKEN = 'ExponentPushToken[clientphoneAAAAAAAAAAAAA]';
 const SHARED_TOKEN = 'ExponentPushToken[sharedtabletBBBBBBBBBBBB]';
 const PRO_TOKEN = 'ExponentPushToken[prophoneCCCCCCCCCCCCCCCC]';
@@ -98,7 +102,7 @@ describe.runIf(TEST_DATABASE_URL)(
       e2e = await startE2eApp({
         now: NOW,
         nodeEnv: 'development',
-        env: { EXOTEL_WEBHOOK_SECRET: SECRET, PUBLIC_API_URL },
+        env: { EXOTEL_WEBHOOK_SECRET: SECRET, PUBLIC_API_URL, PUBLIC_WEB_URL },
       });
       proId = await insertPhotographer(e2e.db.sql, {
         phone: PRO_PHONE,
@@ -737,6 +741,38 @@ describe.runIf(TEST_DATABASE_URL)(
       const reopened = await e2e.db.sql`
         SELECT 1 FROM call_bindings WHERE assignment_id = ${otherAssignment}`;
       expect(reopened).toHaveLength(0);
+    });
+
+    it('delivered → the link goes to the web delivery page, never the API (ADR-0027 D6c)', async () => {
+      // The link token is the delivery module's (delivery.e2e covers deriving it from real links).
+      const release = e2e.get(ReleaseService);
+      const tokenSpy = vi.spyOn(release, 'primaryLinkToken').mockResolvedValue(LINK_TOKEN);
+      try {
+        const bookings = e2e.get(BookingsService);
+        await e2e.db.sql.begin(async (tx) => {
+          await bookings.recordDelivered(tx, bookingId, e2e.now());
+          await bookings.transition(tx, {
+            bookingId,
+            to: 'DELIVERED',
+            actor: { kind: 'SYSTEM', id: null },
+            occurredAt: e2e.now(),
+            reason: 'notifications e2e',
+          });
+        });
+        await drainOutbox(e2e);
+        await sendDue();
+      } finally {
+        tokenSpy.mockRestore();
+      }
+      const [booking] = await e2e.db.sql<{ reference: string }[]>`
+        SELECT reference FROM bookings WHERE id = ${bookingId}`;
+      const delivered = lastWhatsApp();
+      expect(delivered).toMatchObject({ templateCode: 'DELIVERED', to: CLIENT_PHONE });
+      expect(delivered?.text).toBe(
+        `Your photos for ${booking?.reference} are ready: ${PUBLIC_WEB_URL}/d/${LINK_TOKEN}`,
+      );
+      expect(delivered?.text).not.toContain(PUBLIC_API_URL);
+      expect(JSON.stringify(push.sent)).not.toContain(LINK_TOKEN);
     });
 
     it('no row ever holds a full phone number or push token', async () => {

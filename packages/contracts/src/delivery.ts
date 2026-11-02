@@ -95,9 +95,12 @@ export type DeliveryFileView = z.infer<typeof DeliveryFileView>;
 
 /**
  * GET /d/:token — the files behind one delivery link (audit M5: listed and streamed through
- * Clickco; the API never redirects to the storage provider).
+ * Clickco; the API never redirects to the storage provider). The web page at
+ * `<PUBLIC_WEB_URL>/d/<token>` renders it (ADR-0027 D6c).
  */
 export const DeliveryFolderView = z.object({
+  /** "CLK-1004": the same reference the DELIVERED message names next to the link. */
+  bookingReference: z.string().min(1).max(32),
   kind: DeliveryLinkKind,
   expiresAt: IsoDateTime,
   fileCount: z.int().min(0),

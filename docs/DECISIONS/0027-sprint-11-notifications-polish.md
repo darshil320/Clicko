@@ -146,7 +146,7 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
   link's files (`DeliveryFolderView`), and `/d/<token>/files/<id>` streams each file from
   StoragePort as an attachment (`no-store`, `nosniff`, sandbox CSP). **Deferred:** HTTP Range
   (StoragePort.openObject has no ranged read; resumable downloads of large RAW files wait for it),
-  and the client-facing page that renders the listing (apps/web or the client app, other streams).
+  and the client-facing page that renders the listing (done 2 Nov 2026: D6c).
   Bandwidth through the API is the accepted cost; revisit at launch volume.
 - **L1.** A verified webhook keeps only the fields Clickco parsed (ids, amount, kind) and the sha256
   of the exact body; payer email, contact and VPA are never stored. Existing payloads are reduced
@@ -212,13 +212,66 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
       - No subscriber passes the signal on to its own I/O.
       - If a settle query itself throws, the tick's unstarted claims wait out the lease instead of
         being handed back (LOW).
-  - Replace `script-src 'unsafe-inline'` on the web CSP with build hashes.
+  - Replace `script-src 'unsafe-inline'` on the web CSP with build hashes. Start with `/d/(.*)`
+    (one fixed page, and the one whose address carries a delivery token, D6c).
   - Run one full-history gitleaks scan of the public repo.
+
+### D6c — The delivery page lives on the website (2 Nov 2026)
+**Decision:** the page clients open from the DELIVERED message is on the marketing site (apps/web),
+not in the client app and not served by the API. It works without the app installed, on any
+phone browser, and the API keeps serving JSON and file bytes only.
+- **Link.** Messages link to `<PUBLIC_WEB_URL>/d/<token>`. The `/d/<token>` path and the token are
+  unchanged. `PUBLIC_WEB_URL` (apps/api env.ts) is an origin: https and required in staging and
+  production, required with a real WhatsApp or SMS adapter, `http://localhost:3000` (the web dev
+  server) otherwise. The WhatsApp template's URL button (`photos_delivered_v1`) must be
+  registered with the base `<PUBLIC_WEB_URL>/d/`.
+- **Page.** The static export builds one page, `out/d/index.html`. vercel.json rewrites
+  `/d/:token` (with or without the trailing slash) to it, so the address bar keeps the token.
+  - The browser reads the token from its own path and checks it like the API does (43 base64url
+    characters). A malformed one shows "incomplete link" and nothing is fetched.
+  - It reads `GET <NEXT_PUBLIC_API_URL>/d/<token>` with no cache, no cookies, no Referer and no
+    redirects, and shows nothing the `DeliveryFolderView` schema rejects.
+  - States: the file list, expired (410), not found (404 `LINK_NOT_FOUND`), incomplete link, and
+    a retryable error (anything else, including a timeout).
+  - Each download is a plain link to the API's `/d/<token>/files/<id>`, built from the token and
+    the file's uuid. The API streams it as an attachment, as before.
+  - The listing now names the booking reference (`bookingReference`), the same one the DELIVERED
+    message shows beside the link. Nothing else about the booking is listed.
+- **Headers** (vercel.json, `/d/(.*)`): `Cache-Control: no-store`, `Referrer-Policy: no-referrer`
+  (overrides the site's `strict-origin-when-cross-origin`), `X-Robots-Tag: noindex, nofollow`. The
+  page also carries `<meta name="referrer" content="no-referrer">` and a robots noindex meta. The
+  site CSP already allows `connect-src` to the API origin only, and next.config.ts fails a deploy
+  build whose `NEXT_PUBLIC_API_URL` the CSP would block.
+- **Who sees the token.** The site loads no analytics or third-party script (CSP `script-src` has
+  no origin but the site's own; `'unsafe-inline'` remains, see D6b), fonts are self-hosted, and the
+  page's code sends the token to the Clickco API only. The HTML is the same for every token, so a
+  link preview (WhatsApp, SMS apps) sees no files.
+  - **Accepted (security review MEDIUM, 2 Nov):** the token is in the page's address, so the site's
+    host, Vercel, records it in its request logs, as the API's host records API requests. Anyone
+    who can read those logs could open the link until it expires. Launch-checklist items (owner:
+    Darshil): limit Vercel log access on the team to the people who run the site, and keep `/d/*`
+    out of any log drain.
+  - The alternative is `/d/#<token>`: a fragment never reaches a server. It changes this decision's
+    URL and needs Meta to accept a URL-button base ending in `#`, so it stays an owner decision.
+- **CORS** (apps/api http-app.ts). `CORS_ORIGINS` applies to every route, as before. The
+  `PUBLIC_WEB_URL` origin is admitted only on `GET`/`HEAD` of `/d/<token>` (a well-formed token),
+  and on its preflight, with methods `GET` and never credentials. Downloads are navigations and
+  need no CORS. This is narrower than adding the website to `CORS_ORIGINS`, which would let it
+  read every route.
+- **Not yet:**
+  - A "download all": the API has no archive route, so each file is one tap.
+  - Ranged downloads (D6a M5).
+  - Downloads count against the listing's 60 a minute per IP (`linkHitsPerMinutePerIp`). A
+    client saving more than about 59 files in a minute, or many clients behind one carrier NAT,
+    get a 429, and the tab then shows the API's JSON. A separate, higher limit for
+    `/d/:token/files/:id` is an API follow-up (security review LOW).
+  - The booking reference proves nothing about who someone is: support must not treat it as
+    identity (security review LOW; runbook item).
 
 ### D2/D3a — Notifications and masked calls as built (1 Nov 2026)
 - Client messages go to the account's verified phone, not the booker phone typed into a booking.
-- The link in messages is `PUBLIC_API_URL/d/<token>`. Until the delivery page exists (D6a), it
-  returns the JSON file list.
+- The link in messages was `PUBLIC_API_URL/d/<token>`, which returned the JSON file list. Since
+  D6c (2 Nov 2026) it is `PUBLIC_WEB_URL/d/<token>`, the web delivery page.
 - Ticket acknowledged/resolved and the Pro assignment reminder have no domain event yet, so they
   have no template either. They wait for those events. (2 Nov: a raised ticket now has one;
   see D5a.)

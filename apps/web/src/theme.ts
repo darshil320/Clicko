@@ -1,5 +1,6 @@
 import { baseCss } from './styles/base';
 import { componentsCss } from './styles/components';
+import { deliveryCss } from './styles/delivery';
 import { formsCss } from './styles/forms';
 import { heroCss } from './styles/hero';
 import { layoutCss } from './styles/layout';
@@ -19,6 +20,7 @@ export function siteCss(): string {
     momentsCss(),
     sectionsCss(),
     formsCss(),
+    deliveryCss(),
     motionCss(),
   ].join('\n');
 }

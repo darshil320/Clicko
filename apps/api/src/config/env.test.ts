@@ -30,6 +30,7 @@ const LIVE_CHANNELS = {
   EXOTEL_CALLER_ID: '08047112233',
   EXOTEL_WEBHOOK_SECRET: 'exotel-test-webhook-secret-0123456789',
   PUBLIC_API_URL: 'https://api.clickco.test',
+  PUBLIC_WEB_URL: 'https://clickco.test',
 };
 
 const valid = {
@@ -140,6 +141,66 @@ describe('loadEnv', () => {
       expect(() => loadEnv({ ...prod, PUBLIC_API_URL: 'http://api.clickco.in' })).toThrow(
         /PUBLIC_API_URL/,
       );
+    });
+
+    describe('PUBLIC_WEB_URL (ADR-0027 D6c: messages link to the web delivery page)', () => {
+      it('is required with a real WhatsApp or SMS adapter, deployed or not', () => {
+        expect(() => loadEnv({ ...valid, PUBLIC_WEB_URL: undefined })).toThrow(/PUBLIC_WEB_URL/);
+        const whatsappOnly = { ...valid, ...consoleOnly, WHATSAPP_ADAPTER: 'meta' };
+        expect(() =>
+          loadEnv({
+            ...whatsappOnly,
+            WHATSAPP_PHONE_NUMBER_ID: valid.WHATSAPP_PHONE_NUMBER_ID,
+            WHATSAPP_ACCESS_TOKEN: valid.WHATSAPP_ACCESS_TOKEN,
+          }),
+        ).toThrow(/PUBLIC_WEB_URL/);
+        expect(() =>
+          loadEnv({
+            ...valid,
+            ...consoleOnly,
+            NOTIFY_SMS_ADAPTER: 'msg91',
+            MSG91_AUTH_KEY: valid.MSG91_AUTH_KEY,
+            MSG91_SENDER_ID: valid.MSG91_SENDER_ID,
+            MSG91_DLT_ENTITY_ID: valid.MSG91_DLT_ENTITY_ID,
+            MSG91_TEMPLATES: valid.MSG91_TEMPLATES,
+          }),
+        ).toThrow(/PUBLIC_WEB_URL/);
+      });
+
+      it('is required and https in staging and production', () => {
+        expect(loadEnv(prod).PUBLIC_WEB_URL).toBe('https://clickco.test');
+        for (const NODE_ENV of ['staging', 'production']) {
+          for (const PUBLIC_WEB_URL of [undefined, '', 'http://clickco.in']) {
+            expect(() => loadEnv({ ...prod, NODE_ENV, PUBLIC_WEB_URL }), PUBLIC_WEB_URL).toThrow(
+              /PUBLIC_WEB_URL/,
+            );
+          }
+        }
+      });
+
+      it('is an origin: a trailing slash is dropped, a path, query or credentials refused', () => {
+        expect(loadEnv({ ...prod, PUBLIC_WEB_URL: 'https://clickco.in/' }).PUBLIC_WEB_URL).toBe(
+          'https://clickco.in',
+        );
+        for (const bad of [
+          'https://clickco.in/d',
+          'https://clickco.in/?x=1',
+          'https://clickco.in/#d',
+          'https://user:pw@clickco.in',
+          'ftp://clickco.in',
+          'not a url',
+        ]) {
+          expect(() => loadEnv({ ...prod, PUBLIC_WEB_URL: bad }), bad).toThrow(/PUBLIC_WEB_URL/);
+        }
+      });
+
+      it('development and test with console adapters default to the local web dev server', () => {
+        expect(loadEnv({ ...valid, ...consoleOnly }).PUBLIC_WEB_URL).toBe('http://localhost:3000');
+        expect(
+          loadEnv({ ...valid, ...consoleOnly, PUBLIC_WEB_URL: 'http://localhost:3100' })
+            .PUBLIC_WEB_URL,
+        ).toBe('http://localhost:3100');
+      });
     });
   });
 

@@ -7,6 +7,7 @@ import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
 import { ok } from '../../common/envelope';
 import { SQL } from '../../infra/db/db.module';
+import { BookingsService } from '../bookings/bookings.service';
 import { MediaRetentionService } from '../media/media-retention.service';
 import { DELIVERY_CONFIG } from './delivery.config';
 import type { DeliveryLinkRecord } from './delivery.types';
@@ -14,7 +15,7 @@ import { linkExpired, linkNotFound } from './http-errors';
 import { tokenSha256 } from './link-tokens';
 import { DeliveryLinksRepository } from './repositories/delivery-links.repository';
 
-const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const TOKEN = DELIVERY_CONFIG.publicToken;
 
 /** A filename safe in a Content-Disposition header (ASCII fallback + RFC 5987 UTF-8 form). */
 export function attachmentHeader(name: string): string {
@@ -27,6 +28,9 @@ export function attachmentHeader(name: string): string {
  * server-side (by its sha256, audit L2); the files behind it are listed and STREAMED THROUGH
  * CLICKCO via StoragePort — the API never redirects to the storage provider, so no provider URL
  * (and no provider-side sharing) ever reaches a browser. Every open is counted.
+ * Messages link to the web page `<PUBLIC_WEB_URL>/d/<token>` (apps/web, ADR-0027 D6c), which reads
+ * the listing cross-origin (http-app.ts allows that origin on GET /d/:token only) and links each
+ * download straight here.
  */
 @Controller('d')
 @Throttle({ default: { limit: DELIVERY_CONFIG.linkHitsPerMinutePerIp, ttl: 60_000 } })
@@ -36,6 +40,7 @@ export class PublicDeliveryController {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(DeliveryLinksRepository) private readonly links: DeliveryLinksRepository,
     @Inject(MediaRetentionService) private readonly media: MediaRetentionService,
+    @Inject(BookingsService) private readonly bookings: BookingsService,
   ) {}
 
   private async live(token: string): Promise<DeliveryLinkRecord> {
@@ -57,8 +62,14 @@ export class PublicDeliveryController {
     const link = await this.live(token);
     await this.links.recordAccess(this.sql, link.id, this.clock());
     PublicDeliveryController.private(res);
-    const files = await this.media.deliverable(link.bookingId, link.kind);
+    const [booking, files] = await Promise.all([
+      this.bookings.deliveryFacts(this.sql, link.bookingId),
+      this.media.deliverable(link.bookingId, link.kind),
+    ]);
     const view: DeliveryFolderView = {
+      // The reference the DELIVERED message already shows beside the link; nothing else about
+      // the booking (who, where, what it cost) is ever listed here.
+      bookingReference: booking.reference,
       kind: link.kind,
       expiresAt: link.expiresAt.toISOString(),
       fileCount: files.length,

@@ -13,11 +13,42 @@ interface HeaderRule {
   readonly headers: ReadonlyArray<{ readonly key: string; readonly value: string }>;
 }
 
+interface Rewrite {
+  readonly source: string;
+  readonly destination: string;
+}
+
+const headerRules = (vercelJson: string): readonly HeaderRule[] =>
+  (JSON.parse(vercelJson) as { headers?: readonly HeaderRule[] }).headers ?? [];
+
 /** The headers vercel.json sends on every path, by name. */
 export function siteHeaders(vercelJson: string): ReadonlyMap<string, string> {
-  const parsed = JSON.parse(vercelJson) as { headers?: readonly HeaderRule[] };
-  const rule = parsed.headers?.find((r) => r.source === '/(.*)');
+  const rule = headerRules(vercelJson).find((r) => r.source === '/(.*)');
   return new Map((rule?.headers ?? []).map((h) => [h.key, h.value]));
+}
+
+/** vercel.json's rewrites, in order. */
+export function rewrites(vercelJson: string): readonly Rewrite[] {
+  return (JSON.parse(vercelJson) as { rewrites?: readonly Rewrite[] }).rewrites ?? [];
+}
+
+/**
+ * Every header vercel.json sends for a request path: each matching rule in order, a later rule
+ * overriding an earlier one's value for the same name (Vercel's order). Supports the literal and
+ * `(.*)` sources this file uses; any other pattern throws so a test cannot pass by accident.
+ */
+export function headersFor(vercelJson: string, path: string): ReadonlyMap<string, string> {
+  const matches = (source: string): boolean => {
+    if (!/^[/a-z0-9-]*(\(\.\*\))?$/.test(source)) {
+      throw new Error(`headersFor: unsupported source pattern ${source}`);
+    }
+    return new RegExp(`^${source.replace('(.*)', '.*')}$`).test(path);
+  };
+  return new Map(
+    headerRules(vercelJson)
+      .filter((rule) => matches(rule.source))
+      .flatMap((rule) => rule.headers.map((h) => [h.key, h.value] as const)),
+  );
 }
 
 /** The sources of one CSP directive, e.g. `connect-src` → ["'self'", "https://api.clickco.in"]. */
@@ -30,8 +61,8 @@ export function cspSources(csp: string, directive: string): readonly string[] {
 }
 
 /**
- * A deploy whose waitlist posts to an origin the CSP does not allow would fail in every browser;
- * stop the build instead. Returns the problem, or null.
+ * A deploy whose waitlist posts to (or whose delivery page reads from) an origin the CSP does not
+ * allow would fail in every browser; stop the build instead. Returns the problem, or null.
  */
 export function cspApiProblem(vercelJson: string, endpoint: string): string | null {
   const origin = new URL(endpoint).origin;

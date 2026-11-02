@@ -4,6 +4,8 @@ import type { DeliveryLinkKind } from '@clickco/contracts';
 export const DELIVERY_CONFIG = {
   /** Clickco's own link path: the provider link is resolved server-side and never shown. */
   publicPathPrefix: '/d/',
+  /** A public link token: base64url(HMAC-SHA256), 43 characters (audit L2, link-tokens.ts). */
+  publicToken: /^[A-Za-z0-9_-]{43}$/,
   /** Per-IP limit on the public link route. */
   linkHitsPerMinutePerIp: 60,
 } as const;

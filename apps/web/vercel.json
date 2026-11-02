@@ -3,6 +3,10 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile --filter clickco --filter @clickco/web...",
   "buildCommand": "cd ../.. && pnpm --filter @clickco/web... run build",
+  "rewrites": [
+    { "source": "/d/:token", "destination": "/d/" },
+    { "source": "/d/:token/", "destination": "/d/" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -32,6 +36,14 @@
       "source": "/reels/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/d/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     }
   ]

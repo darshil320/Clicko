@@ -12,6 +12,8 @@ import { insertPhotographer } from './test-support/photographer-fixtures';
 import { TEST_DATABASE_URL } from './test-support/scratch-db';
 
 const HOUR = 3_600_000;
+/** The website's origin: its delivery page reads GET /d/<token> cross-origin (ADR-0027 D6c). */
+const WEB_ORIGIN = 'https://clickco.test';
 const DAY = 24 * HOUR;
 const FILES: UploadFile[] = [
   {
@@ -64,7 +66,11 @@ describe.runIf(TEST_DATABASE_URL)(
     let links: Json[];
 
     beforeAll(async () => {
-      e2e = await startE2eApp({ now: NOW, nodeEnv: 'development' });
+      e2e = await startE2eApp({
+        now: NOW,
+        nodeEnv: 'development',
+        env: { PUBLIC_WEB_URL: WEB_ORIGIN },
+      });
       await insertPhotographer(e2e.db.sql, {
         phone: '+919999179001',
         km: 3,
@@ -208,7 +214,13 @@ describe.runIf(TEST_DATABASE_URL)(
       expect(res.headers.get('location')).toBeNull();
       expect(res.headers.get('cache-control')).toBe('no-store');
       const folder = ((await res.json()) as Json).data;
-      expect(folder).toMatchObject({ kind: 'RAW_PHOTO', fileCount: 1 });
+      const [booking] = await e2e.db.sql<{ reference: string }[]>`
+      SELECT reference FROM bookings WHERE id = ${bookingId}`;
+      expect(folder).toMatchObject({
+        bookingReference: booking?.reference,
+        kind: 'RAW_PHOTO',
+        fileCount: 1,
+      });
       expect(folder.files).toHaveLength(1);
       expect(JSON.stringify(folder)).not.toMatch(/local:\/\/|https?:\/\//);
       const [row] = await e2e.db.sql<{ access_count: number }[]>`
@@ -230,6 +242,38 @@ describe.runIf(TEST_DATABASE_URL)(
       expect(wrong.status).toBe(404);
       expect((await e2e.call('GET', `/d/${'A'.repeat(43)}`)).status).toBe(404);
       expect((await e2e.call('GET', '/d/short')).status).toBe(404);
+    });
+
+    it('D6c: the website may read the listing cross-origin, and nothing else', async () => {
+      const raw = links.find((l) => l.kind === 'RAW_PHOTO') as Json;
+      const listing = await fetch(`${e2e.baseUrl}${raw.path}`, { headers: { Origin: WEB_ORIGIN } });
+      expect(listing.status).toBe(200);
+      expect(listing.headers.get('access-control-allow-origin')).toBe(WEB_ORIGIN);
+      expect(listing.headers.get('access-control-allow-credentials')).toBeNull();
+      expect(listing.headers.get('vary')).toMatch(/Origin/);
+      const preflight = await fetch(`${e2e.baseUrl}${raw.path}`, {
+        method: 'OPTIONS',
+        headers: { Origin: WEB_ORIGIN, 'Access-Control-Request-Method': 'GET' },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get('access-control-allow-methods')).toBe('GET');
+
+      // Another site, the file bytes (a plain navigation) and every other route: no CORS.
+      const elsewhere = await fetch(`${e2e.baseUrl}${raw.path}`, {
+        headers: { Origin: 'https://elsewhere.test' },
+      });
+      expect(elsewhere.headers.get('access-control-allow-origin')).toBeNull();
+      const folder = ((await listing.json()) as Json).data;
+      const file = await fetch(`${e2e.baseUrl}${folder.files[0].path}`, {
+        headers: { Origin: WEB_ORIGIN },
+      });
+      expect(file.status).toBe(200);
+      expect(file.headers.get('access-control-allow-origin')).toBeNull();
+      await file.arrayBuffer();
+      const delivery = await fetch(`${e2e.baseUrl}/bookings/${bookingId}/delivery`, {
+        headers: { Origin: WEB_ORIGIN, Authorization: `Bearer ${clientToken}` },
+      });
+      expect(delivery.headers.get('access-control-allow-origin')).toBeNull();
     });
 
     it('audit L2: only the sha256 of a link token is stored', async () => {

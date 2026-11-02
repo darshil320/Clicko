@@ -61,6 +61,8 @@ const event = (eventType: string, payload: Record<string, unknown> = {}): Publis
 });
 
 const CONFIRMED = event('booking.confirmed');
+const DELIVERED = event('booking.delivered');
+const LINK_TOKEN = 'k'.repeat(43);
 const REMINDER = event('booking.balance_reminder', { balance_paise: 576_725, sequence: 1 });
 
 /** notification_sends in memory, with the SENT-once-per-channel rule of the unique index. */
@@ -100,6 +102,15 @@ class FailingMessaging implements WhatsAppPort, NotificationSmsPort {
   }
 }
 
+/** Keeps every message as the pipeline built it (text and DLT placeholders included). */
+class CapturingMessaging implements WhatsAppPort, NotificationSmsPort {
+  readonly sent: TemplatedMessage[] = [];
+  async sendTemplate(m: TemplatedMessage) {
+    this.sent.push(m);
+    return { provider: 'capture', providerMessageId: `capture-${this.sent.length}` };
+  }
+}
+
 class ScriptedPush implements PushPort {
   readonly sent: PushMessage[] = [];
   constructor(private readonly answer: (m: PushMessage) => PushReceipt) {}
@@ -119,6 +130,7 @@ interface Setup {
   readonly sms?: NotificationSmsPort;
   readonly push?: PushPort;
   readonly event?: PublishedEvent | null;
+  readonly linkToken?: string | null;
 }
 
 function setup(s: Setup = {}) {
@@ -136,7 +148,7 @@ function setup(s: Setup = {}) {
     booking: async () => s.booking ?? facts(),
     photographerName: async () => 'Meera Joshi',
     currentAssignment: async () => null,
-    deliveryLinkToken: async () => null,
+    deliveryLinkToken: async () => s.linkToken ?? null,
     userPhone: async () => PHONE,
   });
   const readers = {
@@ -157,7 +169,11 @@ function setup(s: Setup = {}) {
   const sender = new NotificationSender(
     {} as never,
     () => now,
-    { PORT: 3000, PUBLIC_API_URL: 'https://api.clickco.in' } as Env,
+    {
+      PORT: 3000,
+      PUBLIC_API_URL: 'https://api.clickco.in',
+      PUBLIC_WEB_URL: 'https://clickco.in',
+    } as Env,
     scheduler,
     readers,
     sends as unknown as NotificationSendsRepository,
@@ -214,6 +230,27 @@ describe('NotificationSender (ADR-0027 D2)', () => {
       title: 'Booking confirmed',
       data: { template: 'BOOKING_CONFIRMED', bookingId: BOOKING },
     });
+  });
+
+  it('DELIVERED links to the web delivery page, never the API or a provider (ADR-0027 D6c)', async () => {
+    const sms = new CapturingMessaging();
+    const t = setup({ event: DELIVERED, linkToken: LINK_TOKEN, sms, tokens: [TOKEN_A] });
+    await t.sender.process(job('DELIVERED'));
+    expect(summary(t.sends.rows)).toEqual([
+      ['SMS', 'SENT', null],
+      ['PUSH', 'SENT', null],
+    ]);
+    const [message] = sms.sent;
+    expect(message?.text).toBe(
+      `Your photos for CLK-1042 are ready: https://clickco.in/d/${LINK_TOKEN}`,
+    );
+    expect(message?.placeholders).toEqual({
+      bookingRef: 'CLK-1042',
+      link: `https://clickco.in/d/${LINK_TOKEN}`,
+    });
+    expect(JSON.stringify(message)).not.toContain('api.clickco.in');
+    // The push (lock screen, Expo/FCM/APNs) never carries the link at all.
+    expect(JSON.stringify((t.push as ConsolePushAdapter).sent)).not.toContain(LINK_TOKEN);
   });
 
   it('opted in: WhatsApp first, and SMS is not used when it goes', async () => {

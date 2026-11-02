@@ -77,7 +77,7 @@ Last full run: API 1,700 tests green (3 runs in a row), typecheck 17/17.
   the client rating screen and the report/block buttons in the apps.
 - **D5 left:** a staff route that confirms DATA_LOSS; a payout rule for ABANDONED bookings.
 - **Security follow-ups (ADR-0027 D6a/D6b):**
-  - a page for `/d/:token`, which messages link to and which still returns JSON;
+  - ~~a page for `/d/:token`~~ done 2 Nov (ADR-0027 D6c: apps/web `/d/<token>`, uncommitted);
   - ranged downloads;
   - check in a browser that a KYC PDF opens;
   - web CSP hashes instead of `unsafe-inline`;
@@ -148,7 +148,7 @@ T=$(gh auth token --user darshil320) && git -c credential.helper= -c "credential
 | Legal | Registered address, Grievance Officer (OD-06/09). Legal pages show "Draft" until then. |
 | Waitlist | Cloudflare Turnstile CAPTCHA needs his Cloudflare account. |
 | Providers | WhatsApp templates (Meta), DLT headers/templates, Exotel KYC, Razorpay live keys, FCM/APNs credentials. |
-| Production env | Before deploy: `BANK_ACCOUNT_KEY`, `DELIVERY_LINK_KEY`, `MEDIA_WORKER_ISOLATED=true` + a separate media worker, a `clickco_api` DB role (apps/api/CLAUDE.md "Database roles"), strong `JWT_ACCESS_SECRET` / `OTP_HASH_PEPPER`. |
+| Production env | Before deploy: `BANK_ACCOUNT_KEY`, `DELIVERY_LINK_KEY`, `MEDIA_WORKER_ISOLATED=true` + a separate media worker, a `clickco_api` DB role (apps/api/CLAUDE.md "Database roles"), strong `JWT_ACCESS_SECRET` / `OTP_HASH_PEPPER`, `PUBLIC_WEB_URL` (the website's https origin; the API refuses to boot without it, ADR-0027 D6c). |
 | Vercel | `NEXT_PUBLIC_API_URL` must be https://api.clickco.in or the web deploy fails on purpose. |
 
 ## 9. Key decision records

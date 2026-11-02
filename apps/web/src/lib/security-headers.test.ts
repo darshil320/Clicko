@@ -1,6 +1,13 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { cspApiProblem, cspSources, readVercelJson, siteHeaders } from './security-headers';
+import {
+  cspApiProblem,
+  cspSources,
+  headersFor,
+  readVercelJson,
+  rewrites,
+  siteHeaders,
+} from './security-headers';
 
 const vercelJson = readVercelJson(fileURLToPath(new URL('../../vercel.json', import.meta.url)));
 const headers = siteHeaders(vercelJson);
@@ -21,7 +28,7 @@ describe('vercel.json security headers (audit M2)', () => {
     expect(csp).not.toContain('unsafe-eval');
   });
 
-  it('lets the waitlist reach the production API and nothing else', () => {
+  it('lets the waitlist and the delivery page reach the production API and nothing else', () => {
     expect(cspSources(csp, 'connect-src')).toEqual(["'self'", 'https://api.clickco.in']);
   });
 
@@ -74,7 +81,62 @@ describe('vercel.json static media caching', () => {
   it('still sends the security headers on every path, first', () => {
     expect(rules[0]?.source).toBe('/(.*)');
     expect(
-      rules.filter((r) => r.source !== '/(.*)').flatMap((r) => r.headers.map((h) => h.key)),
+      rules
+        .filter((r) => r.source === '/photos/(.*)' || r.source === '/reels/(.*)')
+        .flatMap((r) => r.headers.map((h) => h.key)),
     ).toEqual(['Cache-Control', 'Cache-Control']);
+    // Only the delivery page overrides a security header, and only to a stricter value.
+    const overridden = rules
+      .filter((r) => r.source !== '/(.*)')
+      .flatMap((r) => r.headers.map((h) => h.key))
+      .filter((key) => headers.has(key));
+    expect(overridden).toEqual(['Referrer-Policy']);
+  });
+});
+
+describe('the delivery page, /d/<token> (ADR-0027 D6c)', () => {
+  const TOKEN = 'A'.repeat(43);
+
+  it('rewrites every /d/<token> to the one exported page, keeping the address', () => {
+    expect(rewrites(vercelJson)).toEqual([
+      { source: '/d/:token', destination: '/d/' },
+      { source: '/d/:token/', destination: '/d/' },
+    ]);
+  });
+
+  it.each([`/d/${TOKEN}`, `/d/${TOKEN}/`, '/d/'])(
+    '%s: never indexed, cached or sent as a Referer',
+    (path) => {
+      const sent = headersFor(vercelJson, path);
+      expect(sent.get('Cache-Control')).toBe('no-store');
+      expect(sent.get('Referrer-Policy')).toBe('no-referrer');
+      expect(sent.get('X-Robots-Tag')).toBe('noindex, nofollow');
+      // Every site-wide security header still applies, the CSP unchanged.
+      for (const [key, value] of headers) {
+        if (key !== 'Referrer-Policy') expect(sent.get(key), key).toBe(value);
+      }
+    },
+  );
+
+  it('the rest of the site keeps its own referrer policy and stays indexable', () => {
+    for (const path of ['/', '/cities/', '/photos/surat.jpg', '/dashboard/']) {
+      const sent = headersFor(vercelJson, path);
+      expect(sent.get('Referrer-Policy'), path).toBe('strict-origin-when-cross-origin');
+      expect(sent.has('X-Robots-Tag'), path).toBe(false);
+    }
+  });
+
+  it('no third party can receive the token: scripts from the site only, requests to the API only', () => {
+    const sent = headersFor(vercelJson, `/d/${TOKEN}`);
+    const policy = sent.get('Content-Security-Policy') ?? '';
+    expect(cspSources(policy, 'script-src')).toEqual(["'self'", "'unsafe-inline'"]);
+    expect(cspSources(policy, 'connect-src')).toEqual(["'self'", 'https://api.clickco.in']);
+    expect(cspSources(policy, 'img-src')).toEqual(["'self'", 'data:']);
+    expect(cspSources(policy, 'frame-ancestors')).toEqual(["'none'"]);
+  });
+
+  it('headersFor refuses source patterns it cannot read', () => {
+    const odd = JSON.stringify({ headers: [{ source: '/d/:token', headers: [] }] });
+    expect(() => headersFor(odd, '/d/x')).toThrow(/unsupported/);
   });
 });
