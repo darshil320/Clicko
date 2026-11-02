@@ -43,7 +43,8 @@ function photoCardsCss(): string {
 .card-photo>.photo{height:${px(cardPhotoHeight)};aspect-ratio:auto;border-radius:${px(R.lg)}}
 .card-photo .card-body{display:flex;flex-direction:column;flex:1;padding:${px(S[5])} ${px(S[3])} ${px(S[3])}}
 .card-photo .card-body>:last-child{margin-bottom:0}
-.card-photo h3{font-family:${fontDisplay};${fluidType(webType.figure)};margin-bottom:${px(S[2])}}
+.card-photo h3{font-family:${fontDisplay};${fluidType(webType.figure)};margin-bottom:${px(S[2])};
+  overflow-wrap:break-word;min-width:0}
 .card-photo .photo .badge{position:absolute;z-index:1;top:${px(S[3])};left:${px(S[3])};margin:0}
 `;
 }

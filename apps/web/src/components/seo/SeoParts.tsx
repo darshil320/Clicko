@@ -98,7 +98,8 @@ export function CategoryLinks({
             <div className="card-body">
               <h3>
                 <a className="card-link" href={paths.cityCategory(city, category)}>
-                  {category.label} photography
+                  {category.label}
+                  <span className="sr-only"> photography</span>
                 </a>
               </h3>
               <p className="muted">{category.summary}</p>
