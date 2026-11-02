@@ -86,10 +86,11 @@ const NEXT_DUE = `CASE WHEN t.acknowledged_at IS NULL THEN t.ack_due_at ELSE t.r
 export class SupportTicketsRepository {
   async insert(tx: Tx, t: NewTicket): Promise<string> {
     const [row] = await tx<{ id: string }[]>`
-      INSERT INTO support_tickets (raised_by_kind, photographer_id, contact_name, contact_phone,
-        contact_email, booking_id, category, is_grievance, subject, status, received_at,
-        ack_due_at, resolve_due_at, created_at, updated_at)
-      VALUES (${t.raisedByKind}, ${t.photographerId}, ${t.contactName}, ${t.contactPhone},
+      INSERT INTO support_tickets (raised_by_kind, user_id, photographer_id, contact_name,
+        contact_phone, contact_email, booking_id, category, is_grievance, subject, status,
+        received_at, ack_due_at, resolve_due_at, created_at, updated_at)
+      VALUES (${t.raisedByKind}, ${t.userId ?? null}, ${t.photographerId}, ${t.contactName},
+              ${t.contactPhone},
               ${t.contactEmail}, ${t.bookingId}, ${t.category}, ${t.isGrievance}, ${t.subject},
               'OPEN', ${t.receivedAt}, ${t.ackDueAt}, ${t.resolveDueAt}, ${t.receivedAt},
               ${t.receivedAt})
@@ -112,6 +113,24 @@ export class SupportTicketsRepository {
     await tx`
       INSERT INTO ticket_messages (ticket_id, author_kind, author_id, body, is_internal, created_at)
       VALUES (${m.ticketId}, ${m.authorKind}, ${m.authorId}, ${m.body}, ${m.isInternal}, ${m.at})`;
+  }
+
+  /** The tickets a client raised, newest first (their own only: by user_id). */
+  async forUser(db: Db, userId: string, limit: number): Promise<TicketRecord[]> {
+    const rows = await db<Row[]>`
+      SELECT ${db.unsafe(COLUMNS)} FROM support_tickets t
+      WHERE t.user_id = ${userId}
+      ORDER BY t.received_at DESC, t.id DESC
+      LIMIT ${limit}`;
+    return rows.map(toRecord);
+  }
+
+  /** Tickets this client raised since `since` (the daily cap; caller holds the client's lock). */
+  async countForUserSince(tx: Tx, userId: string, since: Date): Promise<number> {
+    const [row] = await tx<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM support_tickets
+      WHERE user_id = ${userId} AND received_at >= ${since}`;
+    return row?.n ?? 0;
   }
 
   async find(db: Db, id: string, scope: TicketScope): Promise<TicketRecord | null> {

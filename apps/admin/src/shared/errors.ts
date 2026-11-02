@@ -30,3 +30,21 @@ export function isRetryable(error: unknown): boolean {
   if (!isApiError(error)) return false;
   return error.kind === 'NETWORK' || (error.kind === 'HTTP' && error.status >= 500);
 }
+
+/** Statuses where the API refused before committing anything: nothing happened, safe to change. */
+const REFUSED: ReadonlyArray<number> = [400, 401, 403, 404, 409, 422];
+/** A 409 that only means "the same request is still running": its outcome is not known yet. */
+const STILL_RUNNING = 'IDEMPOTENCY_REQUEST_IN_PROGRESS';
+
+/**
+ * Whether a failed money action certainly did NOT happen (security review H1): a 4xx the server
+ * answers before or instead of committing — a wrong code, no access, a validation error, a
+ * refusal. Anything else (offline, timeout, a 5xx, a bad answer, the same request still running)
+ * may have gone through: keep the exact request and its Idempotency-Key, and retry it unchanged,
+ * so the server replays its stored answer instead of acting twice.
+ */
+export function isDefiniteRejection(error: unknown): boolean {
+  if (!isApiError(error) || error.kind !== 'HTTP') return false;
+  if (!REFUSED.includes(error.status)) return false;
+  return !(error.status === 409 && error.code === STILL_RUNNING);
+}

@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CLIENT_CARE_CONFIG,
   claimApprovalProblem,
+  clientTicketSubject,
   evidenceEntries,
+  isGrievanceCategory,
   qualityAmountProblem,
+  qualityReportWindowOpen,
   qualityReviewReason,
   ticketMessageEffect,
 } from '../care-rules';
@@ -122,5 +126,34 @@ describe('ticket messages', () => {
   it('nothing is added to a resolved ticket', () => {
     expect(ticketMessageEffect('RESOLVED', 'REPLY', true)).toBeNull();
     expect(ticketMessageEffect('CLOSED', 'NOTE', true)).toBeNull();
+  });
+});
+
+describe('client entry points (ADR-0027 D5)', () => {
+  it('a client ticket gets a plain subject from its category and booking', () => {
+    expect(clientTicketSubject('BILLING', 'CC-100245')).toBe('Billing · CC-100245');
+    expect(clientTicketSubject('DATA_DELETION', null)).toBe('Delete my data');
+    expect(clientTicketSubject('OTHER', null)).toBe('Something else');
+  });
+
+  it('grievance, data deletion and consent withdrawal are formal grievances (T&C §11–12)', () => {
+    expect(isGrievanceCategory('GRIEVANCE')).toBe(true);
+    expect(isGrievanceCategory('DATA_DELETION')).toBe(true);
+    expect(isGrievanceCategory('CONSENT_WITHDRAWAL')).toBe(true);
+    expect(isGrievanceCategory('BILLING')).toBe(false);
+  });
+
+  it('a quality issue can be reported for 30 days after delivery, not before or after', () => {
+    const delivered = new Date('2026-12-01T10:00:00.000Z');
+    const day = 86_400_000;
+    expect(CLIENT_CARE_CONFIG.qualityReportWindowDays).toBe(30);
+    expect(qualityReportWindowOpen(null, delivered)).toBe(false);
+    expect(qualityReportWindowOpen(delivered, new Date(delivered.getTime() + day))).toBe(true);
+    expect(qualityReportWindowOpen(delivered, new Date(delivered.getTime() + 30 * day - 1))).toBe(
+      true,
+    );
+    expect(qualityReportWindowOpen(delivered, new Date(delivered.getTime() + 30 * day))).toBe(
+      false,
+    );
   });
 });

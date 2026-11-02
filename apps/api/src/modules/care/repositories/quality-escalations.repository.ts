@@ -50,14 +50,15 @@ export class QualityEscalationsRepository {
     tx: Tx,
     e: {
       readonly bookingId: string;
-      readonly staffId: string;
+      /** STAFF logging it for the client, or the client (USER) from the app (ADR-0027 D5). */
+      readonly raisedBy: { readonly kind: 'STAFF' | 'USER'; readonly id: string };
       readonly complaint: string;
       readonly at: Date;
     },
   ): Promise<string> {
     const [row] = await tx<{ id: string }[]>`
       INSERT INTO quality_escalations (booking_id, raised_by_kind, raised_by_id, complaint, created_at)
-      VALUES (${e.bookingId}, 'STAFF', ${e.staffId}, ${e.complaint}, ${e.at})
+      VALUES (${e.bookingId}, ${e.raisedBy.kind}, ${e.raisedBy.id}, ${e.complaint}, ${e.at})
       RETURNING id`;
     if (!row) throw new Error('quality_escalations insert returned nothing');
     return row.id;

@@ -85,6 +85,12 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0017 is byte-identical to docs/schema-addenda/0017-payout-basis.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0017_payout_basis.sql')).toBe(
+      read('docs/schema-addenda/0017-payout-basis.sql'),
+    );
+  });
+
   it('0014 is byte-identical to docs/schema-addenda/0014-performance-indexes.sql', () => {
     expect(read('apps/api/src/infra/db/migrations/0014_performance_indexes.sql')).toBe(
       read('docs/schema-addenda/0014-performance-indexes.sql'),
@@ -109,6 +115,7 @@ describe('migrations mirror the specification (ADR-0006)', () => {
       '0014_performance_indexes.sql',
       '0015_notifications_calls.sql',
       '0016_reviews_ugc.sql',
+      '0017_payout_basis.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

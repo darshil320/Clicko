@@ -2,6 +2,35 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-11-02 · Sprint 11 D5 carry-overs — API and staff panel (ADR-0027 D5a)
+- **Payouts for undelivered shoots:**
+  - Data loss pays in full; the third in a year is withheld, and finance can release it.
+  - Access denied pays half, with travel in full.
+  - Client absence pays the booked payout without the waiting share, once its review is settled.
+  - All three go through the same batch, TDS and ledger path. Migration 0017 adds
+    `payouts.basis` and `basis_bps`.
+- **Pro earnings:**
+  - Jobs show their payout status and amount.
+  - Paid transfers are listed with TDS and the UTR's last 4 characters.
+  - Pending leaves out paid and withheld payouts.
+- **Client:**
+  - New endpoints: `GET /bookings/:id/money`, `POST/GET /me/tickets` and
+    `POST /bookings/:id/quality-issue`.
+  - Contracts `client-money.ts` and `client-care.ts`; api-client `bookings.money` and `care.*`.
+- **Admin:**
+  - Booking page: Refund and Issue credit sheets, gated by role and city. Large credits need two
+    people and are safe to retry.
+  - Payouts desk: "Held back" list with a Release action.
+- **Tests:**
+  - e2e: `payouts-outcomes` and `client-care`, including redelivery and race cases.
+  - Unit rules for payouts, earnings, care and the review suggestion.
+  - Admin `money-actions`, errors and labels; api-client and contract tests.
+- **Next:**
+  - Client and Pro app screens for these (other stream).
+  - Notifications for `ticket.raised` and `payout.withheld`/`payout.released`.
+  - A staff route that confirms DATA_LOSS.
+  - Owner decisions: the payout amounts above and the ABANDONED payout rule.
+
 ## 2026-10-30 · Sprint 10 — money, payouts, supply, care, pricing, and the modern panel (ADR-0026, branch main)
 **Shipped (five parallel streams, integrated)**
 - **Money:**

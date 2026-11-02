@@ -310,12 +310,13 @@ function ResolveDialog({
         setTouched(true);
         if (check.success) resolve.mutate(check.data);
       }}
-      consequence={`${t.contactName}'s ticket closes and your summary is added to the conversation. Nothing more can be added after this.`}
+      consequence={`${t.contactName}'s ticket closes and your summary is added to the conversation, where ${t.contactName} reads it in the Clickco app. Nothing more can be added after this.`}
     >
       <NoteField
         id="resolve-summary"
         label="How was it resolved?"
         required
+        hint="The client sees this in the Clickco app. Don't include internal notes."
         value={summary}
         onChange={setSummary}
         error={touched ? fieldError(check, 'summary') : null}

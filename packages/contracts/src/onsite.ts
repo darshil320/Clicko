@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { IsoDateTime, Pincode, Uuid } from './common.js';
-import { AssignmentStatus, BookingStatus, PlanTier } from './enums.js';
+import { AssignmentStatus, BookingStatus, PayoutBasis, PlanTier } from './enums.js';
 import { Hours, MoneyPaise } from './money.js';
 
 /**
@@ -274,6 +274,13 @@ export const ProAssignmentDetail = z.object({
 });
 export type ProAssignmentDetail = z.infer<typeof ProAssignmentDetail>;
 
+/**
+ * Where a job's payout stands (ADR-0027 D5): DUE (waiting for the weekly batch), IN_PAYMENT (in a
+ * batch, on its way to the bank), PAID, or WITHHELD (held back; support can explain).
+ */
+export const ProPayoutStatus = z.enum(['DUE', 'IN_PAYMENT', 'PAID', 'WITHHELD']);
+export type ProPayoutStatus = z.infer<typeof ProPayoutStatus>;
+
 export const EarningsJob = z.object({
   assignmentId: Uuid,
   bookingId: Uuid,
@@ -285,11 +292,48 @@ export const EarningsJob = z.object({
   basePayoutPaise: MoneyPaise,
   /** Extension and waiting payout shares. */
   extrasPayoutPaise: MoneyPaise,
+  /**
+   * What the job pays: base + extras until a payout is accrued; then the payout's gross (a client
+   * absence leaves out the waived waiting share, ADR-0016 D12), and 0 while it is withheld.
+   */
   totalPayoutPaise: MoneyPaise,
+  /** Absent until the shoot's outcome accrues a payout (delivery, client absence …). */
+  payoutStatus: ProPayoutStatus.optional(),
+  payoutBasis: PayoutBasis.optional(),
 });
 export type EarningsJob = z.infer<typeof EarningsJob>;
 
-/** GET /pro/earnings — expected gross payouts; payout batches and TDS arrive in S8. */
+/**
+ * One bank transfer already paid to the photographer (ADR-0027 D5): their payouts in one weekly
+ * (or off-cycle) batch, with the TDS withheld (s.194C, ADR-0026 D3). Only the UTR's last 4
+ * characters ever leave the server.
+ */
+export const ProPaidTransfer = z.object({
+  /** The payout batch, e.g. PO20261214W. */
+  batchReference: z.string(),
+  paidAt: IsoDateTime,
+  /** Jobs paid in this transfer. */
+  payoutCount: z.int().min(1),
+  grossPaise: MoneyPaise,
+  /** Penalties and late-delivery deductions recovered from it. */
+  deductionsPaise: MoneyPaise,
+  tdsPaise: MoneyPaise,
+  /** What reached the bank account: gross − deductions − TDS. */
+  netPaise: MoneyPaise,
+  /** Null when nothing went to the bank (everything was deducted). */
+  utrLast4: z
+    .string()
+    .regex(/^[A-Z0-9]{4}$/)
+    .nullable(),
+});
+export type ProPaidTransfer = z.infer<typeof ProPaidTransfer>;
+
+/**
+ * GET /pro/earnings — what each checked-out job pays, and (ADR-0027 D5) the transfers already
+ * paid. The period totals and `pendingPayoutPaise` also count shoots that ended without a
+ * check-out but still pay (access denied), by the day they ended; pending leaves out what is
+ * paid or withheld.
+ */
 export const ProEarnings = z.object({
   basis: z.literal('EXPECTED'),
   asOf: IsoDateTime,
@@ -298,6 +342,8 @@ export const ProEarnings = z.object({
   monthPaise: MoneyPaise,
   pendingPayoutPaise: MoneyPaise,
   jobs: z.array(EarningsJob),
+  /** Newest first, at most 20. Optional so older payloads still parse. */
+  paidTransfers: z.array(ProPaidTransfer).optional(),
 });
 export type ProEarnings = z.infer<typeof ProEarnings>;
 

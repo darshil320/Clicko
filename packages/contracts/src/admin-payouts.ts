@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AdminListQuery, AdminPage } from './admin.js';
 import { StepUpCode } from './admin-pricing.js';
 import { IsoDateTime, Uuid } from './common.js';
+import { PayoutBasis } from './enums.js';
 import { BasisPoints, MoneyPaise, MoneyPaiseString } from './money.js';
 
 /**
@@ -106,6 +107,42 @@ export const AdminPayoutDuePayee = z.object({
 export type AdminPayoutDuePayee = z.infer<typeof AdminPayoutDuePayee>;
 
 /** GET /admin/payouts/due — everything due now, and what a batch made now would take. */
+/**
+ * A payout held back instead of falling due (DOMAIN §2: a third data loss in a year). It is never
+ * batched until finance releases it.
+ */
+export const AdminWithheldPayout = z.object({
+  payoutId: Uuid,
+  photographerId: Uuid,
+  photographerName: z.string(),
+  bookingId: Uuid,
+  bookingReference: z.string(),
+  basis: PayoutBasis,
+  grossPaise: MoneyPaise,
+  /** Why it was held, in words. */
+  reason: z.string(),
+  /** When it would have fallen due. */
+  eligibleAt: IsoDateTime,
+});
+export type AdminWithheldPayout = z.infer<typeof AdminWithheldPayout>;
+
+/**
+ * POST /admin/payouts/withheld/:payoutId/release — finance decides the photographer is paid after
+ * all: WITHHELD → PENDING (due at once if its date passed). A fresh authenticator code and a note.
+ */
+export const AdminReleaseWithheldBody = z.object({
+  code: StepUpCode,
+  note: z.string().trim().min(3, 'Say why it is released').max(500),
+});
+export type AdminReleaseWithheldBody = z.infer<typeof AdminReleaseWithheldBody>;
+
+export const AdminReleaseWithheldResponse = z.object({
+  payoutId: Uuid,
+  status: z.literal('PENDING'),
+  eligibleAt: IsoDateTime,
+});
+export type AdminReleaseWithheldResponse = z.infer<typeof AdminReleaseWithheldResponse>;
+
 export const AdminPayoutsDue = z.object({
   asOf: IsoDateTime,
   /** Due now and payable (blocked photographers excluded): what the next batch takes. */
@@ -123,6 +160,8 @@ export const AdminPayoutsDue = z.object({
   payees: z.array(AdminPayoutDuePayee),
   /** More photographers are due than one answer lists (the totals still count them all). */
   truncated: z.boolean(),
+  /** Held back, waiting for finance to release (oldest first). Optional for older answers. */
+  withheld: z.array(AdminWithheldPayout).optional(),
 });
 export type AdminPayoutsDue = z.infer<typeof AdminPayoutsDue>;
 

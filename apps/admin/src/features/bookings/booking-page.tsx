@@ -25,6 +25,7 @@ import { useNow } from '../../shared/use-now';
 import { BookingAssignment } from './booking-assignment';
 import { BookingDelivery } from './booking-delivery';
 import { BookingHistory } from './booking-history';
+import { BookingMoneyActions } from './booking-money-actions';
 import { BookingOverview } from './booking-overview';
 import { BookingRecords } from './booking-records';
 
@@ -39,7 +40,10 @@ function BackLink() {
   );
 }
 
-/** One booking (ADR-0025 D5): everything ops needs, read-only in Sprint 9. */
+/**
+ * One booking (ADR-0025 D5): everything ops needs, plus the Refund and Issue credit actions for
+ * the people who may take them in the booking's city (ADR-0027 D5).
+ */
 export function BookingPage({ bookingId }: { readonly bookingId: string }) {
   const session = useSession();
   const now = useNow();
@@ -123,6 +127,7 @@ export function BookingPage({ bookingId }: { readonly bookingId: string }) {
         </div>
       </div>
       <BookingOverview booking={booking} now={now} />
+      <BookingMoneyActions booking={booking} grants={grants} />
       <BookingHistory booking={booking} />
       <BookingAssignment booking={booking} />
       <BookingDelivery

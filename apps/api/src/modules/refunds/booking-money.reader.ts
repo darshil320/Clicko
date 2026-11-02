@@ -1,3 +1,10 @@
+import type {
+  ClientBookingCredit,
+  ClientBookingMoney,
+  ClientBookingRefund,
+  ClientRefundStatus,
+} from '@clickco/contracts';
+import { fromPaiseBigint } from '@clickco/utils';
 import { Inject, Injectable } from '@nestjs/common';
 import type postgres from 'postgres';
 import { SQL } from '../../infra/db/db.module';
@@ -27,6 +34,46 @@ export interface BookingMoneyFacts {
 const sum = (xs: readonly bigint[]): bigint => xs.reduce((a, b) => a + b, 0n);
 
 /**
+ * What the client sees of a refund (ADR-0027 D5): only once a second person approved it. A
+ * request still waiting, or rejected, is a staff decision in progress and is not shown; a gateway
+ * failure is retried by staff, so to the client it is still on its way.
+ */
+function clientRefundStatus(r: RefundRecord): ClientRefundStatus | null {
+  if (r.status === 'COMPLETED') return 'REFUNDED';
+  if (r.status === 'APPROVED' || r.status === 'PROCESSING' || r.status === 'FAILED') {
+    return 'PROCESSING';
+  }
+  return null;
+}
+
+const clientRefund = (r: RefundRecord): ClientBookingRefund[] => {
+  const status = clientRefundStatus(r);
+  if (!status) return [];
+  return [
+    {
+      id: r.id,
+      amountPaise: fromPaiseBigint(r.amountPaise),
+      status,
+      initiatedAt: (r.approvedAt ?? r.processingAt ?? r.createdAt).toISOString(),
+      completedAt: status === 'REFUNDED' ? (r.completedAt?.toISOString() ?? null) : null,
+    },
+  ];
+};
+
+const clientCredit = (c: CreditRecord, now: Date): ClientBookingCredit => {
+  const left = c.amountPaise - c.consumedPaise;
+  return {
+    id: c.id,
+    amountPaise: fromPaiseBigint(c.amountPaise),
+    remainingPaise: fromPaiseBigint(left > 0n ? left : 0n),
+    reason: c.reasonCode,
+    issuedAt: c.createdAt.toISOString(),
+    expiresAt: c.expiresAt.toISOString(),
+    expired: c.expiresAt.getTime() <= now.getTime(),
+  };
+};
+
+/**
  * A booking's money as the refund and credit desks see it (ADR-0026 D1): what each payment
  * captured, what went back, what is on its way back, and what can still be refunded.
  */
@@ -50,6 +97,22 @@ export class BookingMoneyReader {
       const left = t.capturedPaise - t.refundedPaise - held;
       return { ...t, inFlightPaise: held, refundablePaise: left > 0n ? left : 0n };
     });
+  }
+
+  /**
+   * The client's view of their booking's refunds and credits (GET /bookings/:id/money). The
+   * caller has already proved the booking is theirs; credits are also matched to them.
+   */
+  async forClient(userId: string, bookingId: string, now: Date): Promise<ClientBookingMoney> {
+    const [refunds, credits] = await Promise.all([
+      this.refunds.forBooking(this.sql, bookingId),
+      this.credits.forBooking(this.sql, bookingId),
+    ]);
+    return {
+      bookingId,
+      refunds: refunds.flatMap(clientRefund),
+      credits: credits.filter((c) => c.userId === userId).map((c) => clientCredit(c, now)),
+    };
   }
 
   async facts(bookingId: string): Promise<BookingMoneyFacts> {

@@ -83,6 +83,25 @@ describe('suggestOutcome — what a review item most likely needs (ADR-0026 D2)'
     ).toMatchObject({ outcome: 'NO_ACTION' });
   });
 
+  it('client did not attend: a waiting charge logged first is waived (ADR-0016 D12)', () => {
+    const waited = facts({ reason: 'CLIENT_NON_ATTENDANCE', waitingChargedPaise: 53_100n });
+    expect(suggestOutcome(waited)).toMatchObject({
+      outcome: 'CHARGE_RAISED',
+      amountPaise: 845_411n - 53_100n,
+    });
+    expect(suggestOutcome(waited).why).toMatch(/waiting charge is waived/);
+    // Only the waiting charge was left to pay: nothing is owed.
+    expect(
+      suggestOutcome(
+        facts({
+          reason: 'CLIENT_NON_ATTENDANCE',
+          balanceDuePaise: 53_100n,
+          waitingChargedPaise: 53_100n,
+        }),
+      ),
+    ).toMatchObject({ outcome: 'NO_ACTION' });
+  });
+
   it('unsafe site: billed in full, no refund (T&C §8.3) unless staff choose goodwill', () => {
     expect(suggestOutcome(facts({ reason: 'UNSAFE_SITE_PARTIAL_CHARGE' }))).toMatchObject({
       outcome: 'NO_ACTION',

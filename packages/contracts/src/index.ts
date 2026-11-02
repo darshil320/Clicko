@@ -11,6 +11,8 @@ export * from './auth.js';
 export * from './booking.js';
 export * from './booking-flow.js';
 export * from './city.js';
+export * from './client-care.js';
+export * from './client-money.js';
 export * from './common.js';
 export * from './delivery.js';
 export * from './dispatch.js';

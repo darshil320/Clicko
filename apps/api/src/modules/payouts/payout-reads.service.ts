@@ -95,6 +95,7 @@ export class PayoutReadsService {
     const weeklyRef = weeklyBatchRef(now);
     const weeklyOpen =
       isIstMonday(now) && !(await this.batches.referenceExists(this.sql, weeklyRef));
+    const withheld = await this.withheld();
     return {
       asOf: now.toISOString(),
       ready: totals(ready),
@@ -105,7 +106,29 @@ export class PayoutReadsService {
       nextWeeklyRunOn: weeklyOpen ? istDate(now) : istDate(nextIstWeekStart(now)),
       payees: list.slice(0, PAYOUT_CONFIG.maxDuePayees),
       truncated: list.length > PAYOUT_CONFIG.maxDuePayees,
+      withheld,
     };
+  }
+
+  /** Payouts held back until finance releases them (ADR-0027 D5), oldest first. */
+  private async withheld(): Promise<NonNullable<DueWire['withheld']>> {
+    const rows = await this.payouts.withheld(this.sql, PAYOUT_CONFIG.maxWithheldListed);
+    if (rows.length === 0) return [];
+    const [payees, refs] = await Promise.all([
+      this.directory.payees(unique(rows.map((r) => r.photographerId))),
+      this.references(rows.map((r) => r.bookingId)),
+    ]);
+    return rows.map((r) => ({
+      payoutId: r.id,
+      photographerId: r.photographerId,
+      photographerName: payees.get(r.photographerId)?.name ?? 'Unknown photographer',
+      bookingId: r.bookingId,
+      bookingReference: refs.get(r.bookingId) ?? '—',
+      basis: r.basis,
+      grossPaise: fromPaiseBigint(r.grossPaise),
+      reason: r.withheldReason ?? 'Held back',
+      eligibleAt: r.eligibleAt.toISOString(),
+    }));
   }
 
   private payee(

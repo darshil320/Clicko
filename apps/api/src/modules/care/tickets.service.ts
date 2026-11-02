@@ -6,23 +6,42 @@ import {
   ticketDeadlines,
   ticketStatusAfter,
 } from '@clickco/contracts';
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type postgres from 'postgres';
 import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
+import { appendDomainEvent } from '../../infra/outbox/outbox';
+import { BookingsService } from '../bookings/bookings.service';
 import type { TicketMessageRecord, TicketPageQuery, TicketRecord, TicketScope } from './care.types';
-import { ticketMessageEffect } from './care-rules';
+import {
+  CLIENT_CARE_CONFIG,
+  clientTicketSubject,
+  isGrievanceCategory,
+  ticketMessageEffect,
+} from './care-rules';
 import { SupportTicketsRepository } from './repositories/support-tickets.repository';
 
 const NOT_FOUND = { code: 'TICKET_NOT_FOUND', message: 'Ticket not found' };
 const DONE = { code: 'TICKET_RESOLVED', message: 'This ticket is already resolved' };
+const BOOKING_NOT_FOUND = { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' };
+const DAY_MS = 86_400_000;
 
-/** These categories are formal grievances (T&C §11–12) whatever the subject. */
-const GRIEVANCE_CATEGORIES: readonly TicketCategory[] = [
-  'GRIEVANCE',
-  'DATA_DELETION',
-  'CONSENT_WITHDRAWAL',
-];
+/** A client raising a ticket from the app (ADR-0027 D5). Contact details come from the account. */
+export interface ClientTicketInput {
+  readonly userId: string;
+  readonly contactName: string;
+  readonly contactPhone: string;
+  readonly bookingId: string | null;
+  readonly category: TicketCategory;
+  readonly message: string;
+}
 
 export interface NewTicketInput {
   readonly raisedBy: TicketRaisedBy;
@@ -47,7 +66,89 @@ export class TicketsService {
   constructor(
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(SupportTicketsRepository) private readonly repo: SupportTicketsRepository,
+    @Inject(BookingsService) private readonly bookings: BookingsService,
   ) {}
+
+  /**
+   * The client raises a ticket (SA-02): about one of their own bookings (someone else's is 404,
+   * like a missing one) or about nothing in particular. Both statutory clocks start now. At most
+   * CLIENT_CARE_CONFIG.ticketsPerUserPerDay a day, counted under a per-client lock in the insert's
+   * transaction, so two at once cannot both slip under it on any instance. The ticket, its first
+   * message (the client's words) and `ticket.raised` commit together.
+   */
+  async raiseForClient(c: ClientTicketInput, now: Date): Promise<TicketRecord> {
+    const booking = c.bookingId ? await this.bookings.findForUser(c.userId, c.bookingId) : null;
+    if (c.bookingId && !booking) throw new NotFoundException(BOOKING_NOT_FOUND);
+    const deadlines = ticketDeadlines(now);
+    const isGrievance = isGrievanceCategory(c.category);
+    return this.sql.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`care:tickets:user:${c.userId}`}))`;
+      const today = await this.repo.countForUserSince(
+        tx,
+        c.userId,
+        new Date(now.getTime() - DAY_MS),
+      );
+      if (today >= CLIENT_CARE_CONFIG.ticketsPerUserPerDay) {
+        throw new HttpException(
+          {
+            code: 'RATE_LIMITED',
+            message:
+              'You have raised several tickets today. We will get back to you on those first.',
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      const id = await this.repo.insert(tx, {
+        raisedByKind: 'USER',
+        userId: c.userId,
+        photographerId: null,
+        contactName: c.contactName,
+        contactPhone: c.contactPhone,
+        contactEmail: null,
+        bookingId: booking?.id ?? null,
+        category: c.category,
+        isGrievance,
+        subject: clientTicketSubject(c.category, booking?.reference ?? null),
+        receivedAt: now,
+        ackDueAt: deadlines.ackDueAt,
+        resolveDueAt: deadlines.resolveDueAt,
+      });
+      await this.repo.insertMessage(tx, {
+        ticketId: id,
+        authorKind: 'CUSTOMER',
+        authorId: null,
+        body: c.message,
+        isInternal: false,
+        at: now,
+      });
+      const ticket = await this.repo.find(tx, id, null);
+      if (!ticket) throw new Error(`ticket ${id} vanished in its own transaction`);
+      // No message text or contact details in the event: notifications map ids to templates.
+      await appendDomainEvent(tx, {
+        eventType: 'ticket.raised',
+        aggregateKind: 'support_ticket',
+        aggregateId: id,
+        occurredAt: now,
+        payload: {
+          ticket_id: id,
+          reference: ticket.reference,
+          raised_by_kind: 'USER',
+          user_id: c.userId,
+          booking_id: ticket.bookingId,
+          category: c.category,
+          is_grievance: isGrievance,
+          ack_due_at: deadlines.ackDueAt.toISOString(),
+          resolve_due_at: deadlines.resolveDueAt.toISOString(),
+        },
+      });
+      return ticket;
+    });
+  }
+
+  /** The client's own tickets, newest first. */
+  listForClient(userId: string): Promise<TicketRecord[]> {
+    return this.repo.forUser(this.sql, userId, CLIENT_CARE_CONFIG.ticketListLimit);
+  }
 
   page(q: TicketPageQuery): Promise<TicketRecord[]> {
     return this.repo.page(this.sql, q);
@@ -79,7 +180,7 @@ export class TicketsService {
         contactEmail: i.contactEmail,
         bookingId: i.bookingId,
         category: i.category,
-        isGrievance: GRIEVANCE_CATEGORIES.includes(i.category),
+        isGrievance: isGrievanceCategory(i.category),
         subject: i.subject,
         receivedAt: c.now,
         ackDueAt: deadlines.ackDueAt,

@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { Db, Tx } from '../ports';
+import type { PayoutBasis } from '../rules/outcome-payouts';
 
-/** payouts.status (schema `payout_status`); the payouts module uses five of them. */
 /**
- * PENDING due / in a draft · APPROVED exported, not yet in a bank file · PROCESSING in a bank file,
- * waiting for the UTR · PAID · FAILED (the bank returned it).
+ * payouts.status (schema `payout_status`): PENDING due / in a draft · APPROVED exported, not yet in
+ * a bank file · PROCESSING in a bank file, waiting for the UTR · PAID · FAILED (the bank returned
+ * it) · WITHHELD held back (a data loss past the yearly cap, ADR-0027 D5) until finance releases it.
  */
 export type PayoutStatus = 'PENDING' | 'APPROVED' | 'PROCESSING' | 'PAID' | 'FAILED' | 'WITHHELD';
 
@@ -110,6 +111,65 @@ export interface NewPayout {
   readonly photographerId: string;
   readonly grossPaise: bigint;
   readonly eligibleAt: Date;
+  /** Why it is owed (addendum 0017) and the share of the full payout that pays. */
+  readonly basis: PayoutBasis;
+  readonly basisBps: number;
+  /** A data loss past the yearly cap is written WITHHELD, with the reason (never batched). */
+  readonly withheldReason: string | null;
+}
+
+export interface WithheldPayoutRecord {
+  readonly id: string;
+  readonly bookingId: string;
+  readonly photographerId: string;
+  readonly basis: PayoutBasis;
+  readonly status: PayoutStatus;
+  readonly grossPaise: bigint;
+  readonly withheldReason: string | null;
+  readonly eligibleAt: Date;
+}
+
+interface WithheldRow {
+  id: string;
+  booking_id: string;
+  photographer_id: string;
+  basis: PayoutBasis;
+  status: PayoutStatus;
+  gross: string;
+  withheld_reason: string | null;
+  eligible_at: Date;
+}
+
+const toWithheld = (r: WithheldRow): WithheldPayoutRecord => ({
+  id: r.id,
+  bookingId: r.booking_id,
+  photographerId: r.photographer_id,
+  basis: r.basis,
+  status: r.status,
+  grossPaise: BigInt(r.gross),
+  withheldReason: r.withheld_reason,
+  eligibleAt: r.eligible_at,
+});
+
+export interface PhotographerPayoutRecord {
+  readonly bookingId: string;
+  readonly status: PayoutStatus;
+  readonly basis: PayoutBasis;
+  readonly grossPaise: bigint;
+  readonly eligibleAt: Date;
+}
+
+/** One bank transfer as the photographer sees it: their PAID payouts in one batch. */
+export interface PaidTransferRecord {
+  readonly batchReference: string;
+  readonly paidAt: Date;
+  readonly payoutCount: number;
+  readonly grossPaise: bigint;
+  readonly deductionsPaise: bigint;
+  readonly tdsPaise: bigint;
+  readonly netPaise: bigint;
+  /** The bank's UTR (null when nothing went to the bank). Callers show the last 4 only. */
+  readonly utr: string | null;
 }
 
 export interface PayoutAssessmentRow {
@@ -130,12 +190,15 @@ export interface PayoutAssessmentRow {
  */
 @Injectable()
 export class PayoutsRepository {
-  /** Idempotent per (booking, photographer) — the subscriber is at-least-once. */
+  /** Idempotent per (booking, photographer) — the subscribers are at-least-once. */
   async insert(tx: Tx, p: NewPayout): Promise<{ id: string; created: boolean }> {
+    const status: PayoutStatus = p.withheldReason === null ? 'PENDING' : 'WITHHELD';
     const [row] = await tx<{ id: string }[]>`
-      INSERT INTO payouts (booking_id, photographer_id, gross_paise, net_paise, eligible_at)
+      INSERT INTO payouts (booking_id, photographer_id, gross_paise, net_paise, eligible_at,
+                           basis, basis_bps, status, withheld_reason)
       VALUES (${p.bookingId}, ${p.photographerId}, ${pg(p.grossPaise)}::bigint,
-              ${pg(p.grossPaise)}::bigint, ${p.eligibleAt})
+              ${pg(p.grossPaise)}::bigint, ${p.eligibleAt}, ${p.basis}, ${p.basisBps},
+              ${status}, ${p.withheldReason})
       ON CONFLICT (booking_id, photographer_id) DO NOTHING
       RETURNING id`;
     if (row) return { id: row.id, created: true };
@@ -144,6 +207,115 @@ export class PayoutsRepository {
       WHERE booking_id = ${p.bookingId} AND photographer_id = ${p.photographerId}`;
     if (!existing) throw new Error('payouts.insert: no row');
     return { id: existing.id, created: false };
+  }
+
+  /**
+   * This photographer's DATA_LOSS payouts (paid, pending or withheld) on other bookings falling
+   * due after `since` (DOMAIN §2: the cap counts incidents). Caller holds the photographer's lock.
+   */
+  async dataLossCount(
+    tx: Tx,
+    photographerId: string,
+    exceptBookingId: string,
+    since: Date,
+  ): Promise<number> {
+    const [row] = await tx<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM payouts
+      WHERE photographer_id = ${photographerId} AND basis = 'DATA_LOSS'
+        AND booking_id <> ${exceptBookingId} AND eligible_at > ${since}`;
+    return row?.n ?? 0;
+  }
+
+  /** Withheld payouts, oldest first (the payouts desk's "Held back", ADR-0027 D5). */
+  async withheld(db: Db, limit: number): Promise<WithheldPayoutRecord[]> {
+    const rows = await db<WithheldRow[]>`
+      SELECT id, booking_id, photographer_id, basis, gross_paise::text AS gross, withheld_reason,
+             eligible_at, status
+      FROM payouts WHERE status = 'WITHHELD'
+      ORDER BY eligible_at, id LIMIT ${limit}`;
+    return rows.map(toWithheld);
+  }
+
+  /** The payout under a row lock, for a release decision. */
+  async lockForRelease(tx: Tx, payoutId: string): Promise<WithheldPayoutRecord | null> {
+    const [row] = await tx<WithheldRow[]>`
+      SELECT id, booking_id, photographer_id, basis, gross_paise::text AS gross, withheld_reason,
+             eligible_at, status
+      FROM payouts WHERE id = ${payoutId} FOR UPDATE`;
+    return row ? toWithheld(row) : null;
+  }
+
+  /** WITHHELD → PENDING; the reason stays as history. Caller holds the row lock. */
+  async releaseWithheld(tx: Tx, payoutId: string): Promise<void> {
+    const res = await tx`
+      UPDATE payouts SET status = 'PENDING' WHERE id = ${payoutId} AND status = 'WITHHELD'`;
+    if (res.count !== 1) throw new Error(`payout ${payoutId} is not withheld`);
+  }
+
+  /** One photographer's paid transfers, newest first (Pro earnings, ADR-0027 D5). */
+  async paidTransfers(
+    db: Db,
+    photographerId: string,
+    limit: number,
+  ): Promise<PaidTransferRecord[]> {
+    const rows = await db<
+      {
+        batch_ref: string;
+        paid_at: Date;
+        n: number;
+        gross: string;
+        deductions: string;
+        tds: string;
+        net: string;
+        utr: string | null;
+      }[]
+    >`
+      SELECT b.batch_ref, max(p.paid_at) AS paid_at, count(*)::int AS n,
+             sum(p.gross_paise)::text AS gross, sum(p.tds_paise)::text AS tds,
+             sum(p.penalty_deduction_paise + p.other_deduction_paise)::text AS deductions,
+             sum(p.net_paise)::text AS net, max(p.utr) AS utr
+      FROM payouts p JOIN payout_batches b ON b.id = p.batch_id
+      WHERE p.photographer_id = ${photographerId} AND p.status = 'PAID' AND p.paid_at IS NOT NULL
+      GROUP BY b.id, b.batch_ref
+      ORDER BY max(p.paid_at) DESC, b.batch_ref DESC
+      LIMIT ${limit}`;
+    return rows.map((r) => ({
+      batchReference: r.batch_ref,
+      paidAt: r.paid_at,
+      payoutCount: r.n,
+      grossPaise: BigInt(r.gross),
+      deductionsPaise: BigInt(r.deductions),
+      tdsPaise: BigInt(r.tds),
+      netPaise: BigInt(r.net),
+      utr: r.utr,
+    }));
+  }
+
+  /** This photographer's payouts, newest first (Pro earnings: what each job pays and where). */
+  async forPhotographer(
+    db: Db,
+    photographerId: string,
+    limit: number,
+  ): Promise<PhotographerPayoutRecord[]> {
+    const rows = await db<
+      {
+        booking_id: string;
+        status: PayoutStatus;
+        basis: PayoutBasis;
+        gross: string;
+        eligible_at: Date;
+      }[]
+    >`
+      SELECT booking_id, status, basis, gross_paise::text AS gross, eligible_at FROM payouts
+      WHERE photographer_id = ${photographerId}
+      ORDER BY eligible_at DESC, id DESC LIMIT ${limit}`;
+    return rows.map((r) => ({
+      bookingId: r.booking_id,
+      status: r.status,
+      basis: r.basis,
+      grossPaise: BigInt(r.gross),
+      eligibleAt: r.eligible_at,
+    }));
   }
 
   /** Not in any batch and due by `at`, oldest first. */

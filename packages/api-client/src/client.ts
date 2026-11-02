@@ -4,7 +4,13 @@ import {
   type BlockPhotographerBody,
   BookingDetail,
   BookingSummary,
+  ClientBookingMoney,
+  ClientQualityIssue,
+  type ClientQualityIssueBody,
   ClientReview,
+  ClientTicket,
+  type ClientTicketBody,
+  ClientTicketList,
   type CreateBookingBody,
   CreateBookingResponse,
   type JoinWaitlistBody,
@@ -150,6 +156,55 @@ export function createApiClient(options: ApiClientOptions) {
           method: 'POST',
           path: `/bookings/${uuidSegment(bookingId)}/cancel`,
           schema: BookingSummary,
+          auth: true,
+          idempotencyKey,
+        }),
+      /**
+       * ADR-0027 D5: the refunds (once approved) and the credits on this booking of yours. Someone
+       * else's booking is 404 BOOKING_NOT_FOUND, like a missing one.
+       */
+      money: async (bookingId: string) =>
+        http.request({
+          method: 'GET',
+          path: `/bookings/${uuidSegment(bookingId)}/money`,
+          schema: ClientBookingMoney,
+          auth: true,
+        }),
+    },
+
+    /**
+     * ADR-0027 D5: customer care — support tickets (acknowledged in 48 h, resolved in 30 days)
+     * and quality issues on a delivered booking. Writes take one Idempotency-Key per intent: a
+     * retried tap replays the first answer instead of raising a second ticket.
+     */
+    care: {
+      /** Your tickets, newest first, with both statutory deadlines. */
+      tickets: () =>
+        http.request({ method: 'GET', path: '/me/tickets', schema: ClientTicketList, auth: true }),
+      /** 429 RATE_LIMITED after 5 in a day; 404 BOOKING_NOT_FOUND for a booking not yours. */
+      raiseTicket: (body: ClientTicketBody, { idempotencyKey }: Idempotent) =>
+        http.request({
+          method: 'POST',
+          path: '/me/tickets',
+          body,
+          schema: ClientTicket,
+          auth: true,
+          idempotencyKey,
+        }),
+      /**
+       * Within 30 days of delivery, once per booking. 409 BOOKING_NOT_DELIVERED,
+       * QUALITY_ISSUE_ALREADY_OPEN or QUALITY_WINDOW_CLOSED.
+       */
+      reportQualityIssue: async (
+        bookingId: string,
+        body: ClientQualityIssueBody,
+        { idempotencyKey }: Idempotent,
+      ) =>
+        http.request({
+          method: 'POST',
+          path: `/bookings/${uuidSegment(bookingId)}/quality-issue`,
+          body,
+          schema: ClientQualityIssue,
           auth: true,
           idempotencyKey,
         }),

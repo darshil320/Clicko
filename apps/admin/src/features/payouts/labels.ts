@@ -1,4 +1,5 @@
 import type {
+  PayoutBasis,
   PayoutBatchState,
   PayoutBlocker,
   PayoutNotice,
@@ -51,6 +52,18 @@ export const NOTICE: Readonly<Record<PayoutNotice, string>> = {
   BREACH_UNDER_REVIEW: 'Late delivery under review',
   GST_REGISTERED: 'GST registered',
 };
+
+/** Why a payout is owed, in words (ADR-0027 D5). */
+export const BASIS: Readonly<Record<PayoutBasis, string>> = {
+  DELIVERED: 'Delivered',
+  DATA_LOSS: 'Files lost',
+  ACCESS_DENIED: 'Access denied',
+  CLIENT_ABSENT: "Client didn't attend",
+};
+
+/** The release confirm: "₹5,200 will be paid to Asha Patel in the next batch." */
+export const releaseConsequence = (paise: number | bigint, name: string): string =>
+  `${rupees(paise)} will be paid to ${name} in the next batch, with TDS and any deductions worked out there as usual.`;
 
 /** 2500 → "25%"; 100 → "1%". */
 export const percent = (bps: number): string => `${bps / 100}%`;

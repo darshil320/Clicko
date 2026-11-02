@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BASIS,
   count,
   istToday,
   maskedAccount,
   monthLabel,
   percent,
+  releaseConsequence,
   rupees,
   rupeesExact,
   toPhotographers,
@@ -30,5 +32,15 @@ describe('payouts desk labels', () => {
     expect(maskedAccount({ bankName: null, last4: '7890' })).toBe('···· 7890');
     expect(monthLabel('2026-12')).toBe('December 2026');
     expect(istToday(Date.parse('2026-12-06T19:00:00Z'))).toBe('2026-12-07');
+  });
+
+  it('withheld payouts: the basis in words and what releasing does (ADR-0027 D5)', () => {
+    expect(BASIS.DATA_LOSS).toBe('Files lost');
+    expect(BASIS.ACCESS_DENIED).toBe('Access denied');
+    expect(BASIS.CLIENT_ABSENT).toBe("Client didn't attend");
+    expect(BASIS.DELIVERED).toBe('Delivered');
+    expect(releaseConsequence(520_000, 'Asha Patel')).toBe(
+      '₹5,200 will be paid to Asha Patel in the next batch, with TDS and any deductions worked out there as usual.',
+    );
   });
 });

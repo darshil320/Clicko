@@ -41,6 +41,8 @@ export const PAYOUT_CONFIG = {
   upcomingDays: 7,
   /** Photographers listed on the Due tab in one answer (the totals count everyone). */
   maxDuePayees: 500,
+  /** Withheld payouts listed on the Due tab ("Held back", ADR-0027 D5). */
+  maxWithheldListed: 200,
   /** Bank transfers in one batch (the reference has three digits). */
   maxTransfersPerBatch: 999,
   /** A late-delivery or penalty deduction is looked for on payouts this recent. */

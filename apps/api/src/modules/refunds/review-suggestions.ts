@@ -20,6 +20,8 @@ export interface ReviewFacts {
   readonly refundablePaise: bigint;
   /** What the client still owes (the booking's balance when unpaid). */
   readonly balanceDuePaise: bigint;
+  /** Waiting charges on the booking (ADR-0013 D9); waived on a client absence (ADR-0016 D12). */
+  readonly waitingChargedPaise?: bigint;
   readonly breach: {
     readonly remedyKind: 'CREDIT' | 'PARTIAL_REFUND' | 'FULL_REFUND';
     readonly remedyPaise: bigint;
@@ -133,6 +135,25 @@ function accessDenied(f: ReviewFacts): Suggestion {
   return none(`${why} What was paid covers it exactly.`);
 }
 
+/**
+ * T&C §3.8: treated as completed, so the balance is due — less any waiting charge logged before
+ * the absence report, which ADR-0016 D12 waives (the photographer is not paid its share either).
+ */
+function nonAttendance(f: ReviewFacts): Suggestion {
+  const waived = f.waitingChargedPaise ?? 0n;
+  const due = f.balanceDuePaise - waived;
+  const waiver =
+    waived > 0n ? ` The ${rupees(waived)} waiting charge is waived (ADR-0016 D12).` : '';
+  return due > 0n
+    ? charge(
+        due,
+        `The client didn't attend: the booking counts as completed and the balance is due (T&C §3.8).${waiver}`,
+      )
+    : none(
+        `The client didn't attend: the booking counts as completed and is fully paid (T&C §3.8).${waiver}`,
+      );
+}
+
 export function suggestOutcome(f: ReviewFacts): Suggestion {
   const r = f.reason;
   if (r === 'REFUND_DUE_UNFILLED') {
@@ -166,16 +187,7 @@ export function suggestOutcome(f: ReviewFacts): Suggestion {
       'Unsafe site: billed in full with no refund for the part not shot (T&C §8.3). Choose a refund only as goodwill.',
     );
   }
-  if (r === 'CLIENT_NON_ATTENDANCE') {
-    return f.balanceDuePaise > 0n
-      ? charge(
-          f.balanceDuePaise,
-          "The client didn't attend: the booking counts as completed and the balance is due (T&C §3.8).",
-        )
-      : none(
-          "The client didn't attend: the booking counts as completed and is fully paid (T&C §3.8).",
-        );
-  }
+  if (r === 'CLIENT_NON_ATTENDANCE') return nonAttendance(f);
   if (r === 'SLA_BREACH_REMEDY') return breachSuggestion(f);
   if (MISPLACED_CAPTURE.some((p) => r.startsWith(p))) {
     return refund(

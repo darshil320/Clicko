@@ -95,6 +95,8 @@ export interface TicketMessageRecord {
 
 export interface NewTicket {
   readonly raisedByKind: TicketRaisedBy;
+  /** The client who raised it themselves (ADR-0027 D5); null when staff log it. */
+  readonly userId?: string | null;
   readonly photographerId: string | null;
   readonly contactName: string;
   readonly contactPhone: string | null;

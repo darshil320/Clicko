@@ -16,6 +16,7 @@ import { PayoutReadsService } from './payout-reads.service';
 import { PayoutsService } from './payouts.service';
 import { PayoutsSubscribers } from './payouts.subscribers';
 import { BREACH_DEDUCTIONS, PAYEE_DIRECTORY, PENALTY_DEDUCTIONS } from './ports';
+import { ProPayoutsReader } from './pro-payouts.reader';
 import { BatchesRepository } from './repositories/batches.repository';
 import {
   DeductionsRepository,
@@ -24,7 +25,9 @@ import {
 import { PayoutsRepository } from './repositories/payouts.repository';
 
 /**
- * Photographer payouts, batches, TDS and the bank file (ADR-0026 D3, doc 02 `modules/payouts`).
+ * Photographer payouts, batches, TDS and the bank file (ADR-0026 D3, doc 02 `modules/payouts`),
+ * accrued on delivery and on the three undelivered outcomes (ADR-0027 D5). ProPayoutsReader is
+ * the Pro app's view of a photographer's own paid transfers.
  * Owns payouts, payout_batches, payout_deductions and vendor_invoices. Reads bookings, dispatch,
  * SLA and serviceability through their services; photographers through PAYEE_DIRECTORY /
  * PENALTY_DEDUCTIONS (interim adapter, see ./adapters). Ledger postings go through the payments
@@ -56,7 +59,14 @@ import { PayoutsRepository } from './repositories/payouts.repository';
     PayoutBatchesService,
     PayoutFilesService,
     PayoutsSubscribers,
+    ProPayoutsReader,
   ],
-  exports: [PayoutsService, PayoutReadsService, PayoutBatchesService, PayoutFilesService],
+  exports: [
+    PayoutsService,
+    PayoutReadsService,
+    PayoutBatchesService,
+    PayoutFilesService,
+    ProPayoutsReader,
+  ],
 })
 export class PayoutsModule {}

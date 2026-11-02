@@ -143,6 +143,10 @@ export class ReviewsService {
         const total = booking?.totalPaise ?? 0n;
         const owes = booking ? total - booking.amountPaidPaise : 0n;
         const resolution = resolutionBy.get(review.eventId) ?? null;
+        const waitingChargedPaise =
+          review.reason === 'CLIENT_NON_ATTENDANCE' && review.bookingId
+            ? await this.waitingCharged(review.bookingId)
+            : 0n;
         return {
           review,
           booking,
@@ -160,6 +164,7 @@ export class ReviewsService {
             netPaidPaise: paidPaise,
             refundablePaise,
             balanceDuePaise: owes > 0n ? owes : 0n,
+            waitingChargedPaise,
             breach: breach
               ? {
                   remedyKind: breach.remedyKind,
@@ -171,6 +176,12 @@ export class ReviewsService {
         };
       }),
     );
+  }
+
+  /** Waiting charges on a booking (ADR-0013 D9), waived when the client did not attend. */
+  private async waitingCharged(bookingId: string): Promise<bigint> {
+    const charges = await this.bookings.charges(this.sql, bookingId);
+    return charges.filter((c) => c.kind === 'WAITING').reduce((sum, c) => sum + c.totalPaise, 0n);
   }
 
   /** Settles a review item exactly once, in one transaction with every money effect. */

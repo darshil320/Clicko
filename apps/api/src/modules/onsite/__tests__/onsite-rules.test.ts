@@ -345,19 +345,33 @@ describe('earnings buckets (IST, ADR-0013 D13)', () => {
     });
   });
 
-  it('sums each bucket; pending counts everything (no payouts before S8)', () => {
+  it('sums each bucket; pending counts every job not yet settled', () => {
     const jobs = [
-      { checkedOutAt: new Date('2026-11-18T05:00:00.000Z'), totalPaise: 100n }, // today
-      { checkedOutAt: new Date('2026-11-16T05:00:00.000Z'), totalPaise: 20n }, // Monday
-      { checkedOutAt: new Date('2026-11-15T17:00:00.000Z'), totalPaise: 3n }, // Sunday 22:30 IST
-      { checkedOutAt: new Date('2026-10-31T19:00:00.000Z'), totalPaise: 4000n }, // 1 Nov IST
-      { checkedOutAt: new Date('2026-10-30T05:00:00.000Z'), totalPaise: 50_000n }, // October
+      { endedAt: new Date('2026-11-18T05:00:00.000Z'), totalPaise: 100n }, // today
+      { endedAt: new Date('2026-11-16T05:00:00.000Z'), totalPaise: 20n }, // Monday
+      { endedAt: new Date('2026-11-15T17:00:00.000Z'), totalPaise: 3n }, // Sunday 22:30 IST
+      { endedAt: new Date('2026-10-31T19:00:00.000Z'), totalPaise: 4000n }, // 1 Nov IST
+      { endedAt: new Date('2026-10-30T05:00:00.000Z'), totalPaise: 50_000n }, // October
     ];
     expect(bucketEarnings(jobs, now)).toEqual({
       todayPaise: 100n,
       weekPaise: 120n,
       monthPaise: 4123n,
       pendingPaise: 54_123n,
+    });
+  });
+
+  it('pending leaves out jobs whose payout is paid or withheld (ADR-0027 D5)', () => {
+    const jobs = [
+      { endedAt: new Date('2026-11-18T05:00:00.000Z'), totalPaise: 100n },
+      { endedAt: new Date('2026-11-16T05:00:00.000Z'), totalPaise: 20n, settled: true },
+      { endedAt: new Date('2026-10-30T05:00:00.000Z'), totalPaise: 50_000n, settled: false },
+    ];
+    expect(bucketEarnings(jobs, now)).toEqual({
+      todayPaise: 100n,
+      weekPaise: 120n,
+      monthPaise: 120n,
+      pendingPaise: 50_100n,
     });
   });
 });

@@ -26,6 +26,7 @@ import { useAdminMutation } from '../../shared/mutation';
 import { useNow } from '../../shared/use-now';
 import { BLOCKER, count, maskedAccount, NOTICE, rupees, toPhotographers } from './labels';
 import { Confirm, payoutKeys } from './shared';
+import { WithheldSection } from './withheld-section';
 
 function columns(now: number): ReadonlyArray<ColumnDef<AdminPayoutDuePayee>> {
   return [
@@ -203,6 +204,8 @@ export function DueTab({ onOpenBatch }: { readonly onOpenBatch: (id: string) => 
           </p>
         ) : null}
       </section>
+
+      <WithheldSection payouts={d?.withheld ?? []} now={now} />
 
       {confirming && d ? (
         <Confirm

@@ -10,6 +10,8 @@ import {
   type AdminPayoutBatchQuery,
   AdminPayoutFile,
   AdminPayoutsDue,
+  type AdminReleaseWithheldBody,
+  AdminReleaseWithheldResponse,
   type AdminRetryPayoutBody,
   type AdminTdsQuery,
   AdminTdsSummary,
@@ -18,6 +20,7 @@ import {
   AdminExportPayoutBatchBody as ExportSchema,
   AdminMarkPayoutFailedBody as MarkFailedSchema,
   AdminMarkPayoutsPaidBody as MarkPaidSchema,
+  AdminReleaseWithheldBody as ReleaseWithheldSchema,
   AdminRetryPayoutBody as RetrySchema,
   TdsMonth,
   AdminTdsQuery as TdsQuerySchema,
@@ -37,6 +40,17 @@ export function adminPayoutsRoutes(r: AdminRequests) {
   return {
     /** Everything due now, what a batch would take, and who is blocked on bank details. */
     due: async () => r.get('/admin/payouts/due', AdminPayoutsDue),
+    /**
+     * ADR-0027 D5: pay a withheld payout after all (WITHHELD → PENDING) with a fresh
+     * authenticator code and a note. 409 PAYOUT_NOT_WITHHELD once it is no longer held.
+     */
+    releaseWithheld: async (payoutId: string, body: AdminReleaseWithheldBody, idem: Idempotent) =>
+      r.post(
+        `/admin/payouts/withheld/${idSegment(payoutId)}/release`,
+        AdminReleaseWithheldResponse,
+        idem,
+        checked(ReleaseWithheldSchema, body),
+      ),
     batches: {
       list: async (query: AdminPayoutBatchQuery = {}) =>
         r.get('/admin/payouts/batches', AdminPayoutBatchPage, listParams(query)),

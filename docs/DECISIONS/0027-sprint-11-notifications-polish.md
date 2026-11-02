@@ -207,3 +207,57 @@ Each item has a regression test. Migration/addendum **0012** carries the schema 
   stripping them would also catch ordinary sentences.
 - **Deferred:** reporting a message (there is no in-app messaging yet); notifying the person on
   WARN; unhide; PRO_TO_CLIENT reviews and the sub-scores; the client and Pro app screens.
+
+### D5a — Client entry points and payouts as built (2 Nov 2026)
+- **Payouts for undelivered shoots** go through the same `payouts` row, weekly batch, TDS and
+  ledger as a delivered one. `payouts.basis` and `basis_bps` (addendum/migration **0017**) say
+  why. Each falls due 3 days after its outcome. Amounts are named constants in
+  `payouts/rules/outcome-payouts.ts`. Each one the owner may override:
+  - **DATA_LOSS** pays the full payout, extension and waiting shares included (DOMAIN §2,
+    v0.2 G-13).
+    - A partial loss pays the same. G-13 names only a total loss, but a partial loss cannot pay
+      less than a complete one.
+    - The cap is 2 losses per photographer in any 365 days. From the third, the payout is written
+      WITHHELD with its reason, and ops is alerted on the booking.
+    - Finance can release a withheld payout from the payouts desk ("Held back"). Releasing it
+      needs a fresh authenticator code and a note, and it is audited (`payout.release`).
+  - **ACCESS_DENIED** pays half the payout: the photographer's share of the 50 % the client is
+    charged (T&C §7.2). Travel still passes through at 100 % (doc 05 step 12).
+  - **CLIENT_ABSENT** pays the booked payout without the waiting share. The waiting charge is
+    waived (ADR-0016 D12), and the CLIENT_NON_ATTENDANCE review now suggests charging the balance
+    less that waiting charge.
+    - The photographer reports the absence themselves, so the payout accrues only when staff
+      settle that review (`review.settled`). It falls due 3 days after the check-out.
+  - When an outcome event cannot accrue a payout, a HIGH `payout.not_accrued` ops alert is
+    raised, instead of the payout silently going missing.
+  - No route reaches DATA_LOSS yet. Payouts subscribe to `booking.data_loss` for when one does.
+- **Pro earnings:**
+  - A job pays its payout's gross once one is accrued (0 while withheld), and each job carries
+    its payout status and basis.
+  - Access-denied shoots count in the period totals by the day they ended.
+  - Pending leaves out paid and withheld payouts.
+  - Paid transfers are listed with batch reference, paid date, gross, deductions, TDS, net and the
+    UTR's last 4 characters. They come from the payouts module's `ProPayoutsReader`.
+- **Client:**
+  - `GET /bookings/:id/money` shows refunds once approved (PROCESSING or REFUNDED) and credits
+    (amount, remaining, expiry).
+  - `POST/GET /me/tickets`: a category and 10–2,000 characters; at most 5 a day per client;
+    idempotent. The subject and contact details come from the account and the booking.
+  - `POST /bookings/:id/quality-issue`: the client's own DELIVERED booking, within 30 days of
+    delivery, once per booking. The actor is USER, and the request is idempotent.
+  - Client writes are limited to 10 a minute per IP.
+- **Admin booking page:**
+  - Refund sheet: the request is made here and another person approves it.
+  - Issue credit sheet: above ₹5,000 it needs two people. If the response is lost, the identical
+    request is resent with the same key, so a credit is never issued twice.
+  - Both appear only for the roles and cities the API accepts.
+  - The ticket Resolve dialog now says the client reads the summary in the app.
+- **Not done here:**
+  - Notifications are not wired: `ticket.raised`, `payout.withheld` and `payout.released` to the
+    photographer, and ticket acknowledged/resolved (still no event).
+  - Tickets raised without a booking are visible only to all-city support.
+  - A refund that failed and was then abandoned still shows the client "processing".
+  - The co-approver check returns different errors for finance and non-finance emails, which lets
+    someone work out who is finance (existing code).
+  - No payout rule exists yet for ABANDONED bookings: the shoot happened, but the balance was
+    never paid.

@@ -13,10 +13,11 @@ import { SQL } from '../../infra/db/db.module';
 import { appendDomainEventOnce } from '../../infra/outbox/outbox';
 import { BookingsService } from '../bookings/bookings.service';
 import type { BookingScope, QualityPageQuery, QualityRecord } from './care.types';
-import { qualityAmountProblem, qualityReviewReason } from './care-rules';
+import { qualityAmountProblem, qualityReportWindowOpen, qualityReviewReason } from './care-rules';
 import { QualityEscalationsRepository } from './repositories/quality-escalations.repository';
 
 const NOT_FOUND = { code: 'QUALITY_ISSUE_NOT_FOUND', message: 'Quality issue not found' };
+const BOOKING_NOT_FOUND = { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' };
 
 const AMOUNT_MESSAGE = {
   CREDIT_ABOVE_TOTAL: 'A credit cannot be more than the booking total',
@@ -69,7 +70,7 @@ export class QualityService {
       }
       const escalationId = await this.repo.insert(tx, {
         bookingId: o.bookingId,
-        staffId: o.staffId,
+        raisedBy: { kind: 'STAFF', id: o.staffId },
         complaint: o.complaint,
         at: o.now,
       });
@@ -89,6 +90,62 @@ export class QualityService {
           booking_id: o.bookingId,
           complaint: o.complaint,
         },
+      });
+      return escalationId;
+    });
+    return this.get(id, null);
+  }
+
+  /**
+   * The client reports a quality issue on their own delivered booking (ADR-0027 D5, DOMAIN §2
+   * DELIVERED → QUALITY_ESCALATION, actor USER): someone else's booking is 404 like a missing one;
+   * only DELIVERED, within 30 days of delivery; one open issue per booking (the status change
+   * under the booking lock is the guarantee). No money moves: the QM decides it on the desk.
+   */
+  async openForClient(o: {
+    readonly userId: string;
+    readonly bookingId: string;
+    readonly complaint: string;
+    readonly now: Date;
+  }): Promise<QualityRecord> {
+    if (!(await this.bookings.findForUser(o.userId, o.bookingId))) {
+      throw new NotFoundException(BOOKING_NOT_FOUND);
+    }
+    const id = await this.sql.begin(async (tx) => {
+      const booking = await this.bookings.lock(tx, o.bookingId);
+      if (booking.userId !== o.userId) throw new NotFoundException(BOOKING_NOT_FOUND);
+      if (booking.status === 'QUALITY_ESCALATION') {
+        throw new ConflictException({
+          code: 'QUALITY_ISSUE_ALREADY_OPEN',
+          message: 'You have already reported a problem with this booking. We are looking into it.',
+        });
+      }
+      if (booking.status !== 'DELIVERED') {
+        throw new ConflictException({
+          code: 'BOOKING_NOT_DELIVERED',
+          message: 'You can report a problem with the photos once they are delivered.',
+        });
+      }
+      const facts = await this.bookings.deliveryFacts(tx, o.bookingId);
+      if (!qualityReportWindowOpen(facts.deliveredAt, o.now)) {
+        throw new ConflictException({
+          code: 'QUALITY_WINDOW_CLOSED',
+          message: 'Problems with the photos can be reported up to 30 days after delivery.',
+        });
+      }
+      const escalationId = await this.repo.insert(tx, {
+        bookingId: o.bookingId,
+        raisedBy: { kind: 'USER', id: o.userId },
+        complaint: o.complaint,
+        at: o.now,
+      });
+      await this.bookings.transition(tx, {
+        bookingId: o.bookingId,
+        to: 'QUALITY_ESCALATION',
+        actor: { kind: 'USER', id: o.userId },
+        occurredAt: o.now,
+        reason: 'The client reported a quality issue',
+        payload: { escalation_id: escalationId, raised_by_kind: 'USER' },
       });
       return escalationId;
     });

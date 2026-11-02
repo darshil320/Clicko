@@ -10,6 +10,8 @@ import {
   AdminPayoutBatchPage,
   AdminPayoutFile,
   AdminPayoutsDue,
+  AdminReleaseWithheldBody,
+  AdminReleaseWithheldResponse,
   AdminRetryPayoutBody,
   AdminTdsQuery,
   AdminTdsSummary,
@@ -46,6 +48,7 @@ import { StaffNames } from '../../admin/money/staff-names';
 import { PayoutBatchesService } from '../payout-batches.service';
 import { PayoutFilesService } from '../payout-files.service';
 import { PayoutReadsService } from '../payout-reads.service';
+import { PayoutsService } from '../payouts.service';
 
 const uuid = new ZodValidationPipe(Uuid);
 const month = new ZodValidationPipe(TdsMonth);
@@ -86,6 +89,7 @@ export class AdminPayoutsController {
     @Inject(PayoutReadsService) private readonly reads: PayoutReadsService,
     @Inject(PayoutBatchesService) private readonly batches: PayoutBatchesService,
     @Inject(PayoutFilesService) private readonly files: PayoutFilesService,
+    @Inject(PayoutsService) private readonly payouts: PayoutsService,
     @Inject(StepUpService) private readonly stepUp: StepUpService,
     @Inject(StaffNames) private readonly staffNames: StaffNames,
   ) {}
@@ -103,6 +107,34 @@ export class AdminPayoutsController {
   async due(@CurrentStaff() caller: StaffCaller) {
     allCities(caller);
     return respondWire(AdminPayoutsDue, await this.reads.due(this.clock()));
+  }
+
+  /** ADR-0027 D5: pay a withheld payout after all — a fresh authenticator code and a note. */
+  @Post('withheld/:payoutId/release')
+  @HttpCode(200)
+  @Roles(...DESK_ROLES.payouts)
+  @Audited('payout.release')
+  @Idempotent()
+  async releaseWithheld(
+    @CurrentStaff() caller: StaffCaller,
+    @AuditCtx() ctx: AuditContext,
+    @Param('payoutId', uuid) payoutId: string,
+    @Body(new ZodValidationPipe(AdminReleaseWithheldBody)) body: AdminReleaseWithheldBody,
+  ) {
+    allCities(caller);
+    await this.stepUp.verify(caller.id, body.code, ctx, 'payout.release');
+    const released = await this.payouts.releaseWithheld({
+      payoutId,
+      staffId: caller.id,
+      note: body.note,
+      now: this.clock(),
+      audit: this.audit.hook(ctx, 'payout', payoutId),
+    });
+    return respondWire(AdminReleaseWithheldResponse, {
+      payoutId: released.payoutId,
+      status: 'PENDING',
+      eligibleAt: released.eligibleAt.toISOString(),
+    });
   }
 
   @Get('batches')

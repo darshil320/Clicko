@@ -235,4 +235,31 @@ describe('createAdminApiClient().payouts (ADR-0026 D3)', () => {
       'INVALID_INPUT',
     );
   });
+
+  it('releases a withheld payout with a code and a note, and never sends a bad id', async () => {
+    const { api, calls } = client(() =>
+      ok({ payoutId: UUID, status: 'PENDING', eligibleAt: '2026-12-10T10:00:00+05:30' }),
+    );
+    const res = await api.payouts.releaseWithheld(
+      UUID,
+      { code: '123456', note: 'Second card was fine' },
+      KEY,
+    );
+    expect(res.status).toBe('PENDING');
+    expect(calls[0]).toMatchObject({
+      url: `${BASE}/admin/payouts/withheld/${UUID}/release`,
+      method: 'POST',
+      body: { code: '123456', note: 'Second card was fine' },
+    });
+    expect(calls[0]?.headers['idempotency-key']).toBe(KEY.idempotencyKey);
+    const bad = await rejection(
+      api.payouts.releaseWithheld('../x', { code: '123456', note: 'Second card was fine' }, KEY),
+    );
+    expect(bad.code).toBe('INVALID_ID');
+    const noNote = await rejection(
+      api.payouts.releaseWithheld(UUID, { code: '123456', note: '' }, KEY),
+    );
+    expect(noNote.code).toBe('INVALID_INPUT');
+    expect(calls).toHaveLength(1);
+  });
 });

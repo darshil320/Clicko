@@ -5,6 +5,7 @@ import {
   isClaimPending,
   type QualityOutcome,
   type TicketAuthor,
+  type TicketCategory,
   type TicketStatus,
   ticketStatusAfter,
 } from '@clickco/contracts';
@@ -122,4 +123,55 @@ export function ticketMessageEffect(
     authorKind: kind === 'CUSTOMER' ? 'CUSTOMER' : 'STAFF',
     isInternal: kind === 'NOTE',
   };
+}
+
+/** The client's own care entry points (ADR-0027 D5). Owner rulings change these, not code. */
+export const CLIENT_CARE_CONFIG = {
+  /**
+   * Per IP on the client care writes (replaces the global 120/min for these routes; in memory per
+   * instance until the throttler moves to Redis, ADR-0027 D6). The daily cap below is shared.
+   */
+  writesPerMinutePerIp: 10,
+  /** Tickets one client may raise in 24 h (counted in Postgres: shared across instances). */
+  ticketsPerUserPerDay: 5,
+  /** GET /me/tickets answers the newest this many. */
+  ticketListLimit: 50,
+  /** DELIVERED lasts 30 days, then the booking closes (ADR-0016 D10 LINK_REVOKE). */
+  qualityReportWindowDays: 30,
+} as const;
+
+const DAY_MS = 86_400_000;
+
+/** These categories are formal grievances (T&C §11–12) whatever the subject. */
+const GRIEVANCE_CATEGORIES: readonly TicketCategory[] = [
+  'GRIEVANCE',
+  'DATA_DELETION',
+  'CONSENT_WITHDRAWAL',
+];
+
+export const isGrievanceCategory = (category: TicketCategory): boolean =>
+  GRIEVANCE_CATEGORIES.includes(category);
+
+const CATEGORY_SUBJECT: Readonly<Record<TicketCategory, string>> = {
+  GRIEVANCE: 'Grievance',
+  DATA_DELETION: 'Delete my data',
+  CONSENT_WITHDRAWAL: 'Withdraw my consent',
+  BILLING: 'Billing',
+  QUALITY: 'Photo quality',
+  CONDUCT: 'Photographer conduct',
+  APP_ISSUE: 'App problem',
+  OTHER: 'Something else',
+};
+
+/** A client ticket's subject: its category in words, and the booking it is about. */
+export function clientTicketSubject(category: TicketCategory, reference: string | null): string {
+  const subject = CATEGORY_SUBJECT[category];
+  return reference ? `${subject} · ${reference}` : subject;
+}
+
+/** A delivered booking takes a quality report until 30 days after delivery. */
+export function qualityReportWindowOpen(deliveredAt: Date | null, now: Date): boolean {
+  if (!deliveredAt) return false;
+  const closesAt = deliveredAt.getTime() + CLIENT_CARE_CONFIG.qualityReportWindowDays * DAY_MS;
+  return now.getTime() < closesAt;
 }

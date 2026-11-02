@@ -24,28 +24,31 @@ export function istPeriodStarts(now: Date): PeriodStarts {
 }
 
 export interface EarningInput {
-  readonly checkedOutAt: Date;
+  /** The check-out — or, for a shoot that ended without one but still pays, when it ended. */
+  readonly endedAt: Date;
   readonly totalPaise: bigint;
+  /** Its payout is paid or withheld (ADR-0027 D5): no longer pending. */
+  readonly settled?: boolean;
 }
 
 export interface EarningBuckets {
   readonly todayPaise: bigint;
   readonly weekPaise: bigint;
   readonly monthPaise: bigint;
-  /** Everything not yet paid: all of it until payout batches exist (S8). */
+  /** Every job whose payout is neither paid nor withheld yet. */
   readonly pendingPaise: bigint;
 }
 
+const total = (jobs: readonly EarningInput[]): bigint =>
+  jobs.reduce((sum, j) => sum + j.totalPaise, 0n);
+
 export function bucketEarnings(jobs: readonly EarningInput[], now: Date): EarningBuckets {
   const p = istPeriodStarts(now);
-  const sum = (since: Date | null) =>
-    jobs
-      .filter((j) => since === null || j.checkedOutAt >= since)
-      .reduce((total, j) => total + j.totalPaise, 0n);
+  const since = (start: Date) => total(jobs.filter((j) => j.endedAt >= start));
   return {
-    todayPaise: sum(p.day),
-    weekPaise: sum(p.week),
-    monthPaise: sum(p.month),
-    pendingPaise: sum(null),
+    todayPaise: since(p.day),
+    weekPaise: since(p.week),
+    monthPaise: since(p.month),
+    pendingPaise: total(jobs.filter((j) => j.settled !== true)),
   };
 }

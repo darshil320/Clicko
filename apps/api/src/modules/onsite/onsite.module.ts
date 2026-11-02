@@ -4,6 +4,7 @@ import { IdempotencyModule } from '../../common/idempotency/idempotency.module';
 import { TokenModule } from '../auth/token.module';
 import { BookingsModule } from '../bookings/bookings.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
+import { PayoutsModule } from '../payouts/payouts.module';
 import { PhotographersModule } from '../photographers/photographers.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { ServiceabilityModule } from '../serviceability/serviceability.module';
@@ -37,6 +38,7 @@ import { WaitingService } from './waiting.service';
     IdempotencyModule,
     BookingsModule,
     DispatchModule,
+    PayoutsModule,
     PhotographersModule,
     PricingModule,
     ServiceabilityModule,

@@ -13,6 +13,7 @@ export function NoteField({
   error,
   hint,
   required = false,
+  disabled = false,
 }: {
   readonly id: string;
   readonly label: string;
@@ -21,6 +22,7 @@ export function NoteField({
   readonly error: string | null;
   readonly hint?: string;
   readonly required?: boolean;
+  readonly disabled?: boolean;
 }) {
   return (
     <Field label={required ? label : `${label} (optional)`} htmlFor={id} hint={hint} error={error}>
@@ -29,6 +31,7 @@ export function NoteField({
         rows={4}
         maxLength={NOTE_MAX}
         required={required}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={error ? true : undefined}

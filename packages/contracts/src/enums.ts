@@ -98,3 +98,7 @@ export const DispatchOutcome = z.enum([
   'LOST_RACE',
 ]);
 export type DispatchOutcome = z.infer<typeof DispatchOutcome>;
+
+/** Why a payout is owed (addendum 0017, ADR-0027 D5). */
+export const PayoutBasis = z.enum(['DELIVERED', 'DATA_LOSS', 'ACCESS_DENIED', 'CLIENT_ABSENT']);
+export type PayoutBasis = z.infer<typeof PayoutBasis>;
