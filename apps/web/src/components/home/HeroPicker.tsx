@@ -6,10 +6,10 @@ import type { SiteReel } from '../../content/reels';
 import { quoteFor } from '../../lib/pricing';
 import { CATEGORY_MOOD, PhotoFrame } from '../ui/PhotoFrame';
 import { ReelVideo } from '../ui/ReelVideo';
-import { CategoryTiles, HoursStepper, Segmented, TierLabel } from './picker/controls';
+import { CategoryTiles, HoursStepper, Segmented } from './picker/controls';
 import { useHydrated, usePrefill, useScrolledPast } from './picker/hooks';
 import { QuoteTotal } from './picker/QuoteTotal';
-import { describeQuote } from './picker/quote-copy';
+import { describeQuote, recommendedNote } from './picker/quote-copy';
 import { ShootBar } from './picker/ShootBar';
 import type { PickerCategory, PickerCity, PickerTier, Shoot, ShootPreset } from './picker/types';
 
@@ -111,13 +111,11 @@ export function HeroPicker({
             <Segmented
               name={`${id}-tier`}
               label="Pro level"
-              options={tiers.map((t) => ({
-                value: t.code,
-                label: <TierLabel tier={t} category={category} />,
-              }))}
+              options={tiers.map((t) => ({ value: t.code, label: t.label }))}
               value={shoot.tier}
               onChange={(tier) => update({ tier })}
               wide
+              note={recommendedNote(category, tiers)}
             />
           </div>
         </fieldset>

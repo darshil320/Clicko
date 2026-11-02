@@ -84,6 +84,9 @@ function pickerCss(): string {
 .picker-rows{margin-top:${px(S[5])};border-top:${hairline()}}
 .picker-row{display:grid;gap:${px(S[2])};align-items:center;padding:${px(S[3])} 0;border-bottom:${hairline()}}
 .picker-label{${type(T.caption)};color:${v('text-secondary')};margin:0}
+/* The control and its note sit in the row's grid, so the label stays level with the control. */
+.picker-control{display:contents}
+.picker-hint{${type(T.caption)};color:${v('text-secondary')};margin:0}
 .picker-total{display:grid;gap:${px(S[4])};margin-top:${px(S[5])}}
 .picker-total p{margin:0}
 .picker-price{font-family:${fontDisplay};${fluidType(webType.figure)};color:${v('text-primary')}}
@@ -98,7 +101,8 @@ function pickerCss(): string {
 .seg-opt input{${coverInput}}
 .seg-opt:has(:focus-visible)>span{${ring}}
 ${cq(picker.rowsInline)}{
-  .picker-row{grid-template-columns:${px(picker.labelColumn)} minmax(0,1fr);gap:${px(S[4])}}
+  .picker-row{grid-template-columns:${px(picker.labelColumn)} minmax(0,1fr);gap:${px(S[1])} ${px(S[4])}}
+  .picker-hint{grid-column:2}
   .picker-row .stepper{justify-self:start}
   .picker .seg-wide{grid-auto-flow:column;grid-template-columns:none;border-radius:${px(R.full)}}
   .picker .seg-wide .seg-opt>span{border-radius:${px(R.full)}}

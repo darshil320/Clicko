@@ -4,7 +4,7 @@ import { type ReactNode, useRef } from 'react';
 import type { CategoryCode } from '../../../content/rate-card';
 import { categoryGlyph } from '../../ui/CategoryIcon';
 import { Icon } from '../../ui/Icon';
-import type { PickerCategory, PickerTier } from './types';
+import type { PickerCategory } from './types';
 
 export function CategoryTiles({
   name,
@@ -57,6 +57,7 @@ export function Segmented<T extends string>({
   value,
   onChange,
   wide = false,
+  note,
 }: {
   readonly name: string;
   readonly label: string;
@@ -65,44 +66,42 @@ export function Segmented<T extends string>({
   readonly onChange: (value: T) => void;
   /** Four or more options: two by two on phones. */
   readonly wide?: boolean;
+  /** A line under the control, in words, read with the group (the recommended tier). */
+  readonly note?: string;
 }) {
+  const noteId = `${name}-note`;
   return (
-    <div className="picker-row" role="radiogroup" aria-labelledby={`${name}-label`}>
+    <div
+      className="picker-row"
+      role="radiogroup"
+      aria-labelledby={`${name}-label`}
+      aria-describedby={note ? noteId : undefined}
+    >
       <span id={`${name}-label`} className="picker-label">
         {label}
       </span>
-      <div className={wide ? 'seg seg-wide' : 'seg'}>
-        {options.map((option) => (
-          <label key={option.value} className="seg-opt">
-            <input
-              type="radio"
-              name={name}
-              value={option.value}
-              checked={option.value === value}
-              onChange={() => onChange(option.value)}
-            />
-            <span>{option.label}</span>
-          </label>
-        ))}
+      <div className="picker-control">
+        <div className={wide ? 'seg seg-wide' : 'seg'}>
+          {options.map((option) => (
+            <label key={option.value} className="seg-opt">
+              <input
+                type="radio"
+                name={name}
+                value={option.value}
+                checked={option.value === value}
+                onChange={() => onChange(option.value)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+        {note ? (
+          <p id={noteId} className="picker-hint">
+            {note}
+          </p>
+        ) : null}
       </div>
     </div>
-  );
-}
-
-export function TierLabel({
-  tier,
-  category,
-}: {
-  readonly tier: PickerTier;
-  readonly category: PickerCategory;
-}) {
-  if (tier.code !== category.recommended) return <>{tier.label}</>;
-  return (
-    <>
-      {tier.label}
-      <span className="seg-rec" aria-hidden="true" />
-      <span className="sr-only">, recommended for {category.label}</span>
-    </>
   );
 }
 

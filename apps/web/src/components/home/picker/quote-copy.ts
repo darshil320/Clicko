@@ -1,5 +1,6 @@
 import { type ShootMedia, VIDEO_DELIVERY, VIDEO_PRICE_NOTE } from '../../../content/moments';
 import type { Quote } from '../../../lib/pricing';
+import type { PickerCategory, PickerTier } from './types';
 
 export interface QuoteCopy {
   readonly label: string;
@@ -27,4 +28,16 @@ export function describeQuote(media: ShootMedia, quote: Quote): QuoteCopy {
     };
   }
   return { label: 'You pay', price: quote.total, lines: [photoLine], priced: true };
+}
+
+/**
+ * The tier we recommend for a category, said in words under the tier control (DESIGN.md
+ * §Accessibility: never meaning by colour alone).
+ */
+export function recommendedNote(
+  category: Pick<PickerCategory, 'label' | 'recommended'>,
+  tiers: readonly Pick<PickerTier, 'code' | 'label'>[],
+): string | undefined {
+  const tier = tiers.find((t) => t.code === category.recommended);
+  return tier ? `Recommended for ${category.label.toLowerCase()} shoots: ${tier.label}` : undefined;
 }

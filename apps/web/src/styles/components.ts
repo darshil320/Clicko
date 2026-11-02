@@ -208,8 +208,6 @@ function controlsCss(): string {
 .seg-opt:hover>span{color:${v('text-primary')}}
 .seg-opt:active>span{background:${v('surface-overlay')};color:${v('text-primary')}}
 .seg-opt:has(:checked)>span{background:${v('surface-overlay')};color:${v('text-primary')};box-shadow:${shadow('sm')}}
-.seg-rec{width:${px(S[1] + stroke.thick)};height:${px(S[1] + stroke.thick)};border-radius:${px(R.full)};
-  background:${v('accent-default')};flex-shrink:0}
 .stepper{display:inline-flex;align-items:center;gap:${px(S[2])}}
 .stepper button{display:inline-grid;place-items:center;width:${px(L.minTapTarget)};height:${px(L.minTapTarget)};
   padding:0;border:${hairline('border-strong')};border-radius:${px(R.full)};background:${v('surface-overlay')};
