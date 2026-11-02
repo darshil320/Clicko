@@ -104,9 +104,6 @@ export function Hero() {
         waitlistHref="#waitlist"
         aside={<Proof />}
       >
-        <p className="hero-kicker">
-          Photographers &amp; videographers · Live in Surat &amp; Mumbai · Pilot in Vadodara
-        </p>
         <h1 id="hero-title">
           Pro photos and video. <em>No DMs, no haggling.</em>
         </h1>

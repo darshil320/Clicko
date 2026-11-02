@@ -36,7 +36,6 @@ function heroFrameCss(): string {
 .hero{position:relative;padding-top:${px(S[8])};padding-bottom:${px(rhythm.mobile)}}
 .hero-grid{display:grid;gap:${px(S[8])};grid-template-columns:minmax(0,1fr)}
 .hero-head{max-width:${px(measure.hero)}}
-.hero-kicker{${type(T.caption)};font-weight:${T.bodyStrong.weight};color:${v('text-secondary')};margin:0 0 ${px(S[4])}}
 .hero h1{${fluidType(webType.page)};margin:0}
 .hero-copy{max-width:${px(measure.hero)}}
 .hero-copy h1{margin:${px(S[6])} 0}
@@ -49,8 +48,8 @@ function heroFrameCss(): string {
 .facts strong{color:${v('text-primary')};font-weight:${T.bodyStrong.weight};font-variant-numeric:tabular-nums}
 ${mq(bp.sm)}{.hero{padding-top:${px(S[14])}}.facts{display:flex;flex-wrap:wrap;gap:${px(S[3])} ${px(S[8])}}}
 ${mq(bp.lg)}{
-  .hero{padding-top:${px(S[10] + headerOverlay)};padding-bottom:${px(rhythm.tablet)}}
-  .hero-grid{grid-template-columns:minmax(0,7fr) minmax(0,5fr);column-gap:${px(S[10])};row-gap:${px(S[10])};
+  .hero{padding-top:${px(S[6] + headerOverlay)};padding-bottom:${px(rhythm.tablet)}}
+  .hero-grid{grid-template-columns:minmax(0,7fr) minmax(0,5fr);column-gap:${px(S[10])};row-gap:${px(S[6])};
     align-items:stretch}
   .hero-head{grid-column:1/-1;max-width:none}
 }
@@ -61,6 +60,10 @@ ${mq(bp.lg)}{
 const coverInput = `position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer`;
 const ring = `outline:${px(stroke.thick)} solid ${v('text-primary')};outline-offset:${px(stroke.thick)}`;
 
+/**
+ * The shoot picker. On desktop its rows stay tight so the live price and its action sit inside
+ * a 1280 x 800 and a 1366 x 768 screen: the price is the hero's whole point (ADR-0019).
+ */
 function pickerCss(): string {
   return `
 .picker{container-type:inline-size;min-width:0;margin:0;background:${v('surface-overlay')};border:${hairline()};
@@ -103,7 +106,12 @@ ${cq(picker.rowsInline)}{
   .picker-cta .text-link{justify-self:end}
 }
 ${cq(picker.tilesInRow)}{.cat-tiles{grid-template-columns:repeat(7,minmax(0,1fr))}}
-${mq(bp.lg)}{.picker{padding:${px(S[6])}}}
+${mq(bp.lg)}{
+  .picker{padding:${px(S[5])} ${px(S[6])}}
+  .picker-row{padding:${px(S[2])} 0}
+  .picker-controls>.picker-row:first-child{margin-bottom:${px(S[3])}}
+  .picker-rows,.picker-total{margin-top:${px(S[4])}}
+}
 `;
 }
 
