@@ -23,19 +23,23 @@ Updated at the end of every session. Newest first.
   headings break between their parts and the hero accent phrase takes its own line
   (`d0cc2a5`); Why Clickco tiles size to their text, category uplifts never split, captions lose
   the last middle dot, linked cards underline their title on hover (`a8d4699`).
-- **Checks:** web typecheck, 182 tests, build and Biome clean; token tests 77 green; Hallmark
+- **Follow-ups the same day:** the picker names the recommended tier in words instead of an
+  amber dot (`0c0ae71`; at 1366 x 768 the price now ends 13px below the fold, accepted). A
+  better-typography pass (`2352a02`): type in rem with unitless leading, section leads at 1.55
+  (were 1.29), 1.4 minimum leading under 18px, 16px inputs on phones (no iOS zoom), tabular
+  figures on the live price, stepper and shoot bar, running text capped at 34em (~72 characters).
+  The home page's 14 sections stay (owner's call).
+- **Checks:** web typecheck, 184 tests, build and Biome clean; token tests 77 green; Hallmark
   `--kept` 26/26 links and 25/25 handlers. design-verifier was not run: it diffs against Figma
   frames, the website has none, and the Figma MCP is not authorised here.
 - **Open (layout depth, needs a decision before a full redesign):**
   - Nine sections open with the same block (two-line heading left, small lead right), and four
     card grids in a row share one card; the Why Clickco bento carries no photo frame, against
     DESIGN-DAYLIGHT §Rules.
-  - The picker's "recommended tier" dot still carries meaning by colour alone (DESIGN.md
-    §Accessibility, ADR-0028 D4); a visible label needs room the 1366 x 768 fold does not have.
   - The hero reel stops ~58px short of the content edge. `apps/web/src/styles/hero.ts` has an
     uncommitted `justify-self:left` that this session did not write; in a flex column it does
     nothing.
-  - The home page is still 14 sections; Hallmark's 6 to 9 budget was not adopted.
+  - The T&C render with straight quotes (the text comes verbatim from the spec, never forked).
 
 ## 2026-11-02 · Sprint 11 — perf, notifications, calls, reviews/UGC, app states (ADR-0027)
 - **Performance** (`48dc117`, D6b):
