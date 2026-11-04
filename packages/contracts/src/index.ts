@@ -7,6 +7,7 @@ export * from './admin-overview.js';
 export * from './admin-payouts.js';
 export * from './admin-pricing.js';
 export * from './admin-supply.js';
+export * from './analytics.js';
 export * from './auth.js';
 export * from './booking.js';
 export * from './booking-flow.js';

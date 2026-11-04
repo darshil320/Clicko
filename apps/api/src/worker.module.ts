@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { CLOCK, systemClock } from './common/clock';
 import { ENV, loadWorkerEnv } from './config/env';
 import { DbModule } from './infra/db/db.module';
+import { ObservabilityModule } from './infra/observability/observability.module';
 import { OutboxModule } from './infra/outbox/outbox.module';
 import { PROCESS_ROLE, type ProcessRole } from './infra/queues/process-role';
 import { QueuesModule } from './infra/queues/queues.module';
@@ -12,6 +13,7 @@ const ROLE: ProcessRole = 'media-worker';
 
 @Global()
 @Module({
+  imports: [ObservabilityModule],
   providers: [
     { provide: ENV, useFactory: () => loadWorkerEnv(process.env) },
     { provide: CLOCK, useValue: systemClock },

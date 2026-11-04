@@ -1,6 +1,7 @@
 import { Global, Inject, Module, type OnApplicationShutdown } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { ENV, type Env } from '../../config/env';
+import { ObservabilityModule } from '../observability/observability.module';
 import { BullQueues } from './bull-queues';
 import { JobRegistry } from './job-registry';
 import { BullJobScheduler, JOB_SCHEDULER } from './job-scheduler';
@@ -11,6 +12,7 @@ import { RedisLocks } from './redis-lock';
 /** Redis + BullMQ for the whole API. Processors live in src/jobs/ and register into JobRegistry. */
 @Global()
 @Module({
+  imports: [ObservabilityModule],
   providers: [
     { provide: REDIS, inject: [ENV], useFactory: (env: Env) => createRedisClient(env.REDIS_URL) },
     BullQueues,

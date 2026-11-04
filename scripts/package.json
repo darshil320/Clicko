@@ -1,0 +1,6 @@
+{
+  "name": "clickco-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Operator scripts (dry runs, load-test seeding). Not a workspace package; run with apps/api's tsx or plain node."
+}

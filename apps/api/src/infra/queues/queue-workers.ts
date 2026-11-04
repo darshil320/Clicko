@@ -8,7 +8,10 @@ import {
 } from '@nestjs/common';
 import { type Job, Worker } from 'bullmq';
 import { ENV, type Env } from '../../config/env';
+import { ConsoleErrorReporter } from '../observability/console-error-reporter';
+import { ERROR_REPORTER, type ErrorReporter } from '../observability/error-reporter';
 import { BullQueues } from './bull-queues';
+import { handleJobFailure, workerErrorHandler } from './job-failure';
 import { JobRegistry } from './job-registry';
 import { PROCESS_ROLE, type ProcessRole, queuesFor, repeatablesFor } from './process-role';
 import { QUEUE_OF, type QueueName, WORKER_CONCURRENCY } from './queue-names';
@@ -18,10 +21,13 @@ import { QUEUE_OF, type QueueName, WORKER_CONCURRENCY } from './queue-names';
  * (tests, and API instances that should only enqueue). Every job is routed through JobRegistry.
  * Audit H1: with MEDIA_WORKER_ISOLATED the API skips the media-export queue, which only the
  * separate media worker (worker.ts, PROCESS_ROLE `media-worker`) consumes.
+ * ADR-0029 D3: a job that fails for the last time, and any worker error, goes to the ErrorReporter.
  */
 @Injectable()
 export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(QueueWorkers.name);
+  /** Reports each queue's repeated worker errors at most once a minute (ADR-0029 D3). */
+  private readonly onWorkerError: (queue: QueueName, error: Error) => void;
   private workers: readonly Worker[] = [];
   /** The background registration; shutdown waits for it so no command is cut off mid-flight. */
   private registration: Promise<void> = Promise.resolve();
@@ -31,7 +37,12 @@ export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdo
     @Inject(BullQueues) private readonly queues: BullQueues,
     @Inject(JobRegistry) private readonly registry: JobRegistry,
     @Optional() @Inject(PROCESS_ROLE) private readonly role: ProcessRole = 'api',
-  ) {}
+    @Optional()
+    @Inject(ERROR_REPORTER)
+    private readonly reporter: ErrorReporter = new ConsoleErrorReporter(),
+  ) {
+    this.onWorkerError = workerErrorHandler(this.reporter, this.logger);
+  }
 
   /**
    * Never blocks boot on Redis: workers reconnect on their own, and the repeatable jobs are
@@ -69,9 +80,9 @@ export class QueueWorkers implements OnApplicationBootstrap, OnApplicationShutdo
       concurrency: WORKER_CONCURRENCY[name],
     });
     worker.on('failed', (job, error) =>
-      this.logger.warn(`Job ${job?.name ?? '?'} (${job?.id ?? '?'}) failed: ${error.message}`),
+      handleJobFailure(this.reporter, this.logger, name, job, error),
     );
-    worker.on('error', (error) => this.logger.error(`Worker ${name}: ${error.message}`));
+    worker.on('error', (error) => this.onWorkerError(name, error));
     return worker;
   }
 

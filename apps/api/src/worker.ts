@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { loadWorkerEnv } from './config/env';
+import { ERROR_REPORTER, type ErrorReporter } from './infra/observability/error-reporter';
+import { installProcessErrorReporting } from './infra/observability/process-handlers';
 import { WorkerModule } from './worker.module';
 
 /**
@@ -13,6 +15,7 @@ async function bootstrap(): Promise<void> {
   loadWorkerEnv(process.env);
   const app = await NestFactory.createApplicationContext(WorkerModule);
   app.enableShutdownHooks();
+  installProcessErrorReporting(app.get<ErrorReporter>(ERROR_REPORTER), process, 'media-worker');
   new Logger('MediaWorker').log('Consuming the media-export queue');
 }
 

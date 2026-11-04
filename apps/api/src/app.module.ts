@@ -11,6 +11,7 @@ import { ENV, type Env, loadEnv } from './config/env';
 import { devOnlyModules } from './dev/dev-tools.module';
 import { HealthModule } from './health/health.module';
 import { DbModule } from './infra/db/db.module';
+import { ObservabilityModule } from './infra/observability/observability.module';
 import { OutboxModule } from './infra/outbox/outbox.module';
 import { QueuesModule } from './infra/queues/queues.module';
 import { REDIS } from './infra/queues/redis';
@@ -33,6 +34,7 @@ import { UsersModule } from './modules/users/users.module';
 
 @Global()
 @Module({
+  imports: [ObservabilityModule],
   providers: [
     { provide: ENV, useFactory: () => loadEnv(process.env) },
     { provide: CLOCK, useValue: systemClock },

@@ -4,9 +4,10 @@ import {
   type ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
+  Inject,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { ERROR_REPORTER, type ErrorReporter } from '../../infra/observability/error-reporter';
 import type { ApiError, Envelope } from '../envelope';
 
 const DEFAULT_CODES: Record<number, string> = {
@@ -54,24 +55,52 @@ function clientParserError(exception: unknown): { status: number; error: ApiErro
   };
 }
 
-/** Every error leaves as the standard envelope. Unknown errors never expose internals. */
+/** What a report may say about the request: the route PATTERN, never the URL (tokens live there). */
+interface ReportableRequest {
+  readonly method?: string;
+  readonly route?: { readonly path?: unknown };
+  readonly subject?: { readonly kind?: unknown };
+  /** Set by StaffGuard on /admin routes. */
+  readonly staff?: unknown;
+}
+
+function requestContext(req: ReportableRequest | undefined, status: number) {
+  const route = typeof req?.route?.path === 'string' ? req.route.path : '(unmatched)';
+  const kind = req?.staff ? 'STAFF' : req?.subject?.kind;
+  return {
+    method: req?.method ?? 'UNKNOWN',
+    route,
+    status,
+    ...(typeof kind === 'string' ? { subjectKind: kind } : {}),
+  };
+}
+
+/** A deliberate 503 (health, scrypt back-pressure) is the API shedding load, not a fault. */
+const isReportedHttpStatus = (status: number): boolean =>
+  status >= HttpStatus.INTERNAL_SERVER_ERROR && status !== HttpStatus.SERVICE_UNAVAILABLE;
+
+/**
+ * Every error leaves as the standard envelope. Unknown errors never expose internals; they and
+ * any 5xx other than 503 go to the ErrorReporter (ADR-0029 D3), which scrubs personal data.
+ */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger(AllExceptionsFilter.name);
+  constructor(@Inject(ERROR_REPORTER) private readonly reporter: ErrorReporter) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const res = host.switchToHttp().getResponse<Response>();
+    const http = host.switchToHttp();
+    const res = http.getResponse<Response>();
 
     if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      if (isReportedHttpStatus(status)) this.report(exception, http.getRequest(), status);
       const body = exception.getResponse();
       // Health (and anything else) may already send a full envelope.
       if (typeof body === 'object' && body !== null && 'success' in body) {
-        res.status(exception.getStatus()).json(body);
+        res.status(status).json(body);
         return;
       }
-      res
-        .status(exception.getStatus())
-        .json({ success: false, data: null, error: toApiError(exception) });
+      res.status(status).json({ success: false, data: null, error: toApiError(exception) });
       return;
     }
 
@@ -81,12 +110,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    this.logger.error('Unhandled error', exception instanceof Error ? exception.stack : exception);
+    this.report(exception, http.getRequest(), HttpStatus.INTERNAL_SERVER_ERROR);
     const envelope: Envelope<null> = {
       success: false,
       data: null,
       error: { code: 'INTERNAL', message: 'Something went wrong' },
     };
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(envelope);
+  }
+
+  private report(error: unknown, req: ReportableRequest | undefined, status: number): void {
+    try {
+      this.reporter.report({ source: 'http', error, context: requestContext(req, status) });
+    } catch {
+      // The answer still goes out: reporting is best effort.
+    }
   }
 }
