@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import type { FetchLike } from '../../../common/http/fetch-like';
 import {
-  type FetchLike,
-  isRetryableStatus,
-  PROVIDER_TIMEOUT_MS,
-  providerId,
-  readJson,
-} from '../../../common/http/fetch-like';
+  DLT_TEMPLATE_ID,
+  MSG91_FLOW_ID,
+  MSG91_PROVIDER,
+  type Msg91Credentials,
+  Msg91FlowClient,
+} from '../../../infra/sms/msg91-flow';
 import { TEMPLATE_CODES, TEMPLATES, type TemplateCode } from '../templates/templates';
 import {
   ChannelSendError,
@@ -14,14 +15,11 @@ import {
   type TemplatedMessage,
 } from './channel.ports';
 
-export const MSG91_PROVIDER = 'msg91';
-const FLOW_URL = 'https://control.msg91.com/api/v5/flow';
-
 /** One SMS template as registered: the MSG91 flow (template) id and its DLT template id. */
 const Msg91Template = z
   .object({
-    flowId: z.string().regex(/^[A-Za-z0-9]{8,40}$/, 'flowId must be the MSG91 template id'),
-    dltTemplateId: z.string().regex(/^\d{10,25}$/, 'dltTemplateId must be the DLT template id'),
+    flowId: z.string().regex(MSG91_FLOW_ID, 'flowId must be the MSG91 template id'),
+    dltTemplateId: z.string().regex(DLT_TEMPLATE_ID, 'dltTemplateId must be the DLT template id'),
   })
   .strict();
 export type Msg91Template = z.infer<typeof Msg91Template>;
@@ -62,60 +60,34 @@ export function parseMsg91Templates(raw: string): Msg91Templates {
   return parsed.data as Msg91Templates;
 }
 
-export interface Msg91Config {
-  readonly authKey: string;
-  /** The DLT-registered header; sent for flows whose sender is "FromAPI". */
-  readonly senderId: string;
+export interface Msg91Config extends Msg91Credentials {
   readonly templates: Msg91Templates;
 }
 
-const field = (json: unknown, key: string): unknown =>
-  typeof json === 'object' && json !== null && key in json
-    ? (json as Record<string, unknown>)[key]
-    : undefined;
-
 /**
- * MSG91 Flow API (DLT SMS, ADR-0027 D1): POST /api/v5/flow with the template (flow) id and one
- * recipient whose keys are the template's ##variables## — the `{name}` placeholders of the
- * template text, so the DLT template mirrors `text` exactly. MSG91 answers HTTP 200 with
- * `type: "error"` for a rejected request. No short URLs: the delivery link goes as registered.
+ * Lifecycle SMS on the MSG91 Flow API (DLT, ADR-0027 D1) through the shared client: the recipient's
+ * keys are the template's ##variables## — the `{name}` placeholders of the template text, so the
+ * DLT template mirrors `text` exactly. No short URLs: the delivery link goes as registered.
  */
 export class Msg91SmsAdapter implements NotificationSmsPort {
+  private readonly client: Msg91FlowClient;
+
   constructor(
     private readonly config: Msg91Config,
-    private readonly fetch: FetchLike,
-  ) {}
+    fetch: FetchLike,
+  ) {
+    this.client = new Msg91FlowClient(config, fetch);
+  }
 
   async sendTemplate(m: TemplatedMessage): Promise<SendReceipt> {
     const registered = this.config.templates[m.template.code as TemplateCode];
     if (!registered) throw new ChannelSendError('MSG91_TEMPLATE_NOT_REGISTERED', false);
-    const body = {
-      template_id: registered.flowId,
-      sender: this.config.senderId,
-      short_url: '0',
-      recipients: [{ mobiles: m.to.replace(/\D/g, ''), ...m.placeholders }],
-    };
-    let res: Awaited<ReturnType<FetchLike>>;
-    try {
-      res = await this.fetch(FLOW_URL, {
-        method: 'POST',
-        headers: {
-          authkey: this.config.authKey,
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
-      });
-    } catch {
-      throw new ChannelSendError('NETWORK', true);
-    }
-    const json = await readJson(res);
-    if (res.status < 200 || res.status >= 300) {
-      throw new ChannelSendError(`HTTP_${res.status}`, isRetryableStatus(res.status));
-    }
-    if (field(json, 'type') !== 'success') throw new ChannelSendError('MSG91_REJECTED', false);
-    // On success `message` is the request id; anything else is never stored verbatim.
-    return { provider: MSG91_PROVIDER, providerMessageId: providerId(field(json, 'message')) };
+    const result = await this.client.send({
+      flowId: registered.flowId,
+      to: m.to,
+      variables: m.placeholders,
+    });
+    if (!result.ok) throw new ChannelSendError(result.code, result.retryable);
+    return { provider: MSG91_PROVIDER, providerMessageId: result.requestId };
   }
 }

@@ -33,8 +33,15 @@ const LIVE_CHANNELS = {
   PUBLIC_WEB_URL: 'https://clickco.test',
 };
 
+/** The OTP SMS on MSG91 (SMS_ADAPTER=dlt): its flow and DLT template ids. Not real ids. */
+const OTP_SMS = {
+  MSG91_OTP_FLOW_ID: '65f0a1b2c3d4e5f6a7b8c9d0',
+  MSG91_OTP_DLT_TEMPLATE_ID: '1107172000000000042',
+};
+
 const valid = {
   ...LIVE_CHANNELS,
+  ...OTP_SMS,
   NODE_ENV: 'development',
   PORT: '4000',
   DATABASE_URL: 'postgres://clickco:pw@localhost:5432/clickco',
@@ -135,6 +142,61 @@ describe('loadEnv', () => {
       for (const [path, drop] of cases) {
         expect(() => loadEnv({ ...valid, ...drop }), path).toThrow(new RegExp(path));
       }
+    });
+
+    describe('OTP SMS on MSG91 (SMS_ADAPTER=dlt)', () => {
+      const MSG91_SHARED = ['MSG91_AUTH_KEY', 'MSG91_SENDER_ID', 'MSG91_DLT_ENTITY_ID'] as const;
+      const OTP_NEEDS = [...MSG91_SHARED, 'MSG91_OTP_FLOW_ID', 'MSG91_OTP_DLT_TEMPLATE_ID'];
+      /** The OTP SMS alone: lifecycle channels on console, only the MSG91 account set. */
+      const otpOnly = {
+        ...valid,
+        ...consoleOnly,
+        ...OTP_SMS,
+        ...Object.fromEntries(MSG91_SHARED.map((k) => [k, valid[k]])),
+        SMS_ADAPTER: 'dlt',
+      };
+      const loadError = (source: Record<string, string | undefined>): Error | null => {
+        try {
+          loadEnv(source);
+          return null;
+        } catch (e) {
+          return e as Error;
+        }
+      };
+
+      it('loads with the OTP flow, its DLT template and the shared MSG91 credentials', () => {
+        expect(loadEnv(prod)).toMatchObject({ SMS_ADAPTER: 'dlt', ...OTP_SMS });
+        // The OTP SMS does not need the lifecycle SMS adapter, only the MSG91 account.
+        expect(loadEnv(otpOnly)).toMatchObject({
+          SMS_ADAPTER: 'dlt',
+          NOTIFY_SMS_ADAPTER: 'console',
+          ...OTP_SMS,
+        });
+      });
+
+      it('names exactly the missing variable, never a value', () => {
+        for (const name of OTP_NEEDS) {
+          expect(loadError({ ...otpOnly, [name]: undefined })?.message, name).toBe(
+            `Invalid or missing environment variables: ${name}`,
+          );
+          expect(() => loadEnv({ ...prod, [name]: undefined }), name).toThrow(new RegExp(name));
+        }
+      });
+
+      it('an empty value counts as missing; a malformed id is refused without echoing it', () => {
+        expect(() => loadEnv({ ...prod, MSG91_OTP_FLOW_ID: '' })).toThrow(/MSG91_OTP_FLOW_ID/);
+        const badFlow = loadError({ ...otpOnly, MSG91_OTP_FLOW_ID: 'not a flow id!' });
+        expect(badFlow?.message).toMatch(/MSG91_OTP_FLOW_ID/);
+        expect(badFlow?.message).not.toMatch(/not a flow id/);
+        expect(() => loadEnv({ ...otpOnly, MSG91_OTP_DLT_TEMPLATE_ID: '12ab' })).toThrow(
+          /MSG91_OTP_DLT_TEMPLATE_ID/,
+        );
+      });
+
+      it('the console adapter needs none of them', () => {
+        const none = Object.fromEntries(OTP_NEEDS.map((k) => [k, undefined]));
+        expect(loadEnv({ ...valid, ...consoleOnly, ...none }).SMS_ADAPTER).toBe('console');
+      });
     });
 
     it('a deployed PUBLIC_API_URL is https', () => {

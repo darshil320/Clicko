@@ -1,4 +1,6 @@
-import type { FetchLike } from '../../../common/http/fetch-like';
+import { MSG91_FIXTURES } from '../../../infra/sms/__tests__/msg91-fixtures';
+
+export { fixtureFetch, type RecordedRequest } from '../../../test-support/fixture-fetch';
 
 /**
  * Provider responses as recorded from each provider's documented examples (no network in tests).
@@ -39,15 +41,7 @@ export const FIXTURES = {
     },
     proxyError: { status: 502, raw: '<html><body>Bad Gateway</body></html>' },
   },
-  msg91: {
-    sent: { status: 200, body: { message: '3763646c3058373530393831', type: 'success' } },
-    rejected: {
-      status: 200,
-      body: { message: 'Invalid mobile number 919812345678', type: 'error' },
-    },
-    unauthorised: { status: 401, body: { message: 'Authentication failure', type: 'error' } },
-    outage: { status: 503, raw: 'Service Unavailable' },
-  },
+  msg91: MSG91_FIXTURES,
   expo: {
     mixed: {
       status: 200,
@@ -134,30 +128,3 @@ export const FIXTURES = {
     },
   },
 } as const;
-
-export interface RecordedRequest {
-  readonly url: string;
-  readonly method: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: string | undefined;
-}
-
-type Reply =
-  | { readonly status: number; readonly body: unknown }
-  | { readonly status: number; readonly raw: string };
-
-/** A FetchLike that answers from the given replies in order and records every request. */
-export function fixtureFetch(...replies: (Reply | Error)[]) {
-  const requests: RecordedRequest[] = [];
-  let next = 0;
-  const fetch: FetchLike = async (url, init) => {
-    requests.push({ url, method: init.method, headers: init.headers, body: init.body });
-    const reply = replies[Math.min(next, replies.length - 1)];
-    next += 1;
-    if (!reply) throw new Error('fixtureFetch: no reply configured');
-    if (reply instanceof Error) throw reply;
-    const text = 'raw' in reply ? reply.raw : JSON.stringify(reply.body);
-    return { status: reply.status, text: async () => text };
-  };
-  return { fetch, requests };
-}

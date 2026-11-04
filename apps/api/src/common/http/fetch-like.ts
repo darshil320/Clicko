@@ -14,6 +14,8 @@ export type FetchLike = (
     readonly headers: Readonly<Record<string, string>>;
     readonly body?: string;
     readonly signal?: AbortSignal;
+    /** `error` for a call that carries a credential: never re-sent to a redirect's target. */
+    readonly redirect?: 'error' | 'follow' | 'manual';
   },
 ) => Promise<FetchResponseLike>;
 

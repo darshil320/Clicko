@@ -25,8 +25,10 @@ These four Railway names are the `<api>`, `<worker>`, `<postgres>` and `<redis>`
 The deploy files are ready. The API itself still refuses to boot in staging or production until
 these are done. This is on purpose (env.ts refuses unsafe settings).
 
-1. **OTP SMS.** `SMS_ADAPTER=dlt` is not built yet (PLAN B6, waits on TRAI DLT). `console` is
-   refused when deployed. Until B6 ships, the API cannot start in staging or production.
+1. **OTP SMS.** `SMS_ADAPTER=dlt` sends the OTP through MSG91 (built in S12, ADR-0029 D1). It
+   needs the DLT-approved OTP template registered as an MSG91 flow (PLAN B6): set
+   `MSG91_OTP_FLOW_ID` and `MSG91_OTP_DLT_TEMPLATE_ID` with the MSG91 account below. `console` is
+   refused when deployed. Without those values the API cannot start in staging or production.
 2. **Provider credentials.** WhatsApp (Meta), MSG91 (DLT), Expo push and Exotel must be real
    adapters. `console` is refused when deployed. See HANDOVER.md §8 for who owes what.
 3. **Razorpay keys.** Test-mode keys are fine for a staging run. Live keys for launch.
@@ -233,7 +235,7 @@ Fixed values:
 | `JPEG_EXPORT_ADAPTER` | `darktable` | |
 | `STORAGE_ADAPTER` | `drive` | |
 | `PAYMENT_GATEWAY` | `razorpay` | |
-| `SMS_ADAPTER` | `dlt` | Blocked until B6 (section 0). |
+| `SMS_ADAPTER` | `dlt` | MSG91 OTP. Needs the `MSG91_OTP_*` values (section 0, B6). |
 | `WHATSAPP_ADAPTER` | `meta` | |
 | `NOTIFY_SMS_ADAPTER` | `msg91` | |
 | `PUSH_ADAPTER` | `expo` | |
@@ -287,6 +289,8 @@ Values a provider gives you. Set each with `doppler secrets set --project clickc
 | `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN` | Meta Business → WhatsApp → API setup (a system-user token, not a 24-hour one). |
 | `MSG91_AUTH_KEY`, `MSG91_SENDER_ID`, `MSG91_DLT_ENTITY_ID` | MSG91 dashboard and your DLT registration (6-letter header, entity id). |
 | `MSG91_TEMPLATES` | JSON, one entry per SMS template: `{"<TEMPLATE_CODE>":{"flowId":"…","dltTemplateId":"…"}}`. The API checks it against its template list at boot. |
+| `MSG91_OTP_FLOW_ID` | The OTP SMS (`SMS_ADAPTER=dlt`): MSG91 → Flow → the OTP flow's template id. The flow's text is the DLT-approved OTP template with one variable, `##otp##`. Uses the same `MSG91_AUTH_KEY`, `MSG91_SENDER_ID` and `MSG91_DLT_ENTITY_ID`. |
+| `MSG91_OTP_DLT_TEMPLATE_ID` | The DLT portal's id for that OTP template (digits). Named in the API's failure logs. |
 | `EXPO_ACCESS_TOKEN` | Only if you turn on Expo's enhanced push security. expo.dev → Access tokens. |
 | `EXOTEL_ACCOUNT_SID`, `EXOTEL_API_KEY`, `EXOTEL_API_TOKEN`, `EXOTEL_CALLER_ID` | Exotel dashboard → API settings, and your ExoPhone. |
 | `EXOTEL_API_HOST` | `api.in.exotel.com` for a Mumbai account. Leave unset for Singapore. |
@@ -781,6 +785,7 @@ the local Redis (the scheduler registered its repeatable jobs there).
   `rediss://media-worker@…`, `REDIS_CA_CERT`) booted under `--read-only`, a `/tmp` tmpfs,
   `--cap-drop ALL`, `no-new-privileges` and `--pids-limit`, took a media-export job and completed it
   with no ACL denial.
-- The API in production mode stops at boot with `SMS_ADAPTER=dlt is not implemented yet` (section 0).
+- The API in production mode stopped at boot with `SMS_ADAPTER=dlt is not implemented yet`. Since
+  fixed: `dlt` is the MSG91 OTP adapter and needs the `MSG91_OTP_*` values (section 0).
 - Not rehearsed: a real RAW through darktable, the Drive adapter (not built), Railway, Doppler,
   Vercel and EAS themselves (no accounts yet).

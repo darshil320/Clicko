@@ -1,6 +1,7 @@
 import { Logger, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { CLOCK, type Clock } from '../../common/clock';
+import { globalFetch, HTTP_FETCH } from '../../common/http/fetch-like';
 import { ENV, type Env } from '../../config/env';
 import { REDIS } from '../../infra/queues/redis';
 import { PhotographersModule } from '../photographers/photographers.module';
@@ -12,8 +13,8 @@ import { OTP_LIMITS, RedisOtpLimits } from './otp-limits';
 import { OTP_PEPPER } from './otp-tokens';
 import { ProAuthController } from './pro-auth.controller';
 import { OTP_REPOSITORY, PgOtpRepository } from './repositories/otp.repository';
-import { ConsoleSmsAdapter } from './sms/console-sms.adapter';
 import { SMS_PORT } from './sms/sms.port';
+import { otpSmsAdapter } from './sms/sms-providers';
 import { TokenModule } from './token.module';
 
 @Module({
@@ -34,16 +35,9 @@ import { TokenModule } from './token.module';
         );
       },
     },
-    {
-      provide: SMS_PORT,
-      inject: [ENV],
-      useFactory: (env: Env) => {
-        if (env.SMS_ADAPTER === 'console') return new ConsoleSmsAdapter();
-        throw new Error(
-          'SMS_ADAPTER=dlt is not implemented yet (waiting on TRAI DLT approval, PLAN B6)',
-        );
-      },
-    },
+    // SMS_ADAPTER: console (development and test) or MSG91 on the DLT OTP template (ADR-0029 D1).
+    { provide: HTTP_FETCH, useValue: globalFetch },
+    { provide: SMS_PORT, inject: [ENV, HTTP_FETCH], useFactory: otpSmsAdapter },
     OtpDelivery,
     OtpService,
   ],

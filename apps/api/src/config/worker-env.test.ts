@@ -23,6 +23,13 @@ describe('loadWorkerEnv (audit H1: the media worker holds no app secrets)', () =
     expect(a.BANK_ACCOUNT_KEY).not.toBe(b.BANK_ACCOUNT_KEY);
   });
 
+  it('fills the OTP SMS (SMS_ADAPTER=dlt) with throwaway MSG91 settings: it never sends one', () => {
+    const env = loadWorkerEnv(workerProd);
+    expect(env.SMS_ADAPTER).toBe('dlt');
+    expect(env.MSG91_OTP_FLOW_ID).toBeDefined();
+    expect(env.MSG91_OTP_DLT_TEMPLATE_ID).toBeDefined();
+  });
+
   it('refuses to boot when deployed with any app secret in its environment', () => {
     for (const name of WORKER_FORBIDDEN_SECRETS) {
       expect(() => loadWorkerEnv({ ...workerProd, [name]: 'x'.repeat(44) }), name).toThrow(

@@ -86,8 +86,10 @@ export interface JobOptions {
 
 /** Per-job retry policy; anything absent uses the queue default (5 tries, 5 s exponential). */
 export const JOB_OPTIONS: Partial<Readonly<Record<JobName, JobOptions>>> = {
-  // An OTP lives 5 minutes: 2 s, 4 s, 8 s, 16 s, then give up (logged; the code expires).
-  [JOB.AUTH_OTP_SMS]: { attempts: 5, backoffMs: 2_000 },
+  // An OTP lives 5 minutes: 5 s, 10 s, then give up (reported; the user can ask for a new code).
+  // Only retryable failures retry (OtpSmsProcessor). A timeout or 5xx may still have sent the SMS
+  // and the budgets (audit M5) count one per request, so at most 3 tries: duplicates stay few.
+  [JOB.AUTH_OTP_SMS]: { attempts: 3, backoffMs: 5_000 },
   // A failed export (corrupt RAW, missing darktable) alerts ops on the first failure: 30 s … 8 min.
   [JOB.MEDIA_JPEG_EXPORT]: { attempts: 5, backoffMs: 30_000 },
   // A provider outage (WhatsApp, MSG91, Expo): 20 s, 40 s, 80 s, 160 s, 320 s — about 10 minutes

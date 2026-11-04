@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
+import { DLT_TEMPLATE_ID, MSG91_FLOW_ID } from '../infra/sms/msg91-flow';
 import { DEV_STAFF_TOTP_KEY } from '../modules/admin/auth/secret-box';
 import { isLocalDatabaseUrl } from './dev-tools';
 import { publishedSecretProblem, strongSecretProblem } from './secret-strength';
@@ -82,7 +83,8 @@ export const EnvSchema = z
     QUEUE_WORKERS: unsetIfEmpty(z.enum(['on', 'off']).default('on')),
     JWT_ACCESS_SECRET: Secret,
     OTP_HASH_PEPPER: Secret,
-    // `console` prints OTPs to the server log — development only. `dlt` lands with TRAI DLT approval.
+    // `console` prints OTPs to the server log — development only. `dlt` sends them through MSG91 on
+    // the DLT-registered OTP template (MSG91_OTP_* plus the shared MSG91 credentials below).
     SMS_ADAPTER: z.enum(['console', 'dlt']),
     // Load-balancer hops in front of the API. Never `true`: that would trust a client-sent X-Forwarded-For.
     // Required when deployed: a wrong 0 behind a load balancer gives every client one IP (and one
@@ -192,6 +194,10 @@ export const EnvSchema = z
     // JSON: { "<TEMPLATE_CODE>": { "flowId": "…", "dltTemplateId": "…" } } — one per SMS template
     // (checked against the template catalogue at boot).
     MSG91_TEMPLATES: unsetIfEmpty(z.string().min(2).optional()),
+    // The OTP SMS (SMS_ADAPTER=dlt) on the same MSG91 account: its flow (template) id and DLT
+    // template id. The flow's one variable is ##otp##.
+    MSG91_OTP_FLOW_ID: unsetIfEmpty(z.string().regex(MSG91_FLOW_ID).optional()),
+    MSG91_OTP_DLT_TEMPLATE_ID: unsetIfEmpty(z.string().regex(DLT_TEMPLATE_ID).optional()),
     PUSH_ADAPTER: unsetIfEmpty(z.enum(['console', 'expo']).default('console')),
     // Expo push security: optional unless "enhanced push security" is on for the project.
     EXPO_ACCESS_TOKEN: unsetIfEmpty(z.string().min(20).optional()),
@@ -419,6 +425,25 @@ export const EnvSchema = z
       path: ['WHATSAPP_ACCESS_TOKEN'],
     },
   )
+  .superRefine((e, ctx) => {
+    // ADR-0029 D1: the OTP SMS goes through MSG91. Each missing variable is named on its own.
+    if (e.SMS_ADAPTER !== 'dlt') return;
+    const needed = {
+      MSG91_AUTH_KEY: e.MSG91_AUTH_KEY,
+      MSG91_SENDER_ID: e.MSG91_SENDER_ID,
+      MSG91_DLT_ENTITY_ID: e.MSG91_DLT_ENTITY_ID,
+      MSG91_OTP_FLOW_ID: e.MSG91_OTP_FLOW_ID,
+      MSG91_OTP_DLT_TEMPLATE_ID: e.MSG91_OTP_DLT_TEMPLATE_ID,
+    };
+    for (const [name, value] of Object.entries(needed)) {
+      if (value) continue;
+      ctx.addIssue({
+        code: 'custom',
+        path: [name],
+        message: `SMS_ADAPTER=dlt sends OTPs through MSG91 and needs ${name}`,
+      });
+    }
+  })
   .refine(
     (e) =>
       e.NOTIFY_SMS_ADAPTER !== 'msg91' ||
@@ -527,6 +552,8 @@ const WORKER_NO_CHANNELS = {
   MSG91_SENDER_ID: 'NOSEND',
   MSG91_DLT_ENTITY_ID: '1000000000000000000',
   MSG91_TEMPLATES: '{}',
+  MSG91_OTP_FLOW_ID: 'MediaWorkerSendsNoOtp',
+  MSG91_OTP_DLT_TEMPLATE_ID: '1000000000000000000',
   PUSH_ADAPTER: 'expo',
   CALLS_ADAPTER: 'exotel',
   EXOTEL_ACCOUNT_SID: 'media-worker-has-no-calls',
@@ -568,8 +595,8 @@ export function loadWorkerEnv(source: Record<string, string | undefined>): Env {
           RAZORPAY_KEY_ID: 'media-worker-has-no-gateway',
           RAZORPAY_KEY_SECRET: random(),
           RAZORPAY_WEBHOOK_SECRET: random(),
-          // The worker never sends notifications or calls: real adapters with throwaway values
-          // only satisfy the deployed "no console adapter" rule (ADR-0027 D1).
+          // The worker never sends an OTP, a notification or a call: real adapters with throwaway
+          // values only satisfy the deployed "no console adapter" rule (ADR-0027 D1).
           ...WORKER_NO_CHANNELS,
         }
       : { PAYMENT_GATEWAY: 'sandbox', SANDBOX_WEBHOOK_SECRET: random(48) }),
