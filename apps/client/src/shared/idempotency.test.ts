@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { claimKey, fingerprint } from './keys';
+import { claimKey, fingerprint } from './idempotency';
 
 const minter = () => {
   let n = 0;

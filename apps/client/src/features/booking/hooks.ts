@@ -11,9 +11,9 @@ import { useMemo } from 'react';
 import { bookingKeys } from '@/shared/bookings-query';
 import { BOOKABLE_TIERS } from '@/shared/catalogue';
 import { TERMS_VERSION } from '@/shared/config';
+import { fingerprint } from '@/shared/idempotency';
 import { createBooking, fetchQuote, openPayment, simulatePayment } from './api';
 import { type Booker, createBookingBody, referenceRequest } from './lib/draft';
-import { fingerprint } from './lib/keys';
 import { referenceSlot } from './lib/schedule';
 import { useBookingDraft } from './store';
 

@@ -3,9 +3,9 @@ import type { AddonCode, PayBookingResponse } from '@clickco/contracts';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { BookableTier } from '@/shared/catalogue';
+import { claimKey, type KeyRing } from '@/shared/idempotency';
 import { kvStorage } from '@/shared/storage/kv';
 import { type BookingDraft, toggleAddon, withTier } from './lib/draft';
-import { claimKey, type KeyRing } from './lib/keys';
 
 export interface CreatedBooking {
   readonly bookingId: string;
