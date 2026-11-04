@@ -29,7 +29,7 @@ Turborepo + pnpm monorepo:
 | S10 | Done: money (refunds four-eyes, GST credit notes, review settlement, credits, breach remedies), payouts + TDS 194C, supply (onboarding, KYC, directory, waivers), care (quality issues, tickets, equipment claims), pricing editor, "Today" home, ⌘K, grouped nav, password lifecycle (ADR-0026). |
 | Security | Done: whole-app audit (4 reviewers); every CRITICAL/HIGH fixed with tests; committed and pushed (`613a935`). See ADR-0027 D6/D6a. |
 | **S11** | **Nearly done.** Plan and as-built notes in ADR-0027 (D2/D3a, D4a, D5a, D6b). Left: the D5 app screens (section 3) and the follow-ups in section 4. |
-| S12 | Not started: launch prep (EAS builds, store listings, Sentry/PostHog, load test, runbook, dry runs). |
+| S12 | **Code side done** (ADR-0029): deploy files + docs/DEPLOY.md, ErrorReporter and analytics ports, k6 load tests, dry-run script (18 steps pass locally), RUNBOOK, store listings, MSG91 OTP SMS. Gate (T&C v2, Grievance Officer, D-U-N-S/Apple) still open. |
 
 ## 3. Where the last session stopped
 Committed and pushed on `main`, in order:
@@ -66,6 +66,18 @@ cd apps/api && TEST_DATABASE_URL=postgres://clickco:clickco_local_only@localhost
 ```
 Last full run: API 1,700 tests green (3 runs in a row), typecheck 17/17.
 
+**Launch gaps found in S12 (code, no owner input needed):**
+- A paid booking cannot be cancelled by anyone, so the T&C refund ladder is unreachable.
+- The client app has no account deletion (Apple guideline 5.1.1(v); DPDP).
+- No staff route reaches DATA_LOSS.
+- **Uncommitted:** the D5 app screens (booking money section, support tickets, Pro paid transfers)
+  are half-done in apps/client and apps/pro. The owner stopped that agent; ask before finishing or
+  discarding them.
+
+**Owner-gated launch blockers:** the Google Drive storage adapter is a stub (needs Google Workspace
++ Shared Drive, gate S7); approve `@sentry/node`, `@sentry/react-native`, `posthog-react-native`,
+`react-native-razorpay` and `expo-notifications`; `clickco.in` DNS does not resolve yet.
+
 ## 4. S11 and S12 — what is left
 - **Mobile push and call buttons:** need **`expo-notifications`** (asked, **not yet approved**).
   The server side is done. Then: register the push token on sign-in, and add call buttons in the
@@ -82,7 +94,8 @@ Last full run: API 1,700 tests green (3 runs in a row), typecheck 17/17.
   - check in a browser that a KYC PDF opens;
   - web CSP hashes instead of `unsafe-inline`;
   - one full-history gitleaks scan.
-- **S12** (launch prep): EAS builds, store listings, Sentry/PostHog, load test, runbook, dry runs.
+- **S12 left:** run k6 (not installed locally), the 10 staff dry runs on a dev-mode VM, the EAS
+  production builds and store submission (accounts first).
 
 ## 5. Local environment
 - **Node:** Node 22 is pinned. The default `node` on PATH is Zed's Node 24, so always prefix the
