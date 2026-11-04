@@ -61,14 +61,16 @@ export function SignIn() {
   const hydrated = useHydrated();
   const [step, setStep] = useState<Step>({ kind: 'password' });
   const [notice, setNotice] = useState<string | null>(REASONS[params.get('reason') ?? ''] ?? null);
-  const next = safeNextHere(params.get('next'));
+  // Checked against window.location only in the browser (effects and handlers): never in render,
+  // which also runs on the server.
+  const nextParam = params.get('next');
 
   // Already signed in in this tab: go straight in.
   useEffect(() => {
     if (!hydrated) return;
     const session = loadSession();
-    if (session) router.replace(next ?? homeFor(session.staff.grants) ?? '/');
-  }, [hydrated, next, router]);
+    if (session) router.replace(safeNextHere(nextParam) ?? homeFor(session.staff.grants) ?? '/');
+  }, [hydrated, nextParam, router]);
 
   /** Back to the password; the typed passwords are dropped with the step. */
   const restart = (message: string | null) => {
@@ -83,7 +85,7 @@ export function SignIn() {
       staff: session.staff,
     });
     recordActivity(Date.now());
-    router.replace(next ?? homeFor(session.staff.grants) ?? '/');
+    router.replace(safeNextHere(nextParam) ?? homeFor(session.staff.grants) ?? '/');
   };
 
   return (
