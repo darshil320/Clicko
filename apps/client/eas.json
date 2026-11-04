@@ -4,21 +4,37 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "base": {
+      "node": "22.23.4",
+      "corepack": true
+    },
     "development": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "environment": "development"
     },
     "preview": {
+      "extends": "base",
       "distribution": "internal",
       "environment": "preview"
     },
     "production": {
+      "extends": "base",
       "environment": "production",
-      "autoIncrement": true
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    }
   }
 }

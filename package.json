@@ -16,7 +16,8 @@
     "db:migrate": "pnpm --filter @clickco/api db:migrate",
     "db:seed": "pnpm --filter @clickco/api db:seed",
     "console": "pnpm --filter @clickco/admin dev",
-    "api": "pnpm --filter @clickco/api start:local"
+    "api": "pnpm --filter @clickco/api start:local",
+    "postinstall": "test \"$EAS_BUILD\" != true || turbo run build --filter=@clickco/client^... --filter=@clickco/pro^..."
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",

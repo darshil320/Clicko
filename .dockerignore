@@ -1,0 +1,29 @@
+# Build context for the API and media-worker images (apps/api/Dockerfile, Dockerfile.worker).
+# An allow-list: only what those builds read is sent. Other apps' code, docs, .env files,
+# node_modules, build output and local media storage never reach the builder.
+*
+
+# The workspace and its lockfile.
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!turbo.json
+
+# Every workspace manifest, so `turbo prune` sees the same workspace graph as the lockfile.
+!apps/*/package.json
+!packages/*/package.json
+
+# The API and the workspace packages it depends on.
+!apps/api
+!packages/config
+!packages/contracts
+!packages/utils
+
+# Never, even inside the folders above.
+**/node_modules
+**/dist
+**/.turbo
+**/.storage
+**/.env
+**/.env.*
+**/*.tsbuildinfo
