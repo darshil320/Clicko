@@ -3,8 +3,10 @@ import { useRouter } from 'expo-router';
 import { RefreshControl, View } from 'react-native';
 import { screenState } from '@/shared/screen-state';
 import { useEarnings } from '../hooks';
+import { hasPaidTransfers } from '../lib/payouts';
 import { EarningsJobList } from './EarningsJobList';
 import { EarningsSummary } from './EarningsSummary';
+import { PaidTransfers } from './PaidTransfers';
 
 function LoadingBody() {
   return (
@@ -18,8 +20,9 @@ function LoadingBody() {
 }
 
 /**
- * Earnings tab (doc 01 screen 15, ADR-0024 D3): this month big, today / week / pending, and the
- * completed shoots. The city ranking and the 30-day chart wait for API data (ADR-0024 D3).
+ * Earnings tab (doc 01 screen 15, ADR-0024 D3, ADR-0027 D5): this month big, today / week /
+ * pending, the transfers already paid (with TDS), and the completed shoots with their payout
+ * status. The city ranking and the 30-day chart wait for API data (ADR-0024 D3).
  */
 export function EarningsView() {
   const earnings = useEarnings();
@@ -46,6 +49,9 @@ export function EarningsView() {
         {(data) => (
           <>
             <EarningsSummary earnings={data} />
+            {data.paidTransfers && hasPaidTransfers(data.paidTransfers) ? (
+              <PaidTransfers transfers={data.paidTransfers} />
+            ) : null}
             <EarningsJobList
               jobs={data.jobs}
               asOf={new Date(data.asOf)}

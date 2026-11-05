@@ -1,4 +1,5 @@
 import { Avatar, Button, Card, ListRow, OfflineBanner, Screen, Section, Text } from '@clickco/ui';
+import LifeBuoy from 'lucide-react-native/icons/life-buoy';
 import { View } from 'react-native';
 import { API_URL, IS_DEV } from '@/shared/config';
 import { isOffline } from '@/shared/errors';
@@ -6,8 +7,13 @@ import { formatPhone } from '@/shared/format/phone';
 import { useSession } from '@/shared/session/store';
 import { useMe, useSignOut } from '../hooks';
 
-/** Profile tab: who is signed in, and sign out. Editing details arrives with Wave 2 screens. */
-export function ProfileView() {
+export interface ProfileViewProps {
+  /** Opens the "Get help" ticket form (features/care, composed in by the route). */
+  readonly onGetHelp: () => void;
+}
+
+/** Profile tab: who is signed in, help, and sign out. Editing details arrives with Wave 2 screens. */
+export function ProfileView({ onGetHelp }: ProfileViewProps) {
   const user = useSession((s) => s.user);
   const me = useMe();
   const signOut = useSignOut();
@@ -34,6 +40,16 @@ export function ProfileView() {
           onRetry={() => void me.refetch()}
         />
       ) : null}
+      <Card padding="list">
+        <ListRow
+          icon={LifeBuoy}
+          title="Get help"
+          subtitle="Payments, a shoot, your photos or your data"
+          accessory="chevron"
+          onPress={onGetHelp}
+          testID="profile-get-help"
+        />
+      </Card>
       {IS_DEV ? (
         <Section title="Developer">
           <Card>

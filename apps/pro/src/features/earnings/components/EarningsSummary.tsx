@@ -35,7 +35,7 @@ function Stat({
 
 /**
  * Doc 01 screen 15's big number and summary row. Every amount is an expected gross payout
- * (`basis: EXPECTED`): there are no payout batches or TDS yet, so none are shown or guessed.
+ * (`basis: EXPECTED`); paid transfers with their TDS are listed separately (PaidTransfers).
  */
 export function EarningsSummary({ earnings }: { earnings: ProEarnings }) {
   const month = rupees(earnings.monthPaise);
@@ -65,8 +65,8 @@ export function EarningsSummary({ earnings }: { earnings: ProEarnings }) {
       <View className="flex-row gap-3">
         <Icon icon={Info} size="small" tone="tertiary" />
         <Text variant="caption" tone="secondary" className="flex-1">
-          These are expected earnings from shoots you have completed. Payout batches and TDS will
-          appear here once payouts start.
+          Expected earnings from the shoots you've completed. Payouts go out in weekly batches, and
+          each transfer shows under Paid with its TDS.
         </Text>
       </View>
     </View>

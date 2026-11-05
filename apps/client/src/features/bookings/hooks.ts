@@ -1,10 +1,18 @@
 import { newIdempotencyKey } from '@clickco/api-client';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { bookingKeys, useBookingDetail, useBookingList } from '@/shared/bookings-query';
-import { cancelBooking } from './api';
+import { cancelBooking, fetchBookingMoney } from './api';
 
 export const useBookings = useBookingList;
+
+/** The booking's refunds and credits. Under bookingKeys.all, so a cancel refreshes it too. */
+export function useBookingMoney(bookingId: string) {
+  return useQuery({
+    queryKey: bookingKeys.money(bookingId),
+    queryFn: () => fetchBookingMoney(bookingId),
+  });
+}
 
 /** Detail, polled while the booking is moving through dispatch/shoot/delivery. */
 export function useBooking(bookingId: string | undefined, pollMs?: number) {

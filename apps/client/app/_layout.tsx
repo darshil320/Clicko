@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { clearBookingDraft } from '@/features/booking';
+import { clearCareKeys } from '@/features/care';
 import { useNetworkWatch } from '@/shared/network/use-network-watch';
 import { createQueryClient } from '@/shared/query';
 import { onSessionEnd } from '@/shared/session/reset';
@@ -71,6 +72,7 @@ function useSessionEndResets(queryClient: ReturnType<typeof createQueryClient>):
     () =>
       onSessionEnd(() => {
         clearBookingDraft();
+        clearCareKeys();
         queryClient.clear();
       }),
     [queryClient],
@@ -106,6 +108,7 @@ export default function RootLayout() {
                   options={{ headerShown: false, gestureEnabled: false }}
                 />
                 <Stack.Screen name="bookings/[id]" options={{ title: 'Booking' }} />
+                <Stack.Screen name="support/new" options={{ title: 'Get help' }} />
               </Stack.Protected>
               <Stack.Protected guard={!signedIn}>
                 <Stack.Screen name="sign-in" options={{ headerShown: false }} />

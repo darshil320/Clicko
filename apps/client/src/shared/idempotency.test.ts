@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { claimKey, fingerprint } from './idempotency';
+import { claimKey, fingerprint, releaseKey } from './idempotency';
 
 const minter = () => {
   let n = 0;
@@ -48,5 +48,18 @@ describe('fingerprint', () => {
     expect(fingerprint({ modelReleaseConsent: false })).not.toBe(
       fingerprint({ modelReleaseConsent: true }),
     );
+  });
+});
+
+describe('releaseKey', () => {
+  it('drops one scope so the next request there is a new intent, without mutating', () => {
+    const ring = {
+      ticket: { key: 'k1', fingerprint: 'a' },
+      create: { key: 'k2', fingerprint: 'b' },
+    };
+    const released = releaseKey(ring, 'ticket');
+    expect(released).toEqual({ create: { key: 'k2', fingerprint: 'b' } });
+    expect(ring.ticket.key).toBe('k1');
+    expect(releaseKey(released, 'ticket')).toBe(released);
   });
 });

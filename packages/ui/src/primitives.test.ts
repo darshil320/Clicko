@@ -1,10 +1,11 @@
 import { PlanTier } from '@clickco/contracts';
-import { colorLight, lightTailwindPreset } from '@clickco/design-tokens';
+import { colorLight, lightTailwindPreset, typography } from '@clickco/design-tokens';
 import { describe, expect, it } from 'vitest';
 import { initials } from './avatar.logic';
 import { buttonContainerClass, buttonLabelTone, buttonState } from './button.styles';
 import { cx } from './cx';
 import { FONT_FACES, fontFace, fontFaceFor } from './fonts';
+import { multilineTextHeight } from './input.styles';
 import {
   BADGE_TONE_CLASS,
   EDGE_CLASS,
@@ -141,6 +142,19 @@ describe('button styles', () => {
     expect(buttonLabelTone('secondary', 'default')).toBe('primary');
     expect(buttonLabelTone('ghost', 'default')).toBe('secondary');
     expect(buttonLabelTone('primary', 'disabled')).toBe('tertiary');
+  });
+});
+
+describe('input height', () => {
+  it('sizes a multiline message box in body lines, from the type tokens', () => {
+    expect(multilineTextHeight(true, 4)).toBe(typography.scale.body.lineHeight * 4);
+    expect(multilineTextHeight(true, 5.5)).toBe(typography.scale.body.lineHeight * 5);
+  });
+
+  it('keeps the 52pt single-line field otherwise', () => {
+    expect(multilineTextHeight(false, 4)).toBeNull();
+    expect(multilineTextHeight(true, undefined)).toBeNull();
+    expect(multilineTextHeight(true, 1)).toBeNull();
   });
 });
 

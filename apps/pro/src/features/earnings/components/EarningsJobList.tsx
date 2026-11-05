@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { categoryIcon } from '@/shared/category-icons';
 import { rupees } from '@/shared/format/money';
 import { groupByDay, jobSubtitle, jobTitle } from '../lib/earnings';
+import { payoutLine } from '../lib/payouts';
 
 export interface EarningsJobListProps {
   readonly jobs: readonly EarningsJob[];
@@ -13,7 +14,10 @@ export interface EarningsJobListProps {
   readonly onFindJobs: () => void;
 }
 
-/** Completed shoots by day of check-out, each with its expected payout (extras on a second line). */
+/**
+ * Completed shoots by day of check-out, each with its payout (extras on a second line) and where
+ * that payout stands, in words.
+ */
 export function EarningsJobList({ jobs, asOf, onFindJobs }: EarningsJobListProps) {
   if (jobs.length === 0) {
     return (
@@ -51,7 +55,7 @@ export function EarningsJobList({ jobs, asOf, onFindJobs }: EarningsJobListProps
                   key={job.assignmentId}
                   icon={categoryIcon(job.categoryCode)}
                   title={jobTitle(job)}
-                  subtitle={jobSubtitle(job)}
+                  subtitle={`${jobSubtitle(job)}\n${payoutLine(job)}`}
                   value={rupees(job.totalPayoutPaise)}
                   divider={j < day.jobs.length - 1}
                   testID={`earning-${job.bookingReference}`}

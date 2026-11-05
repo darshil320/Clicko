@@ -10,6 +10,8 @@ export const bookingKeys = {
   all: ['bookings'] as const,
   list: () => [...bookingKeys.all, 'list'] as const,
   detail: (id: string) => [...bookingKeys.all, 'detail', id] as const,
+  /** Refunds and credits on one booking (GET /bookings/:id/money). */
+  money: (id: string) => [...bookingKeys.all, 'money', id] as const,
 };
 
 export function useBookingList() {

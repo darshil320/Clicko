@@ -12,7 +12,7 @@ import {
   Text,
   TierBadge,
 } from '@clickco/ui';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { View } from 'react-native';
 import { canCancel, isHalted, journey, statusPresentation } from '@/shared/booking-status';
 import { categoryLabel } from '@/shared/catalogue';
@@ -22,6 +22,7 @@ import { rupees } from '@/shared/format/money';
 import { screenState } from '@/shared/screen-state';
 import { useBooking, useCancelBooking } from '../hooks';
 import { BookingMissing } from './BookingMissing';
+import { BookingMoneySection } from './BookingMoneySection';
 import { JourneyTimeline } from './JourneyTimeline';
 
 const POLL_MS = 15_000;
@@ -71,7 +72,13 @@ function phaseNote(status: BookingStatus, balance: string): { title: string; bod
   }
 }
 
-function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) => void }) {
+interface LoadedProps {
+  readonly detail: BookingDetail;
+  readonly onPay: (id: string) => void;
+  readonly care?: ((detail: BookingDetail) => ReactNode) | undefined;
+}
+
+function Loaded({ detail, onPay, care }: LoadedProps) {
   const { booking, timeline, invoices } = detail;
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const cancel = useCancelBooking(booking.id);
@@ -137,6 +144,10 @@ function Loaded({ detail, onPay }: { detail: BookingDetail; onPay: (id: string) 
           <ListRow title="Balance" value={rupees(booking.balancePaise)} emphasis />
         </Card>
       </Section>
+
+      <BookingMoneySection bookingId={booking.id} />
+
+      {care ? care(detail) : null}
 
       {timeline.length > 0 ? (
         <Section title="Activity">
@@ -211,6 +222,11 @@ export interface BookingDetailViewProps {
   readonly onPay: (bookingId: string) => void;
   /** The way out when the booking does not exist (or is not this client's). */
   readonly onBackToBookings: () => void;
+  /**
+   * Customer-care entry points for this booking (report a photo problem, get help), composed in
+   * by the route from features/care.
+   */
+  readonly care?: (detail: BookingDetail) => ReactNode;
 }
 
 function DetailSkeleton() {
@@ -225,7 +241,12 @@ function DetailSkeleton() {
 }
 
 /** Booking detail: status, journey and history from GET /bookings/:id (polled while live). */
-export function BookingDetailView({ bookingId, onPay, onBackToBookings }: BookingDetailViewProps) {
+export function BookingDetailView({
+  bookingId,
+  onPay,
+  onBackToBookings,
+  care,
+}: BookingDetailViewProps) {
   const detail = useBooking(bookingId, POLL_MS);
   const missing = !bookingId || (detail.data === undefined && isNotFound(detail.error));
 
@@ -240,7 +261,7 @@ export function BookingDetailView({ bookingId, onPay, onBackToBookings }: Bookin
           errorTitle="We couldn't load this booking"
           onRetry={() => void detail.refetch()}
         >
-          {(data) => <Loaded detail={data} onPay={onPay} />}
+          {(data) => <Loaded detail={data} onPay={onPay} care={care} />}
         </StateView>
       )}
     </Screen>

@@ -1,9 +1,9 @@
 /**
- * Idempotency-key bookkeeping for one checkout. A key belongs to a scope ("create",
- * "pay:<bookingId>") and the exact request it was minted for (its fingerprint): a retry of
- * the same request reuses the key — so a double tap or a flaky network can never book or
- * charge twice — while any change to the request gets a fresh key (the API answers 422 to a
- * reused key with a different body).
+ * Idempotency-key bookkeeping for client writes (checkout, support tickets, quality issues). A
+ * key belongs to a scope ("create", "pay:<bookingId>", "ticket") and the exact request it was
+ * minted for (its fingerprint): a retry of the same request reuses the key — so a double tap or
+ * a flaky network can never book, charge or raise a ticket twice — while any change to the
+ * request gets a fresh key (the API answers 422 to a reused key with a different body).
  */
 export interface MintedKey {
   readonly key: string;
@@ -33,4 +33,10 @@ export function fingerprint(value: unknown): string {
         )
       : v,
   );
+}
+
+/** The ring without one scope: after a success, the next request in that scope is a new intent. */
+export function releaseKey(ring: KeyRing, scope: string): KeyRing {
+  if (!(scope in ring)) return ring;
+  return Object.fromEntries(Object.entries(ring).filter(([name]) => name !== scope));
 }
