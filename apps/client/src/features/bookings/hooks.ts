@@ -1,8 +1,11 @@
-import { newIdempotencyKey } from '@clickco/api-client';
+import type { BookingStatus, CancelBookingBody } from '@clickco/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { isFinished } from '@/shared/booking-status';
 import { bookingKeys, useBookingDetail, useBookingList } from '@/shared/bookings-query';
-import { cancelBooking, fetchBookingMoney } from './api';
+import { fingerprint } from '@/shared/idempotency';
+import { cancelBooking, fetchBookingMoney, fetchCancellationQuote } from './api';
+import { cancelFailure } from './lib/cancellation';
+import { useBookingKeys } from './store';
 
 export const useBookings = useBookingList;
 
@@ -20,19 +23,35 @@ export function useBooking(bookingId: string | undefined, pollMs?: number) {
 }
 
 /**
- * Cancel before payment. One key per cancel intent: retries after a failure reuse it, so
- * the API replays the same outcome instead of acting twice.
+ * GET /bookings/:id/cancellation for a booking still ahead. Keyed by status too, so a move (a
+ * photographer accepts, the shoot starts) asks again; under bookingKeys.all, so a cancel does.
+ */
+export function useCancellationQuote(bookingId: string, status: BookingStatus) {
+  return useQuery({
+    queryKey: [...bookingKeys.all, 'cancellation', bookingId, status] as const,
+    queryFn: () => fetchCancellationQuote(bookingId),
+    enabled: !isFinished(status),
+  });
+}
+
+const cancelScope = (bookingId: string) => `cancel:${bookingId}`;
+
+/**
+ * POST /bookings/:id/cancel with the refund the client confirmed from the quote. One key per exact
+ * request (the persisted booking key ring): a double tap, a timeout or a restart replays the first
+ * answer; confirming a new figure is a new request. Every answer refreshes the booking, its
+ * "Refunds & credits" and the quote.
  */
 export function useCancelBooking(bookingId: string) {
   const queryClient = useQueryClient();
-  const key = useRef<string | null>(null);
+  const scope = cancelScope(bookingId);
   return useMutation({
-    mutationFn: () => {
-      key.current ??= newIdempotencyKey();
-      return cancelBooking(bookingId, key.current);
-    },
-    onSuccess: () => {
-      key.current = null;
+    mutationFn: (body: CancelBookingBody) =>
+      cancelBooking(bookingId, body, useBookingKeys.getState().claimKey(scope, fingerprint(body))),
+    onSuccess: () => useBookingKeys.getState().release(scope),
+    onError: (error) => {
+      // A refusal that retrying cannot change frees the scope for the next intent.
+      if (cancelFailure(error).next !== 'retry') useBookingKeys.getState().release(scope);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: bookingKeys.all }),
   });

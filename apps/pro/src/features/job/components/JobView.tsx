@@ -1,13 +1,14 @@
 import type { ProAssignmentDetail } from '@clickco/contracts';
 import { EmptyState, ErrorState, palette, Screen, Skeleton, Text } from '@clickco/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import SearchX from 'lucide-react-native/icons/search-x';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { RefreshControl, View } from 'react-native';
-import { isNotFound } from '@/shared/errors';
 import { useNow } from '@/shared/hooks/useNow';
 import { type ScreenState, screenState } from '@/shared/screen-state';
-import { useJob, useJobQueue } from '../hooks';
+import { jobKeys, useJob, useJobQueue } from '../hooks';
+import { isJobGone } from '../lib/errors';
 import { projectJob } from '../lib/project';
 import { formatAt } from '../lib/timing';
 import { StageBody, stageFooter } from './StageBody';
@@ -69,30 +70,24 @@ function JobSkeleton() {
 
 type JobFailure = Extract<ScreenState<ProAssignmentDetail>, { kind: 'offline' | 'error' }>;
 
-function JobError({
-  failure,
-  missing,
-  onRetry,
-}: {
-  failure: JobFailure;
-  missing: boolean;
-  onRetry: () => void;
-}) {
+/** The API no longer serves this job to the photographer (released, e.g. the client cancelled). */
+function JobMissing() {
   const router = useRouter();
-  if (missing) {
-    return (
-      <EmptyState
-        icon={SearchX}
-        title="This job isn't on your account"
-        body="It may have been cancelled or passed to another photographer."
-        action={{
-          label: 'Back to jobs',
-          onPress: () => (router.canGoBack() ? router.back() : router.replace('/')),
-        }}
-        testID="job-missing"
-      />
-    );
-  }
+  return (
+    <EmptyState
+      icon={SearchX}
+      title="This job isn't on your account"
+      body="The client may have cancelled it, or it was passed to another photographer. You don't need to go to this shoot."
+      action={{
+        label: 'Back to jobs',
+        onPress: () => (router.canGoBack() ? router.back() : router.replace('/')),
+      }}
+      testID="job-missing"
+    />
+  );
+}
+
+function JobError({ failure, onRetry }: { failure: JobFailure; onRetry: () => void }) {
   return (
     <ErrorState
       offline={failure.kind === 'offline'}
@@ -110,10 +105,26 @@ function JobError({
  */
 export function JobView({ assignmentId }: { assignmentId: string }) {
   const query = useJob(assignmentId);
+  const queryClient = useQueryClient();
   const refresh = () => void query.refetch();
   const state = screenState(query);
+  const gone = isJobGone(query);
 
-  // Data first: an offline refetch failure must not replace a job the photographer is working.
+  // A job the server no longer serves is dropped from the Jobs tab now, not at its next poll.
+  useEffect(() => {
+    if (gone) void queryClient.invalidateQueries({ queryKey: jobKeys.active });
+  }, [gone, queryClient]);
+
+  // The server saying the job is gone outranks a copy loaded earlier (it would keep offering
+  // on-site actions); otherwise data first: an offline refetch failure must not replace a job
+  // the photographer is working.
+  if (gone) {
+    return (
+      <Screen topInset={false}>
+        <JobMissing />
+      </Screen>
+    );
+  }
   if (state.kind === 'ready' || state.kind === 'empty') {
     return (
       <LoadedJob
@@ -127,11 +138,7 @@ export function JobView({ assignmentId }: { assignmentId: string }) {
   }
   return (
     <Screen topInset={false}>
-      {state.kind === 'loading' ? (
-        <JobSkeleton />
-      ) : (
-        <JobError failure={state} missing={isNotFound(query.error)} onRetry={refresh} />
-      )}
+      {state.kind === 'loading' ? <JobSkeleton /> : <JobError failure={state} onRetry={refresh} />}
     </Screen>
   );
 }

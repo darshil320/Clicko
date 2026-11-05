@@ -3,7 +3,7 @@ import type { BookingStatus, BookingSummary } from '@clickco/contracts';
 import { BookingStatus as BookingStatuses } from '@clickco/contracts';
 import { describe, expect, it } from 'vitest';
 import {
-  canCancel,
+  awaitingPayment,
   isFinished,
   isHalted,
   journey,
@@ -124,10 +124,10 @@ describe('booking status presentation', () => {
     });
   });
 
-  it('lets the client cancel only before payment lands', () => {
-    expect(canCancel('QUOTED')).toBe(true);
-    expect(canCancel('ADVANCE_PENDING')).toBe(true);
-    expect(canCancel('CONFIRMED')).toBe(false);
+  it('awaits payment only while quoted or waiting for the advance', () => {
+    expect(awaitingPayment('QUOTED')).toBe(true);
+    expect(awaitingPayment('ADVANCE_PENDING')).toBe(true);
+    expect(awaitingPayment('CONFIRMED')).toBe(false);
   });
 
   it('splits upcoming (soonest first) from past (latest first) without mutating', () => {

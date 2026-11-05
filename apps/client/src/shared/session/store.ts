@@ -2,8 +2,9 @@ import type { TokenStore } from '@clickco/api-client';
 import type { SessionUser, TokenPair, VerifyOtpResponse } from '@clickco/contracts';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { compactKv, kvStorage } from '../storage/kv';
-import { runSessionEndResets } from './reset';
+import { compactKv, kvStorage, wipeKv } from '../storage/kv';
+import { eraseDeletedAccount } from './erase';
+import { runSessionEndResets, type SessionEndReason } from './reset';
 
 export type SignedInUser = Omit<SessionUser, 'isNew'>;
 
@@ -13,7 +14,8 @@ interface SessionState {
   signIn(response: VerifyOtpResponse): void;
   setTokens(tokens: TokenPair): void;
   setUser(user: SignedInUser): void;
-  signOut(): void;
+  /** Forgets the session and runs every session-end reset; 'account-deleted' also drops device choices. */
+  signOut(reason?: SessionEndReason): void;
 }
 
 /**
@@ -32,9 +34,9 @@ export const useSession = create<SessionState>()(
         }),
       setTokens: (tokens) => set({ tokens }),
       setUser: (user) => set({ user }),
-      signOut: () => {
+      signOut: (reason = 'signed-out') => {
         set({ tokens: null, user: null });
-        runSessionEndResets();
+        runSessionEndResets(reason);
         compactKv();
       },
     }),
@@ -46,6 +48,17 @@ export const useSession = create<SessionState>()(
     },
   ),
 );
+
+/**
+ * After the API confirms an account deletion (ADR-0030): the ordinary sign-out path with the 'account-deleted' reason
+ * (tokens, user, booking draft, every key ring, the query cache, the shoot location), then every
+ * key left in the store, so nothing of the account stays on this phone.
+ */
+export const eraseThisDevice = (): void =>
+  eraseDeletedAccount({
+    endSession: (reason) => useSession.getState().signOut(reason),
+    wipeStorage: wipeKv,
+  });
 
 export const useIsSignedIn = (): boolean => useSession((s) => s.tokens !== null);
 

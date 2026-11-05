@@ -1,6 +1,6 @@
 import { ApiError } from '@clickco/api-client';
 import { describe, expect, it } from 'vitest';
-import { describeRefusal, formatDistance, jobErrorMessage } from './errors';
+import { describeRefusal, formatDistance, isJobGone, jobErrorMessage } from './errors';
 
 const http = (status: number, code: string, message: string, details?: unknown) =>
   new ApiError({ kind: 'HTTP', status, code, message, details });
@@ -159,6 +159,33 @@ describe('jobErrorMessage', () => {
     );
     expect(jobErrorMessage(new Error('x'), 'CANCEL')).toBe(
       'Something went wrong. Please try again.',
+    );
+  });
+});
+
+describe('isJobGone — a job the client cancelled (ADR-0031) is released and answers 404', () => {
+  const gone = http(404, 'ASSIGNMENT_NOT_FOUND', 'Assignment not found');
+
+  it('is gone when the latest fetch said not found, even with a copy loaded earlier', () => {
+    expect(isJobGone({ status: 'error', error: gone })).toBe(true);
+  });
+
+  it('keeps the loaded job when the refresh only failed offline or on the server', () => {
+    const offline = new ApiError({ kind: 'NETWORK', status: 0, code: 'NETWORK', message: 'x' });
+    expect(isJobGone({ status: 'error', error: offline })).toBe(false);
+    expect(isJobGone({ status: 'error', error: http(500, 'INTERNAL', 'boom') })).toBe(false);
+  });
+
+  it('is not gone once a later fetch succeeds', () => {
+    expect(isJobGone({ status: 'success', error: null })).toBe(false);
+    expect(isJobGone({ status: 'pending', error: null })).toBe(false);
+  });
+
+  it('a refused on-site action is a conflict, not a missing job', () => {
+    const notActive = http(409, 'ASSIGNMENT_NOT_ACTIVE', 'This assignment is no longer active');
+    expect(isJobGone({ status: 'error', error: notActive })).toBe(false);
+    expect(jobErrorMessage(notActive, 'EN_ROUTE')).toBe(
+      'This job is no longer active on your account.',
     );
   });
 });

@@ -28,3 +28,6 @@ export const useLocation = create<LocationState>()(
     },
   ),
 );
+
+/** The chosen location is a device choice: it survives a sign-out, and goes with a deleted account. */
+export const clearShootLocation = (): void => useLocation.getState().clear();

@@ -64,3 +64,12 @@ export const kvStorage: StateStorage = {
 export function compactKv(): void {
   kv.trim();
 }
+
+/**
+ * Deleted account (ADR-0030): removes every key in the store, including any no reset knows about,
+ * then rewrites the file so superseded values do not linger in it.
+ */
+export function wipeKv(): void {
+  kv.clearAll();
+  kv.trim();
+}

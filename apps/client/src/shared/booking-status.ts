@@ -62,10 +62,12 @@ const HALTED: ReadonlySet<BookingStatus> = new Set([
 
 export const isFinished = (status: BookingStatus): boolean => FINISHED.has(status);
 export const isHalted = (status: BookingStatus): boolean => HALTED.has(status);
-/** The API allows a client cancel only before payment lands (ADR-0009; later = refund ladder, S8). */
-export const canCancel = (status: BookingStatus): boolean =>
+/**
+ * Quoted and waiting for the advance. Whether a booking can be cancelled is the API's answer
+ * (GET /bookings/:id/cancellation, ADR-0031), never a local rule.
+ */
+export const awaitingPayment = (status: BookingStatus): boolean =>
   status === 'QUOTED' || status === 'ADVANCE_PENDING';
-export const awaitingPayment = canCancel;
 
 export interface SplitBookings {
   readonly upcoming: readonly BookingSummary[];

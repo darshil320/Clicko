@@ -30,8 +30,9 @@ export interface ButtonProps {
 }
 
 /**
- * DESIGN.md §Components, white theme: primary / secondary / ghost × default / pressed / disabled
- * / loading. Presses shrink 2% and fade lightly (usePressFeedback).
+ * DESIGN.md §Components, white theme: primary / secondary / ghost / danger × default / pressed /
+ * disabled / loading. danger is only for an action that cannot be undone. Presses shrink 2% and
+ * fade lightly (usePressFeedback).
  */
 export function Button({
   label,

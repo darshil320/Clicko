@@ -1,6 +1,5 @@
 import type { BookingDetail, BookingStatus } from '@clickco/contracts';
 import {
-  BottomSheet,
   Button,
   Card,
   ListRow,
@@ -12,17 +11,18 @@ import {
   Text,
   TierBadge,
 } from '@clickco/ui';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
 import { View } from 'react-native';
-import { canCancel, isHalted, journey, statusPresentation } from '@/shared/booking-status';
+import { awaitingPayment, isHalted, journey, statusPresentation } from '@/shared/booking-status';
 import { categoryLabel } from '@/shared/catalogue';
-import { isNotFound, userMessage } from '@/shared/errors';
+import { isNotFound } from '@/shared/errors';
 import { formatDateTime, formatHours, formatShootWindow } from '@/shared/format/datetime';
 import { rupees } from '@/shared/format/money';
 import { screenState } from '@/shared/screen-state';
-import { useBooking, useCancelBooking } from '../hooks';
+import { useBooking } from '../hooks';
 import { BookingMissing } from './BookingMissing';
 import { BookingMoneySection } from './BookingMoneySection';
+import { CancelBooking } from './CancelBooking';
 import { JourneyTimeline } from './JourneyTimeline';
 
 const POLL_MS = 15_000;
@@ -80,8 +80,6 @@ interface LoadedProps {
 
 function Loaded({ detail, onPay, care }: LoadedProps) {
   const { booking, timeline, invoices } = detail;
-  const [confirmingCancel, setConfirmingCancel] = useState(false);
-  const cancel = useCancelBooking(booking.id);
   const status = statusPresentation(booking.status);
   const note = phaseNote(booking.status, rupees(booking.balancePaise));
 
@@ -109,7 +107,7 @@ function Loaded({ detail, onPay, care }: LoadedProps) {
         </Card>
       ) : null}
 
-      {canCancel(booking.status) ? (
+      {awaitingPayment(booking.status) ? (
         <Button
           label={`Pay ${rupees(booking.advancePaise)}`}
           onPress={() => onPay(booking.id)}
@@ -181,38 +179,7 @@ function Loaded({ detail, onPay, care }: LoadedProps) {
         </Section>
       ) : null}
 
-      {canCancel(booking.status) ? (
-        <View className="items-center">
-          <Button
-            label="Cancel booking"
-            variant="ghost"
-            onPress={() => setConfirmingCancel(true)}
-            testID="cancel"
-          />
-        </View>
-      ) : null}
-
-      <BottomSheet
-        visible={confirmingCancel}
-        onClose={() => setConfirmingCancel(false)}
-        title="Cancel this booking?"
-      >
-        <View className="gap-4">
-          <Text tone="secondary">
-            Nothing has been charged yet, so there is no fee to cancel now.
-          </Text>
-          {cancel.isError ? <Text tone="danger">{userMessage(cancel.error)}</Text> : null}
-          <Button
-            label="Yes, cancel booking"
-            variant="secondary"
-            loading={cancel.isPending}
-            onPress={() =>
-              cancel.mutate(undefined, { onSuccess: () => setConfirmingCancel(false) })
-            }
-          />
-          <Button label="Keep booking" variant="ghost" onPress={() => setConfirmingCancel(false)} />
-        </View>
-      </BottomSheet>
+      <CancelBooking booking={booking} />
     </>
   );
 }

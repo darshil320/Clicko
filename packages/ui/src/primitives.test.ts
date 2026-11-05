@@ -143,6 +143,19 @@ describe('button styles', () => {
     expect(buttonLabelTone('ghost', 'default')).toBe('secondary');
     expect(buttonLabelTone('primary', 'disabled')).toBe('tertiary');
   });
+
+  it('draws danger as danger text on a white surface with a danger hairline, never a red fill', () => {
+    const idle = buttonContainerClass('danger', 'default', 'default');
+    expect(idle).toContain('bg-surface-base');
+    expect(idle).toContain('border-danger');
+    expect(idle).not.toContain('bg-danger');
+    expect(buttonContainerClass('danger', 'pressed', 'default')).toContain('bg-surface-raised');
+    expect(buttonContainerClass('danger', 'disabled', 'default')).not.toContain('danger');
+    expect(buttonContainerClass('danger', 'default', 'default')).toContain('h-button');
+    expect(buttonLabelTone('danger', 'default')).toBe('danger');
+    expect(buttonLabelTone('danger', 'pressed')).toBe('danger');
+    expect(buttonLabelTone('danger', 'disabled')).toBe('tertiary');
+  });
 });
 
 describe('input height', () => {

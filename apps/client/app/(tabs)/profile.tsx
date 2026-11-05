@@ -3,5 +3,10 @@ import { ProfileView } from '@/features/auth';
 
 export default function ProfileRoute() {
   const router = useRouter();
-  return <ProfileView onGetHelp={() => router.push('/support/new')} />;
+  return (
+    <ProfileView
+      onGetHelp={() => router.push('/support/new')}
+      onDeleteAccount={() => router.push('/account/delete')}
+    />
+  );
 }

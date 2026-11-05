@@ -1,4 +1,4 @@
-import { OtpCode, PhoneE164 } from '@clickco/contracts';
+import { PhoneE164 } from '@clickco/contracts';
 import { z } from 'zod';
 
 /**
@@ -25,20 +25,5 @@ export const PhoneForm = z.object({
 });
 export type PhoneForm = z.infer<typeof PhoneForm>;
 
-export const OtpForm = z.object({
-  code: z
-    .string()
-    .trim()
-    .refine((value) => OtpCode.safeParse(value).success, 'Enter the 6-digit code'),
-});
-export type OtpForm = z.infer<typeof OtpForm>;
-
-/** Seconds left before "Resend code" unlocks, never negative. */
-export function secondsUntil(unlockAtMs: number, nowMs: number): number {
-  return Math.max(0, Math.ceil((unlockAtMs - nowMs) / 1000));
-}
-
-/** 27 → "0:27" */
-export function formatCountdown(seconds: number): string {
-  return `${Math.trunc(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-}
+// The code field and resend countdown are shared with account deletion.
+export { formatCountdown, OtpForm, secondsUntil } from '@/shared/otp';

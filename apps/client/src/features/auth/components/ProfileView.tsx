@@ -1,5 +1,6 @@
 import { Avatar, Button, Card, ListRow, OfflineBanner, Screen, Section, Text } from '@clickco/ui';
 import LifeBuoy from 'lucide-react-native/icons/life-buoy';
+import UserX from 'lucide-react-native/icons/user-x';
 import { View } from 'react-native';
 import { API_URL, IS_DEV } from '@/shared/config';
 import { isOffline } from '@/shared/errors';
@@ -10,10 +11,15 @@ import { useMe, useSignOut } from '../hooks';
 export interface ProfileViewProps {
   /** Opens the "Get help" ticket form (features/care, composed in by the route). */
   readonly onGetHelp: () => void;
+  /** Opens "Delete account" (features/account, composed in by the route). */
+  readonly onDeleteAccount: () => void;
 }
 
-/** Profile tab: who is signed in, help, and sign out. Editing details arrives with Wave 2 screens. */
-export function ProfileView({ onGetHelp }: ProfileViewProps) {
+/**
+ * Profile tab: who is signed in, help, sign out and delete account. Editing details arrives with
+ * Wave 2 screens.
+ */
+export function ProfileView({ onGetHelp, onDeleteAccount }: ProfileViewProps) {
   const user = useSession((s) => s.user);
   const me = useMe();
   const signOut = useSignOut();
@@ -67,6 +73,17 @@ export function ProfileView({ onGetHelp }: ProfileViewProps) {
         onPress={() => signOut.mutate()}
         testID="sign-out"
       />
+      <Card padding="list">
+        <ListRow
+          icon={UserX}
+          iconTone="danger"
+          title="Delete account"
+          subtitle="See what's erased and what's kept first"
+          accessory="chevron"
+          onPress={onDeleteAccount}
+          testID="profile-delete-account"
+        />
+      </Card>
     </Screen>
   );
 }

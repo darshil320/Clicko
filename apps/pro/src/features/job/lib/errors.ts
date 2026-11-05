@@ -1,6 +1,7 @@
 import { isApiError } from '@clickco/api-client';
+import type { QueryLike } from '@clickco/ui/state';
 import { z } from 'zod';
-import { humanMessage, userMessage } from '@/shared/errors';
+import { humanMessage, isNotFound, userMessage } from '@/shared/errors';
 import { formatDateTime } from '@/shared/format/datetime';
 import type { OnsiteActionKind } from '@/shared/offline/queue';
 import { formatClock } from './timing';
@@ -120,3 +121,12 @@ export function jobErrorMessage(error: unknown, action: JobAction): string {
   }
   return userMessage(error);
 }
+
+/**
+ * The server's latest answer for this job is "not on your account" (404): a client cancellation
+ * (ADR-0031) or a reassignment releases the assignment, and the API stops serving it. That
+ * outranks a copy loaded earlier, which would keep offering on-site actions for a job that is
+ * gone. A refresh that failed offline or on the server keeps the loaded job (ADR-0024 D5).
+ */
+export const isJobGone = (query: Pick<QueryLike<unknown>, 'status' | 'error'>): boolean =>
+  query.status === 'error' && isNotFound(query.error);

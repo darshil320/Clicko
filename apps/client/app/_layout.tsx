@@ -13,11 +13,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { clearAccountKeys } from '@/features/account';
 import { clearBookingDraft } from '@/features/booking';
+import { clearBookingKeys } from '@/features/bookings';
 import { clearCareKeys } from '@/features/care';
+import { clearShootLocation } from '@/features/serviceability';
 import { useNetworkWatch } from '@/shared/network/use-network-watch';
 import { createQueryClient } from '@/shared/query';
-import { onSessionEnd } from '@/shared/session/reset';
+import { onSessionEnd, sessionEndReset } from '@/shared/session/reset';
 import { useIsSignedIn } from '@/shared/session/store';
 import { syncSessionAcrossTabs } from '@/shared/session/sync';
 
@@ -66,15 +69,21 @@ function useAppFocus(): void {
   }, []);
 }
 
-/** Sign-out and session expiry leave nothing behind for the next person on the device. */
+/**
+ * Sign-out and session expiry leave nothing behind for the next person on the device; a deleted
+ * account (ADR-0030) also takes the device's shoot location.
+ */
 function useSessionEndResets(queryClient: ReturnType<typeof createQueryClient>): void {
   useEffect(
     () =>
-      onSessionEnd(() => {
-        clearBookingDraft();
-        clearCareKeys();
-        queryClient.clear();
-      }),
+      onSessionEnd(
+        sessionEndReset({
+          bookingDraft: clearBookingDraft,
+          keyRings: [clearCareKeys, clearBookingKeys, clearAccountKeys],
+          queryCache: () => queryClient.clear(),
+          shootLocation: clearShootLocation,
+        }),
+      ),
     [queryClient],
   );
 }
@@ -109,6 +118,7 @@ export default function RootLayout() {
                 />
                 <Stack.Screen name="bookings/[id]" options={{ title: 'Booking' }} />
                 <Stack.Screen name="support/new" options={{ title: 'Get help' }} />
+                <Stack.Screen name="account/delete" options={{ title: 'Delete account' }} />
               </Stack.Protected>
               <Stack.Protected guard={!signedIn}>
                 <Stack.Screen name="sign-in" options={{ headerShown: false }} />
