@@ -59,7 +59,10 @@ export class ClientCareController {
     @Body(new ZodValidationPipe(ClientTicketBody)) body: ClientTicketBody,
   ) {
     const user = await this.users.findById(s.id);
-    if (!user) throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'Not allowed' });
+    // A deleted account has no phone (ADR-0030); UserGuard has already refused it.
+    if (!user?.phone) {
+      throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'Not allowed' });
+    }
     const ticket = await this.tickets.raiseForClient(
       {
         userId: user.id,

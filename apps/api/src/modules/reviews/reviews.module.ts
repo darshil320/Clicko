@@ -4,6 +4,7 @@ import { DispatchModule } from '../dispatch/dispatch.module';
 import { SafetyReadersModule } from '../safety/safety-readers.module';
 import { ClientReviewsController } from './client-reviews.controller';
 import { ReviewsRepository } from './repositories/reviews.repository';
+import { ReviewAccountErasure } from './review-erasure';
 import { BookingReviewsService } from './reviews.service';
 
 /**
@@ -16,7 +17,7 @@ import { BookingReviewsService } from './reviews.service';
 @Module({
   imports: [BookingsModule, DispatchModule, SafetyReadersModule],
   controllers: [ClientReviewsController],
-  providers: [ReviewsRepository, BookingReviewsService],
-  exports: [BookingReviewsService],
+  providers: [ReviewsRepository, BookingReviewsService, ReviewAccountErasure],
+  exports: [BookingReviewsService, ReviewAccountErasure],
 })
 export class ReviewsModule {}

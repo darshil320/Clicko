@@ -54,6 +54,8 @@ export interface CreateQuotedInput {
   /** The engine's quote, priced server-side for this user moments ago. */
   readonly quote: Quote;
   readonly now: Date;
+  /** The account phone's promo key (ADR-0030); null when unknown. */
+  readonly clientPhoneKey?: string | null;
 }
 
 export interface TransitionInput {
@@ -86,6 +88,19 @@ export interface PromoUsage {
   readonly userBookingCount: number;
   readonly userRedemptions: number;
   readonly totalRedemptions: number;
+}
+
+/**
+ * A client cancellation as its status event recorded it (the evidence: booking_status_events is
+ * append-only and written in the cancellation's own transaction). `metadata` is what the
+ * cancellations module stored (band, paise, the released assignment).
+ */
+export interface RecordedCancellation {
+  /** The status it was cancelled from (EN_ROUTE: the photographer had set off). */
+  readonly fromStatus: BookingStatus | null;
+  readonly actorKind: ActorKind;
+  readonly occurredAt: Date;
+  readonly metadata: Readonly<Record<string, unknown>>;
 }
 
 export interface TimelineEntry {

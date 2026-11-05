@@ -30,6 +30,7 @@ import {
   type OfferBookingSummary,
   type OnsiteBookingFacts,
   type PromoUsage,
+  type RecordedCancellation,
   type SnapshotTotals,
   SYSTEM_ACTOR,
   type TimelineEntry,
@@ -76,6 +77,7 @@ function toNewBooking(input: CreateQuotedInput, categoryId: string): NewBooking 
     // Invariant 22: opt-in only, recorded with its timestamp.
     modelReleaseConsent: r.modelReleaseConsent,
     modelReleaseConsentAt: r.modelReleaseConsent ? now : null,
+    clientPhoneKey: input.clientPhoneKey ?? null,
     createdAt: now,
   };
 }
@@ -186,6 +188,11 @@ export class BookingsService {
     return this.reads.timeline(this.sql, bookingId);
   }
 
+  /** The client cancellation as recorded on its status event (payouts' evidence), or null. */
+  clientCancellation(bookingId: string): Promise<RecordedCancellation | null> {
+    return this.reads.clientCancellation(this.sql, bookingId);
+  }
+
   // ── Staff panel reads (ADR-0025 D5) ────────────────────────────────────────
 
   /** The booking board: filters, city scope and keyset cursor, all in SQL. */
@@ -217,8 +224,14 @@ export class BookingsService {
     return this.admin.idsWhere(this.sql, scope, statuses);
   }
 
-  promoUsage(userId: string, promoCode: string, now: Date): Promise<PromoUsage> {
-    return this.reads.promoUsage(this.sql, userId, promoCode, now);
+  /** `phoneKey`: count an earlier, deleted account of the same number too (ADR-0030). */
+  promoUsage(
+    userId: string,
+    promoCode: string,
+    now: Date,
+    phoneKey: string | null = null,
+  ): Promise<PromoUsage> {
+    return this.reads.promoUsage(this.sql, userId, promoCode, now, phoneKey);
   }
 
   /**
@@ -230,9 +243,10 @@ export class BookingsService {
     userId: string,
     promoCode: string,
     now: Date,
+    phoneKey: string | null = null,
   ): Promise<PromoUsage> {
     await this.reads.lockPromoCode(tx, promoCode);
-    return this.reads.promoUsage(tx, userId, promoCode, now);
+    return this.reads.promoUsage(tx, userId, promoCode, now, phoneKey);
   }
 
   /** Dispatch inputs for one booking, in the caller's transaction. Throws 404 when absent. */

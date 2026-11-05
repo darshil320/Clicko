@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { IsoDateTime, PhoneE164, Uuid } from './common.js';
 
-/** LOGIN = client app; PRO_LOGIN = photographer app (ADR-0010), issued only via /pro/auth. */
-export const OtpPurpose = z.enum(['LOGIN', 'PRO_LOGIN']);
+/**
+ * LOGIN = client app; PRO_LOGIN = photographer app (ADR-0010), issued only via /pro/auth;
+ * ACCOUNT_DELETE = a signed-in client re-confirming deletion (ADR-0030), only via /me/deletion.
+ */
+export const OtpPurpose = z.enum(['LOGIN', 'PRO_LOGIN', 'ACCOUNT_DELETE']);
 export type OtpPurpose = z.infer<typeof OtpPurpose>;
 
 export const OtpCode = z.string().regex(/^\d{6}$/, 'must be 6 digits');

@@ -165,6 +165,25 @@ describe('suggestOutcome — what a review item most likely needs (ADR-0026 D2)'
     ).toMatchObject({ outcome: 'NO_ACTION' });
   });
 
+  it('partial data loss: the rest of the share once the balance is paid (ADR-0030 D2)', () => {
+    const item = facts({
+      reason: 'PARTIAL_DATA_LOSS_REMAINDER',
+      details: { amount_paise: 338_165, affected_proportion_bps: 7_000 },
+    });
+    expect(suggestOutcome(item)).toMatchObject({
+      outcome: 'REFUND_REQUESTED',
+      amountPaise: 338_165n,
+      refundReason: 'DATA_LOSS',
+    });
+    // Before the balance is paid nothing more can go back: wait, and say so.
+    const early = suggestOutcome({ ...item, refundablePaise: 0n });
+    expect(early).toMatchObject({ outcome: 'NO_ACTION', amountPaise: 0n });
+    expect(early.why).toMatch(/balance/);
+    expect(reviewTitle('PARTIAL_DATA_LOSS_REMAINDER')).toBe(
+      'Part of the shoot lost: rest of refund',
+    );
+  });
+
   it('suggests no action when everything was already refunded', () => {
     expect(
       suggestOutcome(

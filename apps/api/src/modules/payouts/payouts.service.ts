@@ -15,8 +15,11 @@ import { BatchesRepository } from './repositories/batches.repository';
 import { PayoutsRepository } from './repositories/payouts.repository';
 import { nextIstWeekStart } from './rules/ist-calendar';
 import {
+  cancellationPayout,
   DATA_LOSS_CAP,
   dataLossWithheld,
+  type FixedShareBasis,
+  type JobPayout,
   OUTCOME_PAYOUT_RULES,
   outcomeGross,
   type PayoutBasis,
@@ -31,7 +34,9 @@ export type AccrualOutcome =
   | 'EXISTS'
   | 'NOT_DELIVERED'
   | 'WRONG_OUTCOME'
-  | 'NO_COMPLETED_ASSIGNMENT';
+  | 'NO_COMPLETED_ASSIGNMENT'
+  | 'NO_RELEASED_ASSIGNMENT'
+  | 'NOTHING_OWED';
 
 /**
  * The status a staff-confirmed outcome leaves the booking in (both terminal, DOMAIN §2). A client
@@ -46,9 +51,28 @@ const OUTCOME_STATUS: Readonly<Record<Exclude<UndeliveredBasis, 'CLIENT_ABSENT'>
 
 interface Accrual {
   readonly bookingId: string;
-  readonly basis: PayoutBasis;
+  readonly basis: FixedShareBasis;
   /** Delivery, the confirmed outcome, or the absent client's check-out: the T+3 anchor. */
   readonly outcomeAt: Date;
+}
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
+/** A recorded paise figure: a non-negative safe integer, or null. */
+const paiseOf = (v: unknown): bigint | null =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? BigInt(v) : null;
+
+/** What gets written: a payout row, and the parts that explain its gross (audit). */
+interface PayoutToWrite {
+  readonly bookingId: string;
+  readonly photographerId: string;
+  readonly basis: PayoutBasis;
+  readonly shareBps: number;
+  readonly grossPaise: bigint;
+  readonly job: JobPayout;
+  readonly includesExtras: boolean;
+  readonly outcomeAt: Date;
+  /** Extra audit fields on the payout event. */
+  readonly details?: Readonly<Record<string, string | number>>;
 }
 
 /**
@@ -112,6 +136,86 @@ export class PayoutsService {
     return this.accrue({ bookingId, basis: 'CLIENT_ABSENT', outcomeAt: facts.slaT0 });
   }
 
+  /**
+   * A client cancelled after this photographer accepted (CANCELLED_CLIENT from ASSIGNED / EN_ROUTE).
+   * They are owed their share of what the client was charged (rules/outcome-payouts,
+   * CLIENT_CANCELLATION_PAYOUT — owner-overridable); nothing kept, nothing owed. Every figure comes
+   * from the cancellation as its status event recorded it — never from the outbox payload — and
+   * what was kept can never exceed the advance (security review L2). The assignment must be the
+   * one the cancellation released. Idempotent: one payout per booking and photographer.
+   */
+  async accrueForClientCancellation(bookingId: string): Promise<AccrualOutcome> {
+    const [facts, recorded] = await Promise.all([
+      this.bookings.deliveryFacts(this.sql, bookingId),
+      this.bookings.clientCancellation(bookingId),
+    ]);
+    const m = recorded?.metadata ?? {};
+    if (facts.status !== 'CANCELLED_CLIENT' || recorded?.actorKind !== 'USER') {
+      await this.notAccrued(bookingId, 'CLIENT_CANCELLED', `the booking is ${facts.status}`);
+      return 'WRONG_OUTCOME';
+    }
+    const photographerId = str(m.photographer_id);
+    const assignmentId = str(m.assignment_id);
+    const keptPaise = paiseOf(m.kept_paise);
+    if (m.reason !== 'CLIENT_CANCELLED' || !photographerId || !assignmentId) return 'NOTHING_OWED';
+    if (keptPaise === null || keptPaise > facts.advancePaise) {
+      await this.notAccrued(bookingId, 'CLIENT_CANCELLED', 'the recorded amount kept is invalid');
+      return 'WRONG_OUTCOME';
+    }
+    const latest = (await this.assignmentReads.latestForBookings([bookingId])).get(bookingId);
+    if (
+      latest?.assignmentId !== assignmentId ||
+      latest.photographerId !== photographerId ||
+      latest.status !== 'RELEASED'
+    ) {
+      await this.notAccrued(bookingId, 'CLIENT_CANCELLED', 'not the released assignment');
+      return 'NO_RELEASED_ASSIGNMENT';
+    }
+    const job = await this.jobPayout(bookingId, photographerId, false);
+    const { grossPaise, shareBps } = cancellationPayout(job, {
+      keptPaise,
+      bookingTotalPaise: facts.totalPaise,
+      enRoute: recorded.fromStatus === 'EN_ROUTE',
+    });
+    if (grossPaise <= 0n) return 'NOTHING_OWED';
+    return this.write({
+      bookingId,
+      photographerId,
+      basis: 'CLIENT_CANCELLED',
+      shareBps,
+      grossPaise,
+      job,
+      includesExtras: false,
+      outcomeAt: recorded.occurredAt,
+      details: {
+        kept_paise: fromPaiseBigint(keptPaise),
+        booking_total_paise: fromPaiseBigint(facts.totalPaise),
+        cancelled_from: recorded.fromStatus ?? '',
+      },
+    });
+  }
+
+  /** The full payout's parts: the accepted offer (or the quote's), extras and travel. */
+  private async jobPayout(
+    bookingId: string,
+    photographerId: string,
+    withExtras: boolean,
+  ): Promise<JobPayout> {
+    const [offered, extras, [summary], dispatch] = await Promise.all([
+      this.assignments.acceptedPayouts(photographerId, [bookingId]),
+      withExtras ? this.bookings.extraPayouts([bookingId]) : Promise.resolve(new Map()),
+      this.bookings.offerSummaries([bookingId]),
+      this.bookings.dispatchFacts(this.sql, bookingId),
+    ]);
+    const base = offered.get(bookingId) ?? summary?.expectedPayoutPaise;
+    if (base === undefined) throw new Error(`booking ${bookingId} has no expected payout`);
+    return {
+      basePaise: base,
+      extrasPaise: extras.get(bookingId) ?? 0n,
+      travelPaise: dispatch.payout.travelAmountPaise,
+    };
+  }
+
   private async accrue(a: Accrual): Promise<AccrualOutcome> {
     const { bookingId } = a;
     const assignment = (await this.assignmentReads.latestForBookings([bookingId])).get(bookingId);
@@ -119,34 +223,36 @@ export class PayoutsService {
       await this.notAccrued(bookingId, a.basis, 'no completed assignment');
       return 'NO_COMPLETED_ASSIGNMENT';
     }
-    const photographerId = assignment.photographerId;
-    const [offered, extras, [summary], dispatch] = await Promise.all([
-      this.assignments.acceptedPayouts(photographerId, [bookingId]),
-      this.bookings.extraPayouts([bookingId]),
-      this.bookings.offerSummaries([bookingId]),
-      this.bookings.dispatchFacts(this.sql, bookingId),
-    ]);
-    const base = offered.get(bookingId) ?? summary?.expectedPayoutPaise;
-    if (base === undefined) throw new Error(`booking ${bookingId} has no expected payout`);
-    const job = {
-      basePaise: base,
-      extrasPaise: extras.get(bookingId) ?? 0n,
-      travelPaise: dispatch.payout.travelAmountPaise,
-    };
+    const job = await this.jobPayout(bookingId, assignment.photographerId, true);
     const { grossPaise, shareBps } = outcomeGross(a.basis, job);
-    const eligibleAt = new Date(a.outcomeAt.getTime() + PAYOUT_CONFIG.daysAfterDelivery * DAY_MS);
+    return this.write({
+      bookingId,
+      photographerId: assignment.photographerId,
+      basis: a.basis,
+      shareBps,
+      grossPaise,
+      job,
+      includesExtras: OUTCOME_PAYOUT_RULES[a.basis].includesExtras,
+      outcomeAt: a.outcomeAt,
+    });
+  }
+
+  /** The payout row and its event, due 3 days after the outcome (v0.2 G-23). */
+  private async write(p: PayoutToWrite): Promise<AccrualOutcome> {
+    const { bookingId, photographerId, job } = p;
+    const eligibleAt = new Date(p.outcomeAt.getTime() + PAYOUT_CONFIG.daysAfterDelivery * DAY_MS);
     return this.sql.begin(async (tx) => {
       const withheldReason =
-        a.basis === 'DATA_LOSS'
+        p.basis === 'DATA_LOSS'
           ? await this.dataLossCapReason(tx, photographerId, bookingId, eligibleAt)
           : null;
       const row = await this.payouts.insert(tx, {
         bookingId,
         photographerId,
-        grossPaise,
+        grossPaise: p.grossPaise,
         eligibleAt,
-        basis: a.basis,
-        basisBps: shareBps,
+        basis: p.basis,
+        basisBps: p.shareBps,
         withheldReason,
       });
       if (!row.created) return 'EXISTS';
@@ -154,17 +260,18 @@ export class PayoutsService {
         payout_id: row.id,
         booking_id: bookingId,
         photographer_id: photographerId,
-        basis: a.basis,
-        basis_bps: shareBps,
+        basis: p.basis,
+        basis_bps: p.shareBps,
         // How the gross was reached (audit): the full payout's parts and what the basis counts.
         base_paise: fromPaiseBigint(job.basePaise),
         extras_paise: fromPaiseBigint(job.extrasPaise),
         travel_paise: fromPaiseBigint(job.travelPaise),
-        includes_extras: OUTCOME_PAYOUT_RULES[a.basis].includesExtras,
-        gross_paise: fromPaiseBigint(grossPaise),
+        includes_extras: p.includesExtras,
+        gross_paise: fromPaiseBigint(p.grossPaise),
         eligible_at: eligibleAt.toISOString(),
+        ...(p.details ?? {}),
       };
-      const event = { aggregateKind: 'payout', aggregateId: row.id, occurredAt: a.outcomeAt };
+      const event = { aggregateKind: 'payout', aggregateId: row.id, occurredAt: p.outcomeAt };
       if (withheldReason === null) {
         await appendDomainEvent(tx, { ...event, eventType: 'payout.created', payload });
         return 'CREATED';

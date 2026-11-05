@@ -184,6 +184,64 @@ export class ReviewsService {
     return charges.filter((c) => c.kind === 'WAITING').reduce((sum, c) => sum + c.totalPaise, 0n);
   }
 
+  /**
+   * ADR-0030: closes the booking's open review items of these reasons with no action, because
+   * something larger replaced them (a complete data loss refunds everything, so a partial loss's
+   * remainder is no longer owed). In the caller's transaction, which holds the booking lock; an
+   * item someone settled meanwhile is skipped. Returns the closed items' event ids.
+   */
+  async closeOpenIn(
+    tx: Tx,
+    bookingId: string,
+    reasons: readonly string[],
+    staffId: string,
+    note: string,
+  ): Promise<string[]> {
+    const open = await this.reader.reviewPage({
+      bookings: this.sql`SELECT ${bookingId}::uuid`,
+      status: 'OPEN',
+      settled: this.resolutions.settledEventIds(this.sql),
+      limit: 50,
+    });
+    const now = this.clock();
+    const closed: string[] = [];
+    for (const review of open.filter((r) => reasons.includes(r.reason ?? ''))) {
+      const resolution = await this.resolutions.insert(tx, {
+        reviewEventId: review.eventId,
+        reviewType: review.type,
+        reason: review.reason ?? review.type,
+        bookingId,
+        outcome: 'NO_ACTION',
+        amountPaise: null,
+        creditId: null,
+        breachId: null,
+        note,
+        resolvedBy: staffId,
+        resolvedAt: now,
+      });
+      if (!resolution) continue;
+      await appendDomainEvent(tx, {
+        eventType: 'review.settled',
+        aggregateKind: 'booking',
+        aggregateId: bookingId,
+        occurredAt: now,
+        payload: {
+          review_event_id: review.eventId,
+          booking_id: bookingId,
+          reason: review.reason,
+          outcome: 'NO_ACTION',
+          amount_paise: null,
+          refund_ids: [],
+          credit_id: null,
+          breach_id: null,
+          staff_id: staffId,
+        },
+      });
+      closed.push(review.eventId);
+    }
+    return closed;
+  }
+
   /** Settles a review item exactly once, in one transaction with every money effect. */
   async settle(
     eventId: string,

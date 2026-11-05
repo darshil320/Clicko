@@ -37,6 +37,9 @@ const LIVE_CHANNELS = {
 const OTP_SMS = {
   MSG91_OTP_FLOW_ID: '65f0a1b2c3d4e5f6a7b8c9d0',
   MSG91_OTP_DLT_TEMPLATE_ID: '1107172000000000042',
+  // ADR-0030: the account-deletion code's own template.
+  MSG91_DELETE_OTP_FLOW_ID: '65f0a1b2c3d4e5f6a7b8c9d1',
+  MSG91_DELETE_OTP_DLT_TEMPLATE_ID: '1107172000000000043',
 };
 
 const valid = {
@@ -146,7 +149,13 @@ describe('loadEnv', () => {
 
     describe('OTP SMS on MSG91 (SMS_ADAPTER=dlt)', () => {
       const MSG91_SHARED = ['MSG91_AUTH_KEY', 'MSG91_SENDER_ID', 'MSG91_DLT_ENTITY_ID'] as const;
-      const OTP_NEEDS = [...MSG91_SHARED, 'MSG91_OTP_FLOW_ID', 'MSG91_OTP_DLT_TEMPLATE_ID'];
+      const OTP_NEEDS = [
+        ...MSG91_SHARED,
+        'MSG91_OTP_FLOW_ID',
+        'MSG91_OTP_DLT_TEMPLATE_ID',
+        'MSG91_DELETE_OTP_FLOW_ID',
+        'MSG91_DELETE_OTP_DLT_TEMPLATE_ID',
+      ];
       /** The OTP SMS alone: lifecycle channels on console, only the MSG91 account set. */
       const otpOnly = {
         ...valid,
@@ -190,6 +199,9 @@ describe('loadEnv', () => {
         expect(badFlow?.message).not.toMatch(/not a flow id/);
         expect(() => loadEnv({ ...otpOnly, MSG91_OTP_DLT_TEMPLATE_ID: '12ab' })).toThrow(
           /MSG91_OTP_DLT_TEMPLATE_ID/,
+        );
+        expect(() => loadEnv({ ...otpOnly, MSG91_DELETE_OTP_FLOW_ID: 'no!' })).toThrow(
+          /MSG91_DELETE_OTP_FLOW_ID/,
         );
       });
 

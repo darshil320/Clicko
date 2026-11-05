@@ -15,6 +15,8 @@ export const QUEUE = {
   CHECKOUT: 'checkout',
   /** Lifecycle messages: one job per recipient of a domain event (ADR-0027 D2). */
   NOTIFICATIONS: 'notifications',
+  /** Refund housekeeping (security review M2: refunds left unsent by a crash). */
+  REFUNDS: 'refunds',
 } as const;
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
@@ -57,6 +59,11 @@ export const JOB = {
    * message for one domain event (WhatsApp → SMS fallback, push alongside). ADR-0027 D2.
    */
   NOTIFICATION_SEND: 'notifications.send',
+  /**
+   * Repeatable (2 min): refunds left PROCESSING with no gateway id are looked up at the gateway by
+   * receipt and re-sent only after the safe wait — never blindly (security review M2).
+   */
+  REFUND_SEND_SWEEP: 'refunds.send-sweep',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -77,6 +84,7 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.SLA_SWEEP]: QUEUE.SLA,
   [JOB.CHECKOUT_STALE_SWEEP]: QUEUE.CHECKOUT,
   [JOB.NOTIFICATION_SEND]: QUEUE.NOTIFICATIONS,
+  [JOB.REFUND_SEND_SWEEP]: QUEUE.REFUNDS,
 };
 
 export interface JobOptions {
@@ -112,6 +120,7 @@ export const REPEATABLE_JOBS: readonly RepeatableJob[] = [
   { job: JOB.MEDIA_UPLOAD_REAPER, everyMs: 60 * 60_000 },
   { job: JOB.SLA_SWEEP, everyMs: 60_000 },
   { job: JOB.CHECKOUT_STALE_SWEEP, everyMs: 5 * 60_000 },
+  { job: JOB.REFUND_SEND_SWEEP, everyMs: 2 * 60_000 },
 ];
 
 /** The outbox is drained by one job at a time; dispatch timers may overlap (they lock rows). */
@@ -126,4 +135,6 @@ export const WORKER_CONCURRENCY: Readonly<Record<QueueName, number>> = {
   [QUEUE.SLA]: 4,
   [QUEUE.CHECKOUT]: 1,
   [QUEUE.NOTIFICATIONS]: 4,
+  // One sweep at a time; each refund also holds its own lease while at the gateway.
+  [QUEUE.REFUNDS]: 1,
 };

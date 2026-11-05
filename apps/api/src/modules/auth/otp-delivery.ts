@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { OtpPurpose } from '@clickco/contracts';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { CLOCK, type Clock } from '../../common/clock';
@@ -15,6 +16,8 @@ export interface OtpDeliveryRequest {
   /** false = a decoy: queued exactly like a real send so timing and Redis contents match. */
   readonly deliver: boolean;
   readonly expiresAt: Date;
+  /** Picks the SMS template (ADR-0030); a sign-in when absent. Sealed with the rest. */
+  readonly purpose?: OtpPurpose;
 }
 
 /** What OtpService needs: queue the SMS, never wait for the gateway. */
@@ -28,6 +31,8 @@ const Opened = z.object({
   code: z.string().regex(/^\d{6}$/),
   deliver: z.boolean(),
   expiresAt: z.iso.datetime(),
+  // Jobs queued before the purpose existed carry none: they are sign-in codes.
+  purpose: OtpPurpose.default('LOGIN'),
 });
 
 /**
@@ -56,6 +61,7 @@ export class OtpDelivery implements OtpDeliveryQueue {
         code: r.code,
         deliver: r.deliver,
         expiresAt: r.expiresAt.toISOString(),
+        purpose: r.purpose ?? 'LOGIN',
       }),
       r.challengeId,
     );
@@ -72,7 +78,7 @@ export class OtpDelivery implements OtpDeliveryQueue {
       this.logger.warn(`OTP ${job.challengeId} expired before it could be sent`);
       return;
     }
-    await this.sms.sendOtp(opened.phone, opened.code);
+    await this.sms.sendOtp(opened.phone, opened.code, opened.purpose);
   }
 
   private seal(plain: string, challengeId: string): string {

@@ -1,6 +1,5 @@
 import type {
   BookingDetail,
-  BookingStatus,
   BookingSummary,
   CreateBookingRequest,
   CreateBookingResponse,
@@ -16,14 +15,9 @@ import { PaymentsService } from '../payments/payments.service';
 import { PricingService } from '../pricing/pricing.service';
 import { toPriceQuote } from '../pricing/quote-response';
 import { ServiceabilityService } from '../serviceability/serviceability.service';
+import { UsersService } from '../users/users.service';
 import { bookingNotFound, conflict } from './http-errors';
 import { toBookingDetail, toBookingSummary } from './views';
-
-/**
- * Nothing has been captured in these states, so cancelling needs no refund (refund ladder: S8).
- * An order left open at the gateway may still be paid; that capture is flagged for refund.
- */
-const CANCELLABLE_BEFORE_PAYMENT: readonly BookingStatus[] = ['QUOTED', 'ADVANCE_PENDING'];
 
 const sameUsage = (a: PromoUsage, b: PromoUsage): boolean =>
   a.userBookingCount === b.userBookingCount &&
@@ -51,6 +45,7 @@ export class CheckoutService {
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(OnsiteViewsService) private readonly onsite: OnsiteViewsService,
+    @Inject(UsersService) private readonly users: UsersService,
   ) {}
 
   /**
@@ -63,11 +58,13 @@ export class CheckoutService {
     const { travelDistanceKm: _untrusted, ...pricingReq } = req;
     const now = this.clock();
     const code = req.promoCode;
-    const usage = code ? await this.bookings.promoUsage(userId, code, now) : null;
+    // ADR-0030: promos count by the number too, so a deleted-and-recreated account is not new.
+    const phoneKey = await this.users.promoKey(userId);
+    const usage = code ? await this.bookings.promoUsage(userId, code, now, phoneKey) : null;
     const { quote, venue } = await this.pricing.priceForBooking(pricingReq, now, usage);
     return this.sql.begin(async (tx) => {
       if (code && usage && quote.promoCode) {
-        const locked = await this.bookings.promoUsageLocked(tx, userId, code, now);
+        const locked = await this.bookings.promoUsageLocked(tx, userId, code, now, phoneKey);
         if (!sameUsage(locked, usage)) {
           throw conflict('PROMO_USAGE_CHANGED', 'That code was just used — please try again');
         }
@@ -78,6 +75,7 @@ export class CheckoutService {
         cityId: venue.cityId,
         quote,
         now,
+        clientPhoneKey: phoneKey,
       });
       // Built inside the tx: a mapping failure rolls the booking back, so a retry is safe.
       return { booking: toBookingSummary(view, venue.cityName), quote: toPriceQuote(quote) };
@@ -100,31 +98,6 @@ export class CheckoutService {
       this.onsite.clientExtras(bookingId),
     ]);
     return toBookingDetail(view, cityName, timeline, invoices, extras);
-  }
-
-  /** QUOTED / ADVANCE_PENDING → CANCELLED_CLIENT. Later states need the refund ladder (S8). */
-  async cancel(userId: string, bookingId: string): Promise<BookingSummary> {
-    const now = this.clock();
-    return this.sql.begin(async (tx) => {
-      const booking = await this.bookings.lock(tx, bookingId);
-      if (booking.userId !== userId) throw bookingNotFound();
-      if (!CANCELLABLE_BEFORE_PAYMENT.includes(booking.status)) {
-        throw conflict(
-          'CANCEL_NOT_AVAILABLE',
-          `A ${booking.status} booking cannot be cancelled here yet — contact support`,
-        );
-      }
-      await this.bookings.transition(tx, {
-        bookingId,
-        to: 'CANCELLED_CLIENT',
-        actor: { kind: 'USER', id: userId },
-        occurredAt: now,
-        reason: 'Cancelled by the client before payment',
-        cancellationReason: 'CLIENT_CANCELLED_BEFORE_PAYMENT',
-      });
-      const view = await this.bookings.view(tx, bookingId);
-      return toBookingSummary(view, await this.cityName(view));
-    });
   }
 
   private async cityName(view: BookingView): Promise<string> {

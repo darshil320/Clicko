@@ -1,7 +1,8 @@
 /** doc 05 §3 steps 5–8: category uplift, emergency band, festival surge, night and weekend. */
 import type { EmergencyBand, PlanTier } from '@clickco/contracts';
 import { HOUR_MS, NEUTRAL_BPS } from './constants';
-import type { CategoryUpliftRule, FestivalRule, NightRule, WeekendRule } from './types';
+import { toIst } from './ist-time';
+import type { CategoryUpliftRule, FestivalRule, NightRule, Ruleset, WeekendRule } from './types';
 
 /** Upper bounds are exclusive: exactly 3.0 h of lead time is HOURS_3_8, not HOURS_UNDER_3. */
 const BAND_UPPER_BOUNDS: ReadonlyArray<readonly [number, EmergencyBand]> = [
@@ -57,6 +58,19 @@ export function resolveSurge(
     label: top?.label ?? null,
     isPeakSeason: active.some((f) => f.isPeakSeason),
   };
+}
+
+/**
+ * T&C §3.2 Peak Season for a shoot, as its quote computed it: the IST shoot day on the ruleset's
+ * festival calendar for the city. On the booking's own ruleset (published rulesets never change),
+ * this is the quote's `isPeakSeason` (doc 05 §5), which the cancellation ladder keys off.
+ */
+export function peakSeasonOn(
+  ruleset: Pick<Ruleset, 'festivals'>,
+  cityId: string,
+  scheduledStart: Date,
+): boolean {
+  return resolveSurge(ruleset.festivals, toIst(scheduledStart).isoDate, cityId).isPeakSeason;
 }
 
 /** Judged on the start time only. A window with start > end wraps midnight. */

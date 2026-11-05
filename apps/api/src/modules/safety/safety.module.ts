@@ -7,6 +7,7 @@ import { PhotographersModule } from '../photographers/photographers.module';
 import { ReviewsModule } from '../reviews/reviews.module';
 import { BlocksService } from './blocks.service';
 import { ClientBlocksController } from './client-blocks.controller';
+import { ClientSafetyErasure } from './client-erasure';
 import { ClientReportsController } from './client-reports.controller';
 import { ModerationService } from './moderation.service';
 import { ProReportsController } from './pro-reports.controller';
@@ -33,7 +34,8 @@ import { ReportsRepository } from './repositories/reports.repository';
     ReportsService,
     BlocksService,
     ModerationService,
+    ClientSafetyErasure,
   ],
-  exports: [ReportsService, ModerationService],
+  exports: [ReportsService, ModerationService, ClientSafetyErasure],
 })
 export class SafetyModule {}

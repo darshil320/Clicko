@@ -38,6 +38,8 @@ describe('payouts desk labels', () => {
     expect(BASIS.DATA_LOSS).toBe('Files lost');
     expect(BASIS.ACCESS_DENIED).toBe('Access denied');
     expect(BASIS.CLIENT_ABSENT).toBe("Client didn't attend");
+    // A client's late cancellation: the photographer's share of what was kept (addendum 0019).
+    expect(BASIS.CLIENT_CANCELLED).toBe('Client cancelled late');
     expect(BASIS.DELIVERED).toBe('Delivered');
     expect(releaseConsequence(520_000, 'Asha Patel')).toBe(
       '₹5,200 will be paid to Asha Patel in the next batch, with TDS and any deductions worked out there as usual.',

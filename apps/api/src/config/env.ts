@@ -198,6 +198,10 @@ export const EnvSchema = z
     // template id. The flow's one variable is ##otp##.
     MSG91_OTP_FLOW_ID: unsetIfEmpty(z.string().regex(MSG91_FLOW_ID).optional()),
     MSG91_OTP_DLT_TEMPLATE_ID: unsetIfEmpty(z.string().regex(DLT_TEMPLATE_ID).optional()),
+    // ADR-0030: the account-deletion code has its own DLT template (it must not read as a sign-in
+    // code), on the same account. Same shape: one variable, ##otp##.
+    MSG91_DELETE_OTP_FLOW_ID: unsetIfEmpty(z.string().regex(MSG91_FLOW_ID).optional()),
+    MSG91_DELETE_OTP_DLT_TEMPLATE_ID: unsetIfEmpty(z.string().regex(DLT_TEMPLATE_ID).optional()),
     PUSH_ADAPTER: unsetIfEmpty(z.enum(['console', 'expo']).default('console')),
     // Expo push security: optional unless "enhanced push security" is on for the project.
     EXPO_ACCESS_TOKEN: unsetIfEmpty(z.string().min(20).optional()),
@@ -434,6 +438,8 @@ export const EnvSchema = z
       MSG91_DLT_ENTITY_ID: e.MSG91_DLT_ENTITY_ID,
       MSG91_OTP_FLOW_ID: e.MSG91_OTP_FLOW_ID,
       MSG91_OTP_DLT_TEMPLATE_ID: e.MSG91_OTP_DLT_TEMPLATE_ID,
+      MSG91_DELETE_OTP_FLOW_ID: e.MSG91_DELETE_OTP_FLOW_ID,
+      MSG91_DELETE_OTP_DLT_TEMPLATE_ID: e.MSG91_DELETE_OTP_DLT_TEMPLATE_ID,
     };
     for (const [name, value] of Object.entries(needed)) {
       if (value) continue;
@@ -554,6 +560,8 @@ const WORKER_NO_CHANNELS = {
   MSG91_TEMPLATES: '{}',
   MSG91_OTP_FLOW_ID: 'MediaWorkerSendsNoOtp',
   MSG91_OTP_DLT_TEMPLATE_ID: '1000000000000000000',
+  MSG91_DELETE_OTP_FLOW_ID: 'MediaWorkerSendsNoOtp',
+  MSG91_DELETE_OTP_DLT_TEMPLATE_ID: '1000000000000000000',
   PUSH_ADAPTER: 'expo',
   CALLS_ADAPTER: 'exotel',
   EXOTEL_ACCOUNT_SID: 'media-worker-has-no-calls',

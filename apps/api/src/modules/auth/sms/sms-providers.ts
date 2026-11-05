@@ -16,8 +16,18 @@ export function otpSmsAdapter(env: Env, fetch: FetchLike): SmsPort {
   if (env.SMS_ADAPTER === 'console') return new ConsoleSmsAdapter();
   return new Msg91OtpSmsAdapter(
     {
-      flowId: required(env.MSG91_OTP_FLOW_ID, 'MSG91_OTP_FLOW_ID'),
-      dltTemplateId: required(env.MSG91_OTP_DLT_TEMPLATE_ID, 'MSG91_OTP_DLT_TEMPLATE_ID'),
+      signIn: {
+        flowId: required(env.MSG91_OTP_FLOW_ID, 'MSG91_OTP_FLOW_ID'),
+        dltTemplateId: required(env.MSG91_OTP_DLT_TEMPLATE_ID, 'MSG91_OTP_DLT_TEMPLATE_ID'),
+      },
+      // ADR-0030: the account-deletion code on its own DLT template.
+      accountDelete: {
+        flowId: required(env.MSG91_DELETE_OTP_FLOW_ID, 'MSG91_DELETE_OTP_FLOW_ID'),
+        dltTemplateId: required(
+          env.MSG91_DELETE_OTP_DLT_TEMPLATE_ID,
+          'MSG91_DELETE_OTP_DLT_TEMPLATE_ID',
+        ),
+      },
     },
     new Msg91FlowClient(
       {

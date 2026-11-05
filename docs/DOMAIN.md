@@ -51,7 +51,7 @@ This is the file every future session should read before touching bookings, disp
 
 ## 2. Booking state machine — transition table
 
-Amended by ADR-0011 (re-dispatch, escalation exit, authorise-only invoicing), ADR-0012 (deadline for every band, declined capture, replacement exhaustion) and ADR-0013 (billing start, client non-attendance) and ADR-0016 (unsafe-site upload path, zero-balance delivery, balance tax invoice at capture). T0 for all SLA purposes is **`actual_check_out`** (the CHECKED_OUT transition), **never** booking creation. The delivery clock *pauses* (not restarts) while a booking sits in `BALANCE_PENDING`, resuming when the balance clears — this is equivalent to, and implements, T&C §5.1's "whichever is later" framing without a second anchor timestamp.
+Amended by ADR-0011 (re-dispatch, escalation exit, authorise-only invoicing), ADR-0012 (deadline for every band, declined capture, replacement exhaustion) and ADR-0013 (billing start, client non-attendance) and ADR-0016 (unsafe-site upload path, zero-balance delivery, balance tax invoice at capture) and ADR-0030 D2 (data loss: complete loss only; a partial loss stays on the delivery path). T0 for all SLA purposes is **`actual_check_out`** (the CHECKED_OUT transition), **never** booking creation. The delivery clock *pauses* (not restarts) while a booking sits in `BALANCE_PENDING`, resuming when the balance clears — this is equivalent to, and implements, T&C §5.1's "whichever is later" framing without a second anchor timestamp.
 
 | From | To | Trigger | Actor | Side effects | Emitted event |
 |---|---|---|---|---|---|
@@ -80,7 +80,7 @@ Amended by ADR-0011 (re-dispatch, escalation exit, authorise-only invoicing), AD
 | CHECKED_IN / IN_PROGRESS | ACCESS_DENIED | Venue access denied/withdrawn | PHOTOGRAPHER (reports) / STAFF (confirms) | 50% of booking value charged; booking treated as completed | `booking.access_denied` |
 | IN_PROGRESS | UNSAFE_SITE | Photographer reasonably believes the environment is unsafe | PHOTOGRAPHER (reports) / STAFF (confirms) | Ops-approved abort; partial charge; files captured so far delivered on full payment | `booking.unsafe_site` |
 | UNSAFE_SITE | UPLOADING | Staff confirmed the unsafe site; the photographer uploads what was shot | PHOTOGRAPHER (first upload session) | T0 = the staff confirmation (`sla_t0`, production clocks armed then); billed per T&C §8.3: full amount, no refund for the uncompleted portion (ADR-0016 D11, SA-16) | `booking.uploading` |
-| UPLOADING / PROCESSING / QA | DATA_LOSS | Verified complete or partial loss of shoot data before delivery | STAFF (confirms) | Complete loss → full client refund + full photographer payout (capped at 2 incidents/photographer/year); partial loss → pro-rata client refund | `booking.data_loss` |
+| UPLOADING / PROCESSING / QA | DATA_LOSS | Verified **complete** loss of shoot data before delivery (ADR-0030 D2) | STAFF (Quality Manager or the city's manager, with a second person: four-eyes) | Full refund of all amounts paid, issued by rule (T&C §5.5; refunds still requested or failed are superseded) + full photographer payout (from the third loss in 365 days, withheld — ADR-0027 D5a). A **partial** loss is not a transition: the booking stays on the delivery path, the affected share of the booking is refunded by rule (now, as far as refundable; the rest after the balance, as a review item) and `booking.partial_data_loss` is emitted | `booking.data_loss` |
 | DELIVERED | QUALITY_ESCALATION | Client flags a quality issue | USER | Routed to `quality_escalations` / Quality Manager queue; photographer paid in full regardless; 3 escalations → tier review | `booking.quality_escalation` |
 | QUALITY_ESCALATION | CLOSED | Quality Manager resolves the escalation (reshoot / free edit / partial credit / no action) | STAFF | Remedy applied; reshoot is a new booking (`quality_escalations.reshoot_booking_id`) | `booking.closed` |
 | BALANCE_PENDING | ABANDONED | Balance unpaid for 30 days | SYSTEM | Booking closed; all media permanently purged; no refund of advance | `booking.abandoned` |
@@ -118,7 +118,8 @@ Representative payloads:
 | `assignment.extension_approved` | `assignment_id`, `minutes`, `amount_paise`, `new_snapshot_sequence` |
 | `booking.delivered` | `delivery_id`, `raw_expires_at`, `jpeg_expires_at`, `link_ids` |
 | `booking.pro_no_show` | `assignment_id`, `escalation_stage`, `refund_amount_paise`, `credit_amount_paise` |
-| `booking.data_loss` | `loss_kind` (`COMPLETE`/`PARTIAL`), `affected_proportion_bps`, `refund_amount_paise` |
+| `booking.data_loss` | `loss_kind` (`COMPLETE`; `PARTIAL` is reserved — ADR-0030 D2), `affected_proportion_bps` (10000), `refund_amount_paise` |
+| `booking.partial_data_loss` (no transition) | `loss_kind` (`PARTIAL`), `affected_proportion_bps`, `refund_amount_paise` (the share owed), `refunded_now_paise`, `due_after_balance_paise` |
 | `sla.breached` | `clock_id`, `kind`, `delay_minutes`, `band`, `client_remedy_kind`, `client_remedy_paise` |
 
 Three independent subscribers is the expected fan-out pattern (e.g. `booking.checked_out` → SLA clock arming + upload reminder + client notification). Modules never call each other's write paths directly — only through injected services or by subscribing to events.

@@ -75,6 +75,9 @@ const istWhenOf = (iso: string | null): string | null => {
 };
 
 const user = (b: BookingContactFacts): Recipient => ({ kind: 'USER', id: b.userId });
+
+/** `booking.cancelled_client` reason of the client's own cancellation (cancellations module). */
+const CLIENT_CANCELLED = 'CLIENT_CANCELLED';
 const subject = (b: BookingContactFacts): Recipient => ({ kind: 'SUBJECT', id: b.bookingId });
 
 const intent = (
@@ -245,6 +248,33 @@ export const EVENT_MAP: readonly EventMapping[] = [
       const to = b.galleryRecipient === 'SUBJECT' && b.subjectPhone ? subject(b) : user(b);
       const linkToken = await ctx.deliveryLinkToken(b.bookingId);
       return [intent(to, 'DELIVERED', b.bookingId, { bookingRef: b.reference, linkToken })];
+    },
+  },
+  {
+    // The client cancelled their own paid booking (T&C §3). The amounts follow in REFUND_ISSUED
+    // once the gateway confirms; a declined capture or an expired payment window is not this.
+    eventType: 'booking.cancelled_client',
+    template: 'BOOKING_CANCELLED',
+    resolve: toClient('BOOKING_CANCELLED', async (b, event) =>
+      str(event, 'reason') === CLIENT_CANCELLED
+        ? { bookingRef: b.reference, when: formatIstWhen(b.scheduledStart) }
+        : null,
+    ),
+  },
+  {
+    // …and the photographer who had accepted it: the job is off their schedule.
+    eventType: 'booking.cancelled_client',
+    template: 'PRO_JOB_CANCELLED',
+    resolve: async (event, ctx) => {
+      const photographerId = str(event, 'photographer_id');
+      if (str(event, 'reason') !== CLIENT_CANCELLED || !photographerId) return [];
+      const b = await ctx.booking(event.aggregateId);
+      if (!b) return [];
+      return [
+        intent({ kind: 'PHOTOGRAPHER', id: photographerId }, 'PRO_JOB_CANCELLED', b.bookingId, {
+          when: formatIstWhen(b.scheduledStart),
+        }),
+      ];
     },
   },
   {

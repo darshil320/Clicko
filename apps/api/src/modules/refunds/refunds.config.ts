@@ -30,7 +30,21 @@ export const MONEY_DESK_CONFIG = {
    * only looks — it never creates a second refund (security review H1).
    */
   resendAfterMs: 15 * 60_000,
+  /**
+   * Security review M2: a refund left PROCESSING with no gateway id (the process died, or the
+   * gateway call threw, between the commit and the answer) is looked up by its receipt by the
+   * `refunds.send-sweep` job once it is this old — and re-sent only after `resendAfterMs`.
+   */
+  sweepAfterMs: 2 * 60_000,
+  /** Refunds the sweep looks at in one run (oldest first). */
+  sweepBatchSize: 50,
 } as const;
+
+/**
+ * Refunds a published rule decides, with no approver (addendum 0019 CHECK refund_approved_or_by_
+ * rule): a client's cancellation under the T&C §3 ladder, and a complete data loss (T&C §5.5).
+ */
+export const RULE_REFUND_REASONS = ['CLIENT_CANCEL', 'DATA_LOSS'] as const;
 
 /** schema `refunds.reason_code`, plus UNFILLED and PAYMENT_ANOMALY (ADR-0026 D1 review items). */
 export const REFUND_REASONS = [

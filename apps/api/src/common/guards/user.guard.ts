@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Subject } from '../../modules/auth/token.service';
 import { UsersService } from '../../modules/users/users.service';
@@ -13,6 +14,8 @@ import { AuthGuard } from './auth.guard';
  * Client routes (security audit L1): a valid session (AuthGuard) whose subject is a USER who is
  * not blocked — a blocked client's 15-minute access token stops working at once, as ProGuard
  * does for a paused photographer. Mirrors ProGuard; provided app-wide by UserGuardModule.
+ * A deleted account (ADR-0030) is a dead session: 401, so the app's refresh fails and it signs
+ * out, rather than a 403 that names the account.
  */
 @Injectable()
 export class UserGuard implements CanActivate {
@@ -31,6 +34,9 @@ export class UserGuard implements CanActivate {
       });
     }
     const user = await this.users.findById(subject.id);
+    if (user?.deletedAt) {
+      throw new UnauthorizedException({ code: 'SESSION_INVALID', message: 'Please sign in again' });
+    }
     if (!user || user.isBlocked) {
       throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'This account is blocked' });
     }

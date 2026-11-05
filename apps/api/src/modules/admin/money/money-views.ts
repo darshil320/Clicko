@@ -48,6 +48,16 @@ export interface RefundExtras {
   readonly needsAuthenticatorCode: boolean;
 }
 
+/**
+ * Who asked for a refund: a staff member, or — for a refund the T&C ladder decided when the
+ * client cancelled — the client (never shown by id: a client is not a staff actor).
+ */
+function requesterOf(r: RefundRecord, names: ReadonlyMap<string, string>) {
+  if (r.requestedByKind === 'USER') return { id: null, name: 'The client (cancellation)' };
+  if (r.requestedByKind === 'SYSTEM') return actorOf(null, names);
+  return actorOf(r.requestedById, names);
+}
+
 export function toRefundItem(r: RefundRecord, x: RefundExtras): AdminRefundItem {
   const decider = r.approvedBy ?? r.rejectedBy;
   return {
@@ -63,7 +73,7 @@ export function toRefundItem(r: RefundRecord, x: RefundExtras): AdminRefundItem 
     status: r.status,
     reason: r.reasonCode,
     note: r.reasonNote,
-    requestedBy: actorOf(r.requestedById, x.names),
+    requestedBy: requesterOf(r, x.names),
     requestedAt: r.createdAt.toISOString(),
     decidedBy: decider ? actorOf(decider, x.names) : null,
     decidedAt: iso(r.approvedAt ?? r.rejectedAt),

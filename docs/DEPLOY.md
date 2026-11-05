@@ -27,8 +27,10 @@ these are done. This is on purpose (env.ts refuses unsafe settings).
 
 1. **OTP SMS.** `SMS_ADAPTER=dlt` sends the OTP through MSG91 (built in S12, ADR-0029 D1). It
    needs the DLT-approved OTP template registered as an MSG91 flow (PLAN B6): set
-   `MSG91_OTP_FLOW_ID` and `MSG91_OTP_DLT_TEMPLATE_ID` with the MSG91 account below. `console` is
-   refused when deployed. Without those values the API cannot start in staging or production.
+   `MSG91_OTP_FLOW_ID` and `MSG91_OTP_DLT_TEMPLATE_ID` with the MSG91 account below. The
+   account-deletion code has its own DLT template and flow (ADR-0030): set
+   `MSG91_DELETE_OTP_FLOW_ID` and `MSG91_DELETE_OTP_DLT_TEMPLATE_ID` too. `console` is refused
+   when deployed. Without those values the API cannot start in staging or production.
 2. **Provider credentials.** WhatsApp (Meta), MSG91 (DLT), Expo push and Exotel must be real
    adapters. `console` is refused when deployed. See HANDOVER.md §8 for who owes what.
 3. **Razorpay keys.** Test-mode keys are fine for a staging run. Live keys for launch.
@@ -235,7 +237,7 @@ Fixed values:
 | `JPEG_EXPORT_ADAPTER` | `darktable` | |
 | `STORAGE_ADAPTER` | `drive` | |
 | `PAYMENT_GATEWAY` | `razorpay` | |
-| `SMS_ADAPTER` | `dlt` | MSG91 OTP. Needs the `MSG91_OTP_*` values (section 0, B6). |
+| `SMS_ADAPTER` | `dlt` | MSG91 OTP. Needs the `MSG91_OTP_*` and `MSG91_DELETE_OTP_*` values (section 0, B6). |
 | `WHATSAPP_ADAPTER` | `meta` | |
 | `NOTIFY_SMS_ADAPTER` | `msg91` | |
 | `PUSH_ADAPTER` | `expo` | |
@@ -291,6 +293,8 @@ Values a provider gives you. Set each with `doppler secrets set --project clickc
 | `MSG91_TEMPLATES` | JSON, one entry per SMS template: `{"<TEMPLATE_CODE>":{"flowId":"…","dltTemplateId":"…"}}`. The API checks it against its template list at boot. |
 | `MSG91_OTP_FLOW_ID` | The OTP SMS (`SMS_ADAPTER=dlt`): MSG91 → Flow → the OTP flow's template id. The flow's text is the DLT-approved OTP template with one variable, `##otp##`. Uses the same `MSG91_AUTH_KEY`, `MSG91_SENDER_ID` and `MSG91_DLT_ENTITY_ID`. |
 | `MSG91_OTP_DLT_TEMPLATE_ID` | The DLT portal's id for that OTP template (digits). Named in the API's failure logs. |
+| `MSG91_DELETE_OTP_FLOW_ID` | The account-deletion code (ADR-0030): a second MSG91 flow on its own DLT-approved template, e.g. "##otp## is your Clickco code to DELETE your account. Do not share it." One variable, `##otp##`. |
+| `MSG91_DELETE_OTP_DLT_TEMPLATE_ID` | The DLT portal's id for that deletion template (digits). |
 | `EXPO_ACCESS_TOKEN` | Only if you turn on Expo's enhanced push security. expo.dev → Access tokens. |
 | `EXOTEL_ACCOUNT_SID`, `EXOTEL_API_KEY`, `EXOTEL_API_TOKEN`, `EXOTEL_CALLER_ID` | Exotel dashboard → API settings, and your ExoPhone. |
 | `EXOTEL_API_HOST` | `api.in.exotel.com` for a Mumbai account. Leave unset for Singapore. |

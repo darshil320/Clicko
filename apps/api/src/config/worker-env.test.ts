@@ -28,6 +28,8 @@ describe('loadWorkerEnv (audit H1: the media worker holds no app secrets)', () =
     expect(env.SMS_ADAPTER).toBe('dlt');
     expect(env.MSG91_OTP_FLOW_ID).toBeDefined();
     expect(env.MSG91_OTP_DLT_TEMPLATE_ID).toBeDefined();
+    expect(env.MSG91_DELETE_OTP_FLOW_ID).toBeDefined();
+    expect(env.MSG91_DELETE_OTP_DLT_TEMPLATE_ID).toBeDefined();
   });
 
   it('refuses to boot when deployed with any app secret in its environment', () => {

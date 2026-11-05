@@ -20,6 +20,7 @@ import {
   type OnsiteChargeBasis,
   onsiteChargeBreakdown,
   type PayoutSnapshot,
+  peakSeasonOn,
   waitingCharge,
   waitingGraceMinutes,
 } from './engine';
@@ -93,6 +94,14 @@ export class PricingService {
    */
   async autoRefundMinutesBefore(rulesetId: string, band: EmergencyBand): Promise<number> {
     return (await this.repo.autoRefundMinutes(rulesetId, band)) ?? DEFAULT_AUTO_REFUND_MINUTES;
+  }
+
+  /**
+   * T&C §3.2: is the booking's shoot day in Peak Season? From the booking's own ruleset, so it is
+   * what the quote computed (Invariant 17) — the cancellation ladder keys off it (doc 05 §5).
+   */
+  async isPeakSeason(rulesetId: string, cityId: string, scheduledStart: Date): Promise<boolean> {
+    return peakSeasonOn(await this.bookingRuleset(rulesetId), cityId, scheduledStart);
   }
 
   /** What a no-show re-broadcast offers (ADR-0012 D5): 2.0× on the base-service share only. */

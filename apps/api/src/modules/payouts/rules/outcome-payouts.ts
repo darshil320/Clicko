@@ -9,9 +9,11 @@ import { roundHalfUp } from '@clickco/utils';
 
 const BPS = 10_000n;
 
-/** payouts.basis (addendum 0017). */
+/** payouts.basis (addenda 0017, 0019). */
 export type { PayoutBasis };
-export type UndeliveredBasis = Exclude<PayoutBasis, 'DELIVERED'>;
+/** The outcomes that pay a fixed share of the payout (a client cancellation's share varies). */
+export type FixedShareBasis = Exclude<PayoutBasis, 'CLIENT_CANCELLED'>;
+export type UndeliveredBasis = Exclude<FixedShareBasis, 'DELIVERED'>;
 
 export interface OutcomeRule {
   /** The share of the full payout this outcome pays. */
@@ -22,7 +24,7 @@ export interface OutcomeRule {
   readonly travelPassThrough: boolean;
 }
 
-export const OUTCOME_PAYOUT_RULES: Readonly<Record<PayoutBasis, OutcomeRule>> = {
+export const OUTCOME_PAYOUT_RULES: Readonly<Record<FixedShareBasis, OutcomeRule>> = {
   DELIVERED: { shareBps: 10_000, includesExtras: true, travelPassThrough: true },
   /**
    * DOMAIN §2 (UPLOADING/PROCESSING/QA → DATA_LOSS) and v0.2 G-13: "full photographer payout".
@@ -61,7 +63,7 @@ export interface JobPayout {
 const min = (a: bigint, b: bigint): bigint => (a < b ? a : b);
 
 export function outcomeGross(
-  basis: PayoutBasis,
+  basis: FixedShareBasis,
   job: JobPayout,
 ): { readonly grossPaise: bigint; readonly shareBps: number } {
   if (job.basePaise < 0n || job.extrasPaise < 0n || job.travelPaise < 0n) {
@@ -76,3 +78,44 @@ export function outcomeGross(
 
 /** `earlier` data losses for this photographer in the window: from the third on, withheld. */
 export const dataLossWithheld = (earlier: number): boolean => earlier >= DATA_LOSS_CAP.incidents;
+
+/**
+ * A client cancelled after this photographer accepted (CANCELLED_CLIENT from ASSIGNED / EN_ROUTE,
+ * T&C §3.1–§3.3). No spec states what the photographer is owed. Until the owner rules (ADR-0031),
+ * they get their share of what the client is charged — the doc 05 step 12 principle ACCESS_DENIED
+ * already follows: the full payout scaled by the part of the booking value Clickco keeps. Once the
+ * photographer was on the way (EN_ROUTE) their travel passes through as for the other outcomes;
+ * before that it is shared like the rest. Clickco never pays out more than it kept. Nothing kept,
+ * nothing owed. Owner-overridable: `enabled: false` stops these payouts.
+ */
+export const CLIENT_CANCELLATION_PAYOUT = { enabled: true } as const;
+
+export interface CancellationCharge {
+  /** What Clickco keeps of the client's money under the ladder (bigint paise). */
+  readonly keptPaise: bigint;
+  /** The booking value (bookings.total_paise) the share is measured against. */
+  readonly bookingTotalPaise: bigint;
+  /** Cancelled from EN_ROUTE: the photographer had set off, so their travel passes through. */
+  readonly enRoute?: boolean;
+}
+
+/** One half-up rounding for the money; `shareBps` is the same ratio, for the payouts row. */
+export function cancellationPayout(
+  job: JobPayout,
+  charge: CancellationCharge,
+): { readonly grossPaise: bigint; readonly shareBps: number } {
+  if (job.basePaise < 0n || job.extrasPaise < 0n || job.travelPaise < 0n) {
+    throw new RangeError('cancellationPayout: negative payout');
+  }
+  if (charge.keptPaise < 0n || charge.bookingTotalPaise <= 0n) {
+    throw new RangeError('cancellationPayout: kept must be ≥ 0 and the booking total > 0');
+  }
+  if (!CLIENT_CANCELLATION_PAYOUT.enabled) return { grossPaise: 0n, shareBps: 0 };
+  const kept = min(charge.keptPaise, charge.bookingTotalPaise);
+  const shareBps = Number(roundHalfUp(kept * BPS, charge.bookingTotalPaise));
+  if (kept === 0n) return { grossPaise: 0n, shareBps };
+  const full = job.basePaise + job.extrasPaise;
+  const travel = charge.enRoute ? min(min(job.travelPaise, full), kept) : 0n;
+  const shared = roundHalfUp((full - travel) * kept, charge.bookingTotalPaise);
+  return { grossPaise: min(shared + travel, kept), shareBps };
+}

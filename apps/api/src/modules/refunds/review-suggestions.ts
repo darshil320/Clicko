@@ -182,6 +182,20 @@ export function suggestOutcome(f: ReviewFacts): Suggestion {
     );
   }
   if (r === 'ACCESS_DENIED_CHARGE_50') return accessDenied(f);
+  if (r === 'PARTIAL_DATA_LOSS_REMAINDER') {
+    // ADR-0030 D2: the affected share not refundable when the loss was confirmed.
+    if (f.refundablePaise <= 0n) {
+      return none(
+        'Part of the shoot was lost and the rest of its refund waits for the balance: settle this once the client has paid it.',
+      );
+    }
+    return refund(
+      f,
+      amountIn(f.details, f.refundablePaise),
+      'DATA_LOSS',
+      'Part of the shoot was lost: refund the rest of its share now that the balance is paid (T&C §5.5).',
+    );
+  }
   if (r === 'UNSAFE_SITE_PARTIAL_CHARGE') {
     return none(
       'Unsafe site: billed in full with no refund for the part not shot (T&C §8.3). Choose a refund only as goodwill.',
@@ -213,6 +227,7 @@ const TITLES: ReadonlyArray<readonly [string, string]> = [
   ['REFUND_DUE_NO_SHOW', 'Photographer did not show up'],
   ['LATE_REPLACEMENT_CREDIT_25', 'Replacement arrived late'],
   ['ACCESS_DENIED_CHARGE_50', 'Venue access denied'],
+  ['PARTIAL_DATA_LOSS_REMAINDER', 'Part of the shoot lost: rest of refund'],
   ['UNSAFE_SITE_PARTIAL_CHARGE', 'Shoot stopped: unsafe site'],
   ['CLIENT_NON_ATTENDANCE', "Client didn't attend"],
   ['OFFLINE_CHECK_IN_TIME', 'Offline check-in time to verify'],

@@ -4,7 +4,16 @@ import {
   VerifyOtpBody,
   type VerifyOtpResponse,
 } from '@clickco/contracts';
-import { Body, Controller, ForbiddenException, HttpCode, Inject, Ip, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  HttpCode,
+  Inject,
+  Ip,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ok } from '../../common/envelope';
 import { clientIp } from '../../common/http/client-ip';
@@ -53,9 +62,15 @@ export class AuthController {
     // USER only: a photographer session refreshes at /pro/auth/refresh and is not consumed here.
     const { subject, ...pair } = await this.tokens.refresh(body.refreshToken, 'USER');
     const user = await this.users.findById(subject.id);
-    if (!user || user.isBlocked) {
-      // A blocked account loses every session, not just this one.
+    if (!user || user.isBlocked || user.deletedAt) {
+      // A blocked (or deleted, ADR-0030) account loses every session, not just this one.
       await this.tokens.revokeAll(subject);
+      if (user?.deletedAt) {
+        throw new UnauthorizedException({
+          code: 'SESSION_INVALID',
+          message: 'Please sign in again',
+        });
+      }
       throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'This account is blocked' });
     }
     return ok(pair);

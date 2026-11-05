@@ -5,6 +5,7 @@ import { DispatchModule } from '../modules/dispatch/dispatch.module';
 import { MediaModule } from '../modules/media/media.module';
 import { NotificationsModule } from '../modules/notifications/notifications.module';
 import { OnsiteModule } from '../modules/onsite/onsite.module';
+import { RefundsModule } from '../modules/refunds/refunds.module';
 import { SlaModule } from '../modules/sla/sla.module';
 import { CheckoutSweepProcessor } from './checkout-sweep.processor';
 import { DispatchTimersProcessor } from './dispatch-timers.processor';
@@ -15,6 +16,7 @@ import { OnsiteTimersProcessor } from './onsite-timers.processor';
 import { OtpSmsProcessor } from './otp-sms.processor';
 import { OutboxPublishProcessor } from './outbox-publish.processor';
 import { QuotaMonitorProcessor } from './quota-monitor.processor';
+import { RefundSweepProcessor } from './refund-sweep.processor';
 import { SlaProcessor } from './sla.processor';
 import { UploadReaperProcessor } from './upload-reaper.processor';
 
@@ -28,6 +30,7 @@ import { UploadReaperProcessor } from './upload-reaper.processor';
     SlaModule,
     CheckoutModule,
     NotificationsModule,
+    RefundsModule,
   ],
   providers: [
     OutboxPublishProcessor,
@@ -41,6 +44,7 @@ import { UploadReaperProcessor } from './upload-reaper.processor';
     SlaProcessor,
     CheckoutSweepProcessor,
     NotificationSendProcessor,
+    RefundSweepProcessor,
   ],
 })
 export class JobsModule {}

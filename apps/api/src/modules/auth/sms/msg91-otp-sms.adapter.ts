@@ -1,4 +1,4 @@
-import { PhoneE164 } from '@clickco/contracts';
+import { type OtpPurpose, PhoneE164 } from '@clickco/contracts';
 import { Logger } from '@nestjs/common';
 import type { Msg91FlowClient } from '../../../infra/sms/msg91-flow';
 import { maskPhone } from '../../notifications/masking';
@@ -16,6 +16,12 @@ export interface Msg91OtpTemplate {
   readonly dltTemplateId: string;
 }
 
+/** One template per kind of code (ADR-0030): sign-in (client and Pro) and account deletion. */
+export interface Msg91OtpTemplates {
+  readonly signIn: Msg91OtpTemplate;
+  readonly accountDelete: Msg91OtpTemplate;
+}
+
 interface WarnLogger {
   warn(message: string): void;
 }
@@ -27,26 +33,35 @@ interface WarnLogger {
  */
 export class Msg91OtpSmsAdapter implements SmsPort {
   constructor(
-    private readonly template: Msg91OtpTemplate,
+    private readonly templates: Msg91OtpTemplates,
     private readonly client: Msg91FlowClient,
     private readonly logger: WarnLogger = new Logger('Msg91OtpSms'),
   ) {}
 
-  async sendOtp(phone: string, code: string): Promise<void> {
-    if (!PhoneE164.safeParse(phone).success) throw this.failure(phone, 'INVALID_PHONE', false);
-    if (!OTP_CODE.test(code)) throw this.failure(phone, 'INVALID_CODE', false);
+  async sendOtp(phone: string, code: string, purpose: OtpPurpose = 'LOGIN'): Promise<void> {
+    const template =
+      purpose === 'ACCOUNT_DELETE' ? this.templates.accountDelete : this.templates.signIn;
+    if (!PhoneE164.safeParse(phone).success) {
+      throw this.failure(phone, 'INVALID_PHONE', false, template);
+    }
+    if (!OTP_CODE.test(code)) throw this.failure(phone, 'INVALID_CODE', false, template);
     const result = await this.client.send({
-      flowId: this.template.flowId,
+      flowId: template.flowId,
       to: phone,
       variables: { [OTP_FLOW_VARIABLE]: code },
     });
-    if (!result.ok) throw this.failure(phone, result.code, result.retryable);
+    if (!result.ok) throw this.failure(phone, result.code, result.retryable, template);
   }
 
-  private failure(phone: string, code: string, retryable: boolean): SmsSendError {
+  private failure(
+    phone: string,
+    code: string,
+    retryable: boolean,
+    template: Msg91OtpTemplate,
+  ): SmsSendError {
     const next = retryable ? 'will retry' : 'final';
     this.logger.warn(
-      `OTP SMS to ${maskPhone(phone)} failed: ${code} (${next}; DLT template ${this.template.dltTemplateId})`,
+      `OTP SMS to ${maskPhone(phone)} failed: ${code} (${next}; DLT template ${template.dltTemplateId})`,
     );
     return new SmsSendError(code, retryable);
   }

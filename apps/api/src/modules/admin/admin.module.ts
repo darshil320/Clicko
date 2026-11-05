@@ -31,6 +31,7 @@ import { AdminOpsController } from './desks/admin-ops.controller';
 import { AlertFeedService } from './desks/alert-feed.service';
 import { BookingBoardService } from './desks/booking-board.service';
 import { BreachDeskService } from './desks/breach-desk.service';
+import { DataLossDeskService } from './desks/data-loss-desk.service';
 import { DispatchQueueService } from './desks/dispatch-queue.service';
 import { IncidentDeskService } from './desks/incident-desk.service';
 import { QaDeskService } from './desks/qa-desk.service';
@@ -105,6 +106,7 @@ import {
     BookingBoardService,
     QaDeskService,
     IncidentDeskService,
+    DataLossDeskService,
     DispatchQueueService,
     BreachDeskService,
     AlertFeedService,

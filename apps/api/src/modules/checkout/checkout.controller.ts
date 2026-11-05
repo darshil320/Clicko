@@ -12,7 +12,10 @@ import { PaymentFlowService } from './payment-flow.service';
 
 const BookingId = new ZodValidationPipe(Uuid);
 
-/** The client booking flow (ADR-0009). Every money-mutating route is @Idempotent. */
+/**
+ * The client booking flow (ADR-0009). Every money-mutating route is @Idempotent. Cancelling is the
+ * cancellations module's (GET /bookings/:id/cancellation, POST /bookings/:id/cancel).
+ */
 @Controller('bookings')
 // Audit L1: USER sessions of accounts that are not blocked, checked on every request.
 @UseGuards(UserGuard)
@@ -47,12 +50,5 @@ export class CheckoutController {
   @Idempotent()
   async pay(@CurrentSubject() subject: Subject, @Param('id', BookingId) id: string) {
     return ok(await this.flow.pay(requireUser(subject), id));
-  }
-
-  @Post(':id/cancel')
-  @HttpCode(200)
-  @Idempotent()
-  async cancel(@CurrentSubject() subject: Subject, @Param('id', BookingId) id: string) {
-    return ok(await this.checkout.cancel(requireUser(subject), id));
   }
 }

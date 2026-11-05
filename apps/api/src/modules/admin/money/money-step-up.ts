@@ -21,6 +21,23 @@ const CO_APPROVER_INVALID = {
     'The second approver must be another active finance person or super admin who covers this city.',
 };
 
+/** Who may be named (ADR-0030 lets a second Quality Manager co-approve a data loss too). */
+const CO_APPROVER_LABEL: ReadonlyArray<readonly [StaffRole, string]> = [
+  ['QUALITY_MANAGER', 'Quality Manager'],
+  ['FINANCE', 'finance person'],
+  ['SUPER_ADMIN', 'super admin'],
+];
+
+function invalidCoApprover(roles: readonly StaffRole[]) {
+  if (roles === UNLIMITED) return CO_APPROVER_INVALID;
+  const names = CO_APPROVER_LABEL.filter(([r]) => roles.includes(r)).map(([, n]) => n);
+  const who = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : names[0];
+  return {
+    code: CO_APPROVER_INVALID.code,
+    message: `The second approver must be another active ${who ?? 'approver'} who covers this city.`,
+  };
+}
+
 /**
  * Step-up and four-eyes for the money desks (security audit, 31 Oct 2026):
  * - a refund approval above the Quality Manager's ceiling needs the approver's fresh
@@ -53,9 +70,9 @@ export class MoneyStepUp {
   }
 
   /**
-   * A second person, by sign-in email: active, not the caller, FINANCE or SUPER_ADMIN covering
-   * `cityId` (null = needs an all-city grant), proving it with their own fresh code. Resolves to
-   * their staff id.
+   * A second person, by sign-in email: active, not the caller, holding one of `roles` (FINANCE or
+   * SUPER_ADMIN unless the action says otherwise) covering `cityId` (null = needs an all-city
+   * grant), proving it with their own fresh code. Resolves to their staff id.
    */
   async requireCoApprover(
     caller: StaffCaller,
@@ -64,22 +81,42 @@ export class MoneyStepUp {
     ctx: AuditContext,
     purpose: string,
     why: string,
+    roles: readonly StaffRole[] = UNLIMITED,
   ): Promise<string> {
+    return (await this.coApprover(caller, co, cityId, ctx, purpose, why, roles)).id;
+  }
+
+  /**
+   * As `requireCoApprover`, and whether that person also holds FINANCE or SUPER_ADMIN in the city
+   * (ADR-0030: above the Quality Manager's ceiling only they may be the second person).
+   */
+  async coApprover(
+    caller: StaffCaller,
+    co: CreditCoApprover | undefined,
+    cityId: string | null,
+    ctx: AuditContext,
+    purpose: string,
+    why: string,
+    roles: readonly StaffRole[] = UNLIMITED,
+  ): Promise<{ readonly id: string; readonly unlimited: boolean }> {
     if (!co) {
       throw new UnprocessableEntityException({ code: 'STEP_UP_REQUIRED', message: why });
     }
     const record = await this.staff.findByEmail(this.sql, co.email);
     const principal = record ? await this.access.activePrincipal(record.id) : null;
-    const covers = principal?.grants.some(
-      (g) =>
-        UNLIMITED.includes(g.role) &&
-        (g.role === 'SUPER_ADMIN' || g.cityId === null || (cityId !== null && g.cityId === cityId)),
-    );
-    if (!principal || principal.id === caller.id || !covers) {
-      throw new ForbiddenException(CO_APPROVER_INVALID);
+    const coversWith = (allowed: readonly StaffRole[]) =>
+      principal?.grants.some(
+        (g) =>
+          allowed.includes(g.role) &&
+          (g.role === 'SUPER_ADMIN' ||
+            g.cityId === null ||
+            (cityId !== null && g.cityId === cityId)),
+      ) ?? false;
+    if (!principal || principal.id === caller.id || !coversWith(roles)) {
+      throw new ForbiddenException(invalidCoApprover(roles));
     }
     await this.stepUp.verify(principal.id, co.code, ctx, `${purpose}.co_approve`);
-    return principal.id;
+    return { id: principal.id, unlimited: coversWith(UNLIMITED) };
   }
 }
 

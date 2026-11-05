@@ -1,5 +1,7 @@
+export * from './account-deletion.js';
 export * from './admin.js';
 export * from './admin-care.js';
+export * from './admin-data-loss.js';
 export * from './admin-desks.js';
 export * from './admin-moderation.js';
 export * from './admin-money.js';
@@ -11,6 +13,7 @@ export * from './analytics.js';
 export * from './auth.js';
 export * from './booking.js';
 export * from './booking-flow.js';
+export * from './cancellation.js';
 export * from './city.js';
 export * from './client-care.js';
 export * from './client-money.js';

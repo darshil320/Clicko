@@ -71,6 +71,18 @@ export class IdempotencyStore {
        WHERE key = ${key}`;
   }
 
+  /**
+   * Account deletion (ADR-0030), in its transaction: drops the stored answers of an owner's
+   * completed requests (a booking's answer holds its venue and phones). In-flight claims stay:
+   * the deletion's own request completes into one, with no personal data in it.
+   */
+  async forgetOwner(tx: postgres.TransactionSql, owner: string): Promise<number> {
+    const rows = await tx`
+      DELETE FROM idempotency_keys
+       WHERE starts_with(key, ${`${owner}:`}) AND completed_at IS NOT NULL`;
+    return rows.count;
+  }
+
   /** Frees an in-flight claim after a failed request. A completed key is never released. */
   async release(key: string): Promise<void> {
     await this.sql`DELETE FROM idempotency_keys WHERE key = ${key} AND completed_at IS NULL`;

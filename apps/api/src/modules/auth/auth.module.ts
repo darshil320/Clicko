@@ -6,6 +6,7 @@ import { ENV, type Env } from '../../config/env';
 import { REDIS } from '../../infra/queues/redis';
 import { PhotographersModule } from '../photographers/photographers.module';
 import { UsersModule } from '../users/users.module';
+import { AuthAccountErasure } from './account-erasure';
 import { AuthController } from './auth.controller';
 import { OtpService } from './otp.service';
 import { OtpDelivery } from './otp-delivery';
@@ -40,7 +41,9 @@ import { TokenModule } from './token.module';
     { provide: SMS_PORT, inject: [ENV, HTTP_FETCH], useFactory: otpSmsAdapter },
     OtpDelivery,
     OtpService,
+    AuthAccountErasure,
   ],
-  exports: [OtpDelivery, SMS_PORT],
+  // OtpService: the account-deletion module re-confirms the client with a fresh code (ADR-0030).
+  exports: [OtpDelivery, SMS_PORT, OtpService, AuthAccountErasure],
 })
 export class AuthModule {}

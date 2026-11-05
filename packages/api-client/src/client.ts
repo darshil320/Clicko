@@ -4,6 +4,9 @@ import {
   type BlockPhotographerBody,
   BookingDetail,
   BookingSummary,
+  type CancelBookingBody,
+  CancelBookingResponse,
+  CancellationQuote,
   ClientBookingMoney,
   ClientQualityIssue,
   type ClientQualityIssueBody,
@@ -34,6 +37,7 @@ import {
   VerifyOtpResponse,
 } from '@clickco/contracts';
 import { z } from 'zod';
+import { accountApi } from './account-client.js';
 import { ApiError } from './errors.js';
 import { createHttp, type HttpOptions } from './http.js';
 import { notificationSettingsApi, startMaskedCall } from './notifications-client.js';
@@ -108,6 +112,9 @@ export function createApiClient(options: ApiClientOptions) {
 
     me: () => http.request({ method: 'GET', path: '/me', schema: MeResponse, auth: true }),
 
+    /** ADR-0030: Profile → "Delete account". */
+    account: accountApi(http),
+
     serviceability: {
       check: (pincode: string) =>
         http.request({
@@ -151,11 +158,30 @@ export function createApiClient(options: ApiClientOptions) {
           auth: true,
           idempotencyKey,
         }),
-      cancel: async (bookingId: string, { idempotencyKey }: Idempotent) =>
+      /**
+       * What cancelling now would return under the T&C §3 ladder (band, refund and what is kept,
+       * in paise, and the reason in plain words), or why it cannot be cancelled now.
+       */
+      cancellationQuote: async (bookingId: string) =>
+        http.request({
+          method: 'GET',
+          path: `/bookings/${uuidSegment(bookingId)}/cancellation`,
+          schema: CancellationQuote,
+          auth: true,
+        }),
+      /**
+       * Cancels. Before payment no body is needed. Once anything was paid, send the quote's
+       * `refundPaise` as `expectedRefundPaise`: a different figure under the lock is 409
+       * CANCELLATION_TERMS_CHANGED (quote again); none at all is 422
+       * CANCELLATION_CONFIRMATION_REQUIRED. 409 ALREADY_CANCELLED, CANCEL_NOT_AVAILABLE (the shoot
+       * started or its time passed), CANCEL_PAYMENT_SETTLING (retry in a minute).
+       */
+      cancel: async (bookingId: string, { idempotencyKey }: Idempotent, body?: CancelBookingBody) =>
         http.request({
           method: 'POST',
           path: `/bookings/${uuidSegment(bookingId)}/cancel`,
-          schema: BookingSummary,
+          ...(body === undefined ? {} : { body }),
+          schema: CancelBookingResponse,
           auth: true,
           idempotencyKey,
         }),

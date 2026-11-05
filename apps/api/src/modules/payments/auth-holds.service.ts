@@ -31,7 +31,8 @@ export class HoldBusyError extends Error {
 }
 
 export type HoldCaptureRecord =
-  | { readonly kind: 'RECORDED'; readonly amountPaise: bigint; readonly invoiceId: string }
+  /** invoiceId null: captured on a booking that no longer expected it (no invoice, flagged). */
+  | { readonly kind: 'RECORDED'; readonly amountPaise: bigint; readonly invoiceId: string | null }
   /** A webhook (or an earlier delivery) already booked this capture. */
   | { readonly kind: 'ALREADY_RECORDED' }
   /** Captured although we had released it: the money is booked and flagged for refund. */
@@ -62,6 +63,14 @@ export class AuthHoldsService {
     return this.payments.heldForBooking(db, bookingId);
   }
 
+  /**
+   * A capture or release of this hold may be at the gateway right now (its lease is taken), or
+   * Redis cannot say. A client cancellation waits rather than race it (security review M1).
+   */
+  async inFlight(paymentId: string): Promise<boolean> {
+    return (await this.locks.isHeld(`payment:${paymentId}`)) !== 'FREE';
+  }
+
   /** Runs `fn` holding the payment's lease. Busy or Redis down ⇒ HoldBusyError (retry later). */
   async withLock<T>(paymentId: string, fn: () => Promise<T>): Promise<T> {
     const token = randomUUID();
@@ -84,19 +93,22 @@ export class AuthHoldsService {
 
   /**
    * Books a captured hold (ADR-0011: invoice + ledger at capture). Locks the payment row — the
-   * caller has already locked the booking (lock order booking → payment).
+   * caller has already locked the booking (lock order booking → payment). A null `basis` books
+   * money the booking no longer expected (no invoice; the caller flags it for a refund).
    */
   async recordCapture(
     tx: Tx,
     paymentId: string,
     capturedAt: Date,
-    basis: InvoiceBasis,
+    basis: InvoiceBasis | null,
   ): Promise<HoldCaptureRecord> {
     const p = await this.payments.lockById(tx, paymentId);
     if (!p?.providerPaymentId) throw new Error(`Payment ${paymentId} cannot be captured`);
     if (p.status === 'AUTHORIZED') {
       await this.service.postCaptured(tx, p, p.amountPaise, p.providerPaymentId, capturedAt);
-      const invoiceId = await this.service.issueInvoice(tx, p, p.amountPaise, basis, capturedAt);
+      const invoiceId = basis
+        ? await this.service.issueInvoice(tx, p, p.amountPaise, basis, capturedAt)
+        : null;
       await this.payments.markAuthCaptured(
         tx,
         p.id,

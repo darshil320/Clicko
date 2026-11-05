@@ -23,6 +23,8 @@ export interface RefundRecord {
   readonly decisionNote: string | null;
   readonly providerRefundId: string | null;
   readonly processingAt: Date | null;
+  /** When it last went to the gateway (addendum 0019); null before the first send. */
+  readonly lastSentAt: Date | null;
   readonly attempts: number;
   readonly completedAt: Date | null;
   readonly failedAt: Date | null;

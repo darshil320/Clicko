@@ -14,7 +14,7 @@ import { CLOCK, type Clock } from '../../common/clock';
 import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
 import type { IdSubquery } from '../../infra/db/id-subquery';
-import { appendDomainEvent } from '../../infra/outbox/outbox';
+import { appendDomainEvent, appendDomainEventOnce } from '../../infra/outbox/outbox';
 import { RedisLocks } from '../../infra/queues/redis-lock';
 import { BookingsService } from '../bookings/bookings.service';
 import type { RefundResult } from '../payments/gateways/payment-gateway.port';
@@ -22,8 +22,8 @@ import { PaymentRefundsService } from '../payments/payment-refunds.service';
 import { isOwed } from '../sla/sla.public';
 import { SlaDeskService } from '../sla/sla-desk.service';
 import { BookingMoneyReader } from './booking-money.reader';
-import { allocateRefund, approvalCheck, rupees } from './refund-rules';
-import { MONEY_DESK_CONFIG, type RefundReasonCode } from './refunds.config';
+import { allocateRefund, approvalCheck, isSupersedable, rupees } from './refund-rules';
+import { MONEY_DESK_CONFIG, type RefundReasonCode, RULE_REFUND_REASONS } from './refunds.config';
 import type { MoneyActor, RefundRecord, Tx } from './refunds.types';
 import { CreditsRepository } from './repositories/credits.repository';
 import { type RefundPageQuery, RefundsRepository } from './repositories/refunds.repository';
@@ -51,6 +51,20 @@ export interface RefundRequest {
   readonly paymentId?: string;
   readonly staffId: string;
   readonly reviewResolutionId?: string;
+}
+
+/**
+ * A refund a published rule decides, so no person approves it: the client's cancellation under
+ * the T&C §3 ladder (DOMAIN §2). The amount comes from the pure ladder, never from a request body.
+ */
+export interface RuleRefund {
+  readonly bookingId: string;
+  readonly amountPaise: bigint;
+  readonly reasonCode: RefundReasonCode;
+  readonly note: string;
+  readonly requestedBy: { readonly kind: 'USER' | 'SYSTEM'; readonly id: string | null };
+  /** The rule that decided it, e.g. "T&C §3.1". */
+  readonly rule: string;
 }
 
 /** The gateway receipt of a refund's current attempt: `<id>`, then `<id>.<n>` on a retry. */
@@ -166,6 +180,201 @@ export class RefundsService {
       },
     });
     return rows;
+  }
+
+  /**
+   * A refund the rule decides (RuleRefund), in the caller's transaction (which holds the booking
+   * lock: lock order booking → payment → refund). One row per payment it goes back to, newest
+   * payment first, each straight to PROCESSING with no approver — maker–checker exists for staff
+   * judgement, and here there is none to check. Never more than each payment has left: a larger
+   * amount throws (REFUND_TOO_LARGE) and rolls the caller back. Send with `sendIssued` after
+   * commit; until then nothing has left Clickco.
+   */
+  async issueByRuleIn(tx: Tx, r: RuleRefund): Promise<RefundRecord[]> {
+    // Security review L1: only the reasons a published rule decides, and a client only on their own
+    // booking (checked under the lock). The database CHECK refund_approved_or_by_rule agrees.
+    // Mirrors addendum 0019 refund_approved_or_by_rule: the client's own cancellation, or the
+    // system's rule (a cancellation or a complete data loss).
+    const allowed: readonly string[] =
+      r.requestedBy.kind === 'USER' ? ['CLIENT_CANCEL'] : RULE_REFUND_REASONS;
+    if (!allowed.includes(r.reasonCode)) {
+      throw new Error(
+        `issueByRuleIn: a ${r.reasonCode} refund for a ${r.requestedBy.kind} is not decided by a rule`,
+      );
+    }
+    const booking = await this.bookings.lock(tx, r.bookingId);
+    if (r.requestedBy.kind === 'USER' && booking.userId !== r.requestedBy.id) {
+      throw new Error(`issueByRuleIn: the requesting client does not own booking ${r.bookingId}`);
+    }
+    for (const t of await this.payments.targetsForBooking(r.bookingId, tx)) {
+      await this.payments.lockTarget(tx, t.id);
+    }
+    const targets = await this.money.refundTargets(tx, r.bookingId);
+    const allocation = allocateRefund(
+      r.amountPaise,
+      targets.map((t) => ({
+        paymentId: t.id,
+        refundablePaise: t.refundablePaise,
+        at: t.capturedAt ?? new Date(0),
+      })),
+    );
+    if (!allocation.ok) {
+      throw new ConflictException({
+        code: 'REFUND_TOO_LARGE',
+        message: 'This booking no longer has that much left to refund',
+      });
+    }
+    const now = this.clock();
+    const rows: RefundRecord[] = [];
+    for (const part of allocation.parts) {
+      const row = await this.refunds.insertByRule(tx, {
+        paymentId: part.paymentId,
+        bookingId: r.bookingId,
+        amountPaise: part.amountPaise,
+        reasonCode: r.reasonCode,
+        reasonNote: r.note,
+        requestedByKind: r.requestedBy.kind,
+        requestedById: r.requestedBy.id,
+        rule: r.rule,
+        createdAt: now,
+      });
+      const by = { requested_by_kind: r.requestedBy.kind, rule: r.rule };
+      await this.event(tx, 'refund.requested', row, now, { ...by, staff_id: null });
+      await this.event(tx, 'refund.approved', row, now, { ...by, staff_id: null });
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  /**
+   * The client is cancelling and the ladder's refund replaces every refund still open on the
+   * booking (REQUESTED, or FAILED at the gateway) that no review settlement raised — the selection
+   * `supersedeOpenIn` makes for a data loss, but with no staff rejecter: each becomes REJECTED
+   * `rejected_by_rule` with `note` and emits `refund.rejected`. In the caller's transaction, which
+   * holds the booking lock (lock order booking → refund).
+   */
+  async supersedeOpenByRuleIn(tx: Tx, bookingId: string, note: string): Promise<RefundRecord[]> {
+    await this.bookings.lock(tx, bookingId);
+    const open = (await this.refunds.forBooking(tx, bookingId)).filter(isSupersedable);
+    const now = this.clock();
+    const closed: RefundRecord[] = [];
+    for (const r of open) {
+      const locked = await this.refunds.lock(tx, r.id);
+      if (!locked || !isSupersedable(locked)) continue;
+      if (!(await this.refunds.supersedeByRule(tx, r.id, note, now))) continue;
+      await this.event(tx, 'refund.rejected', locked, now, {
+        staff_id: null,
+        note,
+        superseded_by: 'CLIENT_CANCELLATION',
+      });
+      closed.push({ ...locked, status: 'REJECTED', rejectedAt: now, decisionNote: note });
+    }
+    return closed;
+  }
+
+  /**
+   * Sends refunds issued by rule to the gateway, after their transaction committed. Never throws:
+   * the cancellation already happened. A failure raises a HIGH ops alert on the booking; the
+   * refund stays PROCESSING and `sweepUnsent` picks it up (security review M2).
+   */
+  async sendIssued(refundIds: readonly string[]): Promise<RefundRecord[]> {
+    const out: RefundRecord[] = [];
+    for (const id of refundIds) {
+      try {
+        out.push(await this.execute(id, 'SEND'));
+      } catch (error) {
+        const name = error instanceof Error ? error.name : 'error';
+        this.logger.error(`Refund ${id}: sending to the gateway failed (${name}); swept later`);
+        await this.alertSendFailed(id, name);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * The `refunds.send-sweep` job (security review M2): PROCESSING refunds with no gateway id,
+   * older than `sweepAfterMs`, are looked up at the gateway by receipt (CHECK) — booked if it has
+   * them, re-sent only once `resendAfterMs` has passed since they were sent, never blindly.
+   * Every refund in the batch is tried; one failure does not stop the rest.
+   */
+  async sweepUnsent(): Promise<number> {
+    const before = new Date(this.clock().getTime() - MONEY_DESK_CONFIG.sweepAfterMs);
+    const ids = await this.refunds.unsent(this.sql, before, MONEY_DESK_CONFIG.sweepBatchSize);
+    for (const id of ids) {
+      try {
+        await this.execute(id, 'CHECK');
+      } catch (error) {
+        const name = error instanceof Error ? error.name : 'error';
+        this.logger.error(`Refund ${id}: the send sweep failed (${name})`);
+      }
+    }
+    return ids.length;
+  }
+
+  /** Once per refund: ops sees the booking (the sweep retries on its own). Never throws. */
+  private async alertSendFailed(refundId: string, errorName: string): Promise<void> {
+    try {
+      const r = await this.mustFind(refundId);
+      await this.sql.begin((tx) =>
+        appendDomainEventOnce(tx, {
+          eventType: 'ops.alert',
+          aggregateKind: 'booking',
+          aggregateId: r.bookingId,
+          occurredAt: this.clock(),
+          dedupeKey: `refund.send_failed:${r.id}`,
+          payload: {
+            booking_id: r.bookingId,
+            severity: 'HIGH',
+            source_event_id: null,
+            source_event_type: 'refund.send_failed',
+            details: {
+              refund_id: r.id,
+              amount_paise: fromPaiseBigint(r.amountPaise),
+              error: errorName,
+            },
+          },
+        }),
+      );
+    } catch (error) {
+      const name = error instanceof Error ? error.name : 'error';
+      this.logger.error(`Refund ${refundId}: could not raise the ops alert (${name})`);
+    }
+  }
+
+  /**
+   * ADR-0030: closes every refund on the booking still waiting for approval (REQUESTED) or left
+   * FAILED, because a larger refund decided by rule replaces them (a complete data loss refunds
+   * everything paid). Each becomes REJECTED by `staffId` with `note` and emits `refund.rejected`.
+   * A refund raised by settling a review item is left alone: its settlement (an SLA-breach remedy)
+   * is applied only when it completes, so closing it would leave that breach owed for ever.
+   * In the caller's transaction, which holds the booking lock (lock order booking → refund).
+   */
+  async supersedeOpenIn(
+    tx: Tx,
+    bookingId: string,
+    staffId: string,
+    note: string,
+  ): Promise<RefundRecord[]> {
+    await this.bookings.lock(tx, bookingId);
+    const open = (await this.refunds.forBooking(tx, bookingId)).filter(
+      (r) => (r.status === 'REQUESTED' || r.status === 'FAILED') && r.reviewResolutionId === null,
+    );
+    const now = this.clock();
+    const closed: RefundRecord[] = [];
+    for (const r of open) {
+      const locked = await this.refunds.lock(tx, r.id);
+      if (locked?.status !== 'REQUESTED' && locked?.status !== 'FAILED') continue;
+      if (!(await this.refunds.supersede(tx, r.id, staffId, note, now))) continue;
+      await this.event(tx, 'refund.rejected', locked, now, { staff_id: staffId, note });
+      closed.push({
+        ...locked,
+        status: 'REJECTED',
+        rejectedBy: staffId,
+        rejectedAt: now,
+        decisionNote: note,
+      });
+    }
+    return closed;
   }
 
   /** Approves (four-eyes, ceiling, refundable) and sends it to the gateway at once. */
@@ -357,10 +566,13 @@ export class RefundsService {
       const found =
         mode === 'CHECK' ? await this.payments.find(payment.providerPaymentId, receipt) : null;
       if (found) return await this.applyResult(refundId, found);
-      const sentAt = refund.processingAt?.getTime() ?? 0;
+      // Measured from the LAST send, not the first: a re-send the gateway has not listed yet is
+      // not re-sent again by the next sweep (security review, addendum 0019 last_sent_at).
+      const sentAt = (refund.lastSentAt ?? refund.processingAt)?.getTime() ?? 0;
       if (mode === 'CHECK' && this.clock().getTime() - sentAt < MONEY_DESK_CONFIG.resendAfterMs) {
         return refund; // possibly sent and not listed yet: never create a second one
       }
+      await this.refunds.markSent(this.sql, refundId, this.clock());
       const result = await this.payments.execute({
         providerPaymentId: payment.providerPaymentId,
         amountPaise: refund.amountPaise,

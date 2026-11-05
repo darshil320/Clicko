@@ -35,6 +35,16 @@ export class RedisLocks {
     }
   }
 
+  /** Is someone holding this lease right now? UNAVAILABLE when Redis cannot say. */
+  async isHeld(key: string): Promise<'HELD' | 'FREE' | 'UNAVAILABLE'> {
+    try {
+      return (await this.redis.exists(this.fullKey(key))) > 0 ? 'HELD' : 'FREE';
+    } catch (error) {
+      this.logger.warn(`Lock ${key} unavailable: ${error instanceof Error ? error.name : 'error'}`);
+      return 'UNAVAILABLE';
+    }
+  }
+
   /** Best effort: the lease expires by itself; a failed release only delays the next holder. */
   async release(key: string, token: string): Promise<void> {
     try {

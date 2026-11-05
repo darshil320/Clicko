@@ -16,9 +16,11 @@ import { OutboxModule } from './infra/outbox/outbox.module';
 import { QueuesModule } from './infra/queues/queues.module';
 import { REDIS } from './infra/queues/redis';
 import { JobsModule } from './jobs/jobs.module';
+import { AccountDeletionModule } from './modules/account-deletion/account-deletion.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CallsModule } from './modules/calls/calls.module';
+import { CancellationsModule } from './modules/cancellations/cancellations.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { DispatchModule } from './modules/dispatch/dispatch.module';
@@ -66,9 +68,11 @@ const GLOBAL_THROTTLE = { name: 'default', ttl: 60_000, limit: 120 } as const;
     HealthModule,
     AuthModule,
     UsersModule,
+    AccountDeletionModule,
     ServiceabilityModule,
     PricingModule,
     CheckoutModule,
+    CancellationsModule,
     DispatchModule,
     OnsiteModule,
     SlaModule,

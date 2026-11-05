@@ -7,6 +7,7 @@ import { DeliveryModule } from '../delivery/delivery.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { PhotographersModule } from '../photographers/photographers.module';
 import { UsersModule } from '../users/users.module';
+import { NotificationAccountErasure } from './account-erasure';
 import { CHANNEL_PROVIDERS } from './channels/channel-providers';
 import {
   ClientNotificationSettingsController,
@@ -50,7 +51,8 @@ import { PushTokensRepository } from './repositories/push-tokens.repository';
     NotificationSender,
     NotificationSettingsService,
     NotificationsSubscribers,
+    NotificationAccountErasure,
   ],
-  exports: [NotificationSender],
+  exports: [NotificationSender, NotificationAccountErasure],
 })
 export class NotificationsModule {}

@@ -6,6 +6,7 @@ import type {
   BookingView,
   Db,
   PromoUsage,
+  RecordedCancellation,
   SnapshotTotals,
   TimelineEntry,
 } from '../bookings.types';
@@ -114,6 +115,29 @@ export class BookingReadsRepository {
       : null;
   }
 
+  /** The latest → CANCELLED_CLIENT status event of a booking, or null. */
+  async clientCancellation(db: Db, bookingId: string): Promise<RecordedCancellation | null> {
+    const [row] = await db<
+      {
+        from_status: BookingStatus | null;
+        actor_kind: ActorKind;
+        occurred_at: Date;
+        metadata: Record<string, unknown> | null;
+      }[]
+    >`
+      SELECT from_status, actor_kind, occurred_at, metadata FROM booking_status_events
+      WHERE booking_id = ${bookingId} AND to_status = 'CANCELLED_CLIENT'
+      ORDER BY occurred_at DESC, id DESC LIMIT 1`;
+    return row
+      ? {
+          fromStatus: row.from_status,
+          actorKind: row.actor_kind,
+          occurredAt: row.occurred_at,
+          metadata: row.metadata ?? {},
+        }
+      : null;
+  }
+
   async timeline(db: Db, bookingId: string): Promise<TimelineEntry[]> {
     const rows = await db<
       {
@@ -200,16 +224,29 @@ export class BookingReadsRepository {
    * A booking holds a redemption (and counts as "a booking" for first-booking promos) unless it
    * never got past a draft, was cancelled, or is a quote that expired unpaid.
    */
-  async promoUsage(db: Db, userId: string, promoCode: string, now: Date): Promise<PromoUsage> {
+  /**
+   * `phoneKey` (ADR-0030): bookings of an earlier, deleted account with the same number count as
+   * this person's too, so first-booking and per-person promos are not reused by signing up again.
+   */
+  async promoUsage(
+    db: Db,
+    userId: string,
+    promoCode: string,
+    now: Date,
+    phoneKey: string | null = null,
+  ): Promise<PromoUsage> {
+    const mine = phoneKey
+      ? db`(b.user_id = ${userId} OR b.client_phone_key = ${phoneKey})`
+      : db`b.user_id = ${userId}`;
     const holds = db`b.status NOT IN ('DRAFT', 'CANCELLED_CLIENT', 'CANCELLED_PRO')
       AND NOT (b.status = 'QUOTED' AND b.quote_expires_at <= ${now})`;
     const usedCode = db`EXISTS (SELECT 1 FROM booking_price_snapshots s
       WHERE s.booking_id = b.id AND upper(s.promo_code) = upper(${promoCode}))`;
     const [row] = await db<{ user_bookings: number; user_used: number; total_used: number }[]>`
       SELECT
-        (SELECT count(*)::int FROM bookings b WHERE b.user_id = ${userId} AND ${holds}) AS user_bookings,
+        (SELECT count(*)::int FROM bookings b WHERE ${mine} AND ${holds}) AS user_bookings,
         (SELECT count(*)::int FROM bookings b
-          WHERE b.user_id = ${userId} AND ${holds} AND ${usedCode}) AS user_used,
+          WHERE ${mine} AND ${holds} AND ${usedCode}) AS user_used,
         (SELECT count(*)::int FROM bookings b WHERE ${holds} AND ${usedCode}) AS total_used`;
     return {
       userBookingCount: row?.user_bookings ?? 0,

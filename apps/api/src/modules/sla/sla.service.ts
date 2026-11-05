@@ -31,6 +31,20 @@ const INTERNAL: readonly SlaKind[] = [
   'QA_COMPLETE',
 ];
 const RETENTION: readonly SlaKind[] = ['RAW_PURGE', 'JPEG_PURGE', 'LINK_REVOKE'];
+
+/**
+ * Ended without a delivery: no clock is owed (the same set `terminal` handles from the outbox).
+ * A clock firing between the status change and its outbox event is cancelled, never breached
+ * (ADR-0030). CLOSED is not here: its retention clocks still purge and revoke.
+ */
+const ENDED_UNDELIVERED: readonly BookingStatus[] = [
+  'DATA_LOSS',
+  'ABANDONED',
+  'CANCELLED_CLIENT',
+  'CANCELLED_PRO',
+  'PRO_NO_SHOW',
+  'ACCESS_DENIED',
+];
 /** Held while a quality escalation is open: the files may be needed (ADR-0016 D10). */
 const HELD_BY_ESCALATION: readonly SlaKind[] = ['JPEG_PURGE', 'LINK_REVOKE'];
 const MIN = 60_000;
@@ -126,6 +140,10 @@ export class SlaService {
       const booking = await this.bookings.lock(tx, ref.bookingId);
       const c = await this.clocks.lock(tx, clockId);
       if (c?.state !== 'ARMED' || c.pausedAt) return { outcome: 'SKIPPED' as const };
+      if (ENDED_UNDELIVERED.includes(booking.status)) {
+        await this.clocks.cancelArmed(tx, ref.bookingId);
+        return { outcome: 'SKIPPED' as const };
+      }
       if (now < c.dueAt) return { outcome: 'NOT_DUE' as const, timers: [timerOf(c)] };
       return this.resolveDue(tx, c, booking.status, booking.balancePaise, now);
     });

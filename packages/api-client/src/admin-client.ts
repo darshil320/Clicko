@@ -8,16 +8,20 @@ import {
   AdminBreachPage,
   type AdminBreachQuery,
   AdminCityList,
+  type AdminConfirmDataLossBody,
   type AdminConfirmIncidentBody,
   AdminConfirmIncidentResponse,
+  type AdminConfirmPartialLossBody,
   type AdminCreateStaffBody,
   AdminCreateStaffResponse,
+  AdminDataLossResponse,
   AdminDispatchDetail,
   AdminDispatchPage,
   type AdminGrantBody,
   AdminIncidentPage,
   type AdminListQuery,
   AdminLogoutResponse,
+  AdminPartialLossResponse,
   type AdminQaDecisionBody,
   AdminQaDecisionResponse,
   AdminQaPage,
@@ -28,7 +32,9 @@ import {
   AdminAttributeBreachBody as AttributeBreachSchema,
   AdminBookingQuery as BookingQuerySchema,
   AdminBreachQuery as BreachQuerySchema,
+  AdminConfirmDataLossBody as ConfirmDataLossSchema,
   AdminConfirmIncidentBody as ConfirmIncidentSchema,
+  AdminConfirmPartialLossBody as ConfirmPartialLossSchema,
   AdminCreateStaffBody as CreateStaffSchema,
   AdminGrantBody as GrantSchema,
   AdminQaDecisionBody as QaDecisionSchema,
@@ -179,6 +185,36 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
           schema: AdminBookingDetailWithAudit,
           auth: true,
         }),
+      /**
+       * ADR-0030 D2: the shoot files were lost before delivery. Ends the booking in DATA_LOSS and
+       * sends back everything paid, by rule. Four-eyes: the caller's code and a second person's.
+       */
+      confirmDataLoss: async (
+        bookingId: string,
+        body: AdminConfirmDataLossBody,
+        idem: Idempotent,
+      ) =>
+        post(
+          `/admin/bookings/${idSegment(bookingId)}/data-loss`,
+          AdminDataLossResponse,
+          idem,
+          checked(ConfirmDataLossSchema, body),
+        ),
+      /**
+       * ADR-0030 D2: part of the shoot was lost. The booking carries on; the affected share goes
+       * back as far as it can now, the rest after the balance. Once per booking; four-eyes.
+       */
+      confirmPartialLoss: async (
+        bookingId: string,
+        body: AdminConfirmPartialLossBody,
+        idem: Idempotent,
+      ) =>
+        post(
+          `/admin/bookings/${idSegment(bookingId)}/partial-loss`,
+          AdminPartialLossResponse,
+          idem,
+          checked(ConfirmPartialLossSchema, body),
+        ),
     },
 
     qa: {

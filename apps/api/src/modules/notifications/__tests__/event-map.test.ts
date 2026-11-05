@@ -20,6 +20,9 @@ const PAYOUT = '88888888-8888-4888-8888-888888888888';
 const STAFF = '99999999-9999-4999-8999-999999999999';
 const NOW = new Date('2026-11-14T06:30:00Z'); // 12:00 IST
 const TOKEN = 'c'.repeat(43);
+const never = (): never => {
+  throw new Error('missing template');
+};
 
 const facts = (over: Partial<BookingContactFacts> = {}): BookingContactFacts => ({
   bookingId: BOOKING,
@@ -286,6 +289,63 @@ describe('event map (ADR-0027 D2)', () => {
       TICKET,
     );
     expect(await resolve('ticket.raised', byStaff)).toEqual([]);
+  });
+
+  it('client cancelled → the client and the photographer who held the job; never the money', async () => {
+    const cancelled = event('booking.cancelled_client', {
+      reason: 'CLIENT_CANCELLED',
+      actor_kind: 'USER',
+      band: 'HOURS_24_TO_72',
+      refund_paise: 250_750,
+      kept_paise: 250_750,
+      assignment_id: ASSIGNMENT,
+      photographer_id: PRO,
+    });
+    const intents = (
+      await Promise.all(
+        mappingsFor('booking.cancelled_client').map(async (m) =>
+          (
+            await m.resolve(cancelled, ctx())
+          ).map((i) => ({
+            ...i,
+            variables: validateVariables(templateOf(m.template) ?? never(), i.variables),
+          })),
+        ),
+      )
+    ).flat();
+    expect(intents).toEqual([
+      {
+        recipient: { kind: 'USER', id: USER },
+        variables: { bookingRef: 'CLK-1042', when: 'Sun 15 Nov, 4:30 pm' },
+        bookingId: BOOKING,
+        data: { template: 'BOOKING_CANCELLED', bookingId: BOOKING },
+      },
+      {
+        recipient: { kind: 'PHOTOGRAPHER', id: PRO },
+        variables: { when: 'Sun 15 Nov, 4:30 pm' },
+        bookingId: BOOKING,
+        data: { template: 'PRO_JOB_CANCELLED', bookingId: BOOKING },
+      },
+    ]);
+    expect(JSON.stringify(intents)).not.toContain('250');
+
+    // Nobody had accepted: only the client hears.
+    const unassigned = event('booking.cancelled_client', {
+      reason: 'CLIENT_CANCELLED',
+      photographer_id: null,
+    });
+    const [pro] = mappingsFor('booking.cancelled_client').filter(
+      (m) => m.template === 'PRO_JOB_CANCELLED',
+    );
+    expect(await pro?.resolve(unassigned, ctx())).toEqual([]);
+    // Not the client's own cancellation (a declined capture, an expired payment window, or the
+    // unpaid cancel in the app): no message from these templates.
+    for (const reason of ['CAPTURE_FAILED', 'PAYMENT_WINDOW_EXPIRED', undefined]) {
+      for (const m of mappingsFor('booking.cancelled_client')) {
+        const e = event('booking.cancelled_client', { reason, photographer_id: PRO });
+        expect(await m.resolve(e, ctx())).toEqual([]);
+      }
+    }
   });
 
   it('payout withheld and released → the photographer, with the gross and the shoot date only', async () => {

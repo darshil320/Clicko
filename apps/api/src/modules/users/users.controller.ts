@@ -13,9 +13,11 @@ export class UsersController {
 
   @Get()
   async me(@CurrentSubject() subject: Subject) {
-    // UserGuard has checked the kind and that the account exists and is not blocked.
+    // UserGuard has checked the kind and that the account exists, is not blocked or deleted.
     const user = await this.users.findById(subject.id);
-    if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Account not found' });
+    if (!user?.phone) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Account not found' });
+    }
     return ok({ id: user.id, phone: user.phone, fullName: user.fullName });
   }
 }

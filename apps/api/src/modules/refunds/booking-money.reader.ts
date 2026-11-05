@@ -10,9 +10,10 @@ import type postgres from 'postgres';
 import { SQL } from '../../infra/db/db.module';
 import { PaymentRefundsService } from '../payments/payment-refunds.service';
 import type { RefundTarget } from '../payments/refunds.types';
+import { isSupersedable } from './refund-rules';
 import type { CreditRecord, Db, RefundRecord } from './refunds.types';
 import { CreditsRepository } from './repositories/credits.repository';
-import { RefundsRepository } from './repositories/refunds.repository';
+import { IN_FLIGHT, RefundsRepository } from './repositories/refunds.repository';
 
 export interface RefundableTarget extends RefundTarget {
   readonly inFlightPaise: bigint;
@@ -97,6 +98,27 @@ export class BookingMoneyReader {
       const left = t.capturedPaise - t.refundedPaise - held;
       return { ...t, inFlightPaise: held, refundablePaise: left > 0n ? left : 0n };
     });
+  }
+
+  /**
+   * What the booking still holds of the client's money once its supersedable refunds (REQUESTED or
+   * FAILED, not from a review settlement) are closed: captured − refunded − refunds still on their
+   * way back. The cancellation quote shows this, and after `supersedeOpenByRuleIn` it equals what
+   * `refundTargets` leaves refundable — so the quote and the POST agree.
+   */
+  async heldIfOpenSuperseded(db: Db, bookingId: string): Promise<bigint> {
+    const [targets, refunds] = await Promise.all([
+      this.payments.targetsForBooking(bookingId, db),
+      this.refunds.forBooking(db, bookingId),
+    ]);
+    const kept = sum(targets.map((t) => t.capturedPaise - t.refundedPaise));
+    const onTheirWay = sum(
+      refunds
+        .filter((r) => IN_FLIGHT.includes(r.status) && !isSupersedable(r))
+        .map((r) => r.amountPaise),
+    );
+    const held = kept - onTheirWay;
+    return held > 0n ? held : 0n;
   }
 
   /**

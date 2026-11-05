@@ -140,3 +140,12 @@ export function creditExpiresAt(issuedAt: Date): Date {
   const day = Math.min(ist.getUTCDate(), lastDay);
   return new Date(Date.UTC(year, month, day, 23, 59, 59, 999) - IST_OFFSET_MS);
 }
+
+/**
+ * A refund a rule refund supersedes when the client cancels: still waiting for approval, or failed
+ * at the gateway — and not one a review settlement raised (that settlement stands on its own).
+ */
+export const isSupersedable = (r: {
+  readonly status: string;
+  readonly reviewResolutionId: string | null;
+}): boolean => (r.status === 'REQUESTED' || r.status === 'FAILED') && r.reviewResolutionId === null;

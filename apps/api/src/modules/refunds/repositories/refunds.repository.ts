@@ -23,6 +23,7 @@ interface Row {
   decision_note: string | null;
   provider_refund_id: string | null;
   processing_at: Date | null;
+  last_sent_at: Date | null;
   attempts: number;
   completed_at: Date | null;
   failed_at: Date | null;
@@ -48,6 +49,7 @@ const toRecord = (r: Row): RefundRecord => ({
   decisionNote: r.decision_note,
   providerRefundId: r.provider_refund_id,
   processingAt: r.processing_at,
+  lastSentAt: r.last_sent_at,
   attempts: r.attempts,
   completedAt: r.completed_at,
   failedAt: r.failed_at,
@@ -81,9 +83,43 @@ export interface RefundPageQuery {
   readonly limit: number;
 }
 
+/**
+ * A refund a published rule decides (the client's cancellation under the T&C §3 ladder): asked
+ * for by the client (USER) or the system, never approved by a person.
+ */
+export interface NewRuleRefund {
+  readonly paymentId: string;
+  readonly bookingId: string;
+  readonly amountPaise: bigint;
+  readonly reasonCode: RefundReasonCode;
+  readonly reasonNote: string;
+  readonly requestedByKind: 'USER' | 'SYSTEM';
+  readonly requestedById: string | null;
+  /** The rule that decided it, e.g. "T&C §3.1" — the decision note on the row. */
+  readonly rule: string;
+  readonly createdAt: Date;
+}
+
 /** refunds (schema §11 + addendum 0005). Status changes only in the caller's transaction. */
 @Injectable()
 export class RefundsRepository {
+  /**
+   * Straight to PROCESSING, attempt 1, no approver (approved_by stays NULL: the rule is the
+   * decision, recorded in decision_note). The caller sends it to the gateway after commit.
+   */
+  async insertByRule(tx: Tx, r: NewRuleRefund): Promise<RefundRecord> {
+    const [row] = await tx<Row[]>`
+      INSERT INTO refunds (payment_id, booking_id, amount_paise, reason_code, reason_note,
+                           requested_by_kind, requested_by_id, status, decision_note,
+                           processing_at, attempts, created_at)
+      VALUES (${r.paymentId}, ${r.bookingId}, ${pg(r.amountPaise)}, ${r.reasonCode}, ${r.reasonNote},
+              ${r.requestedByKind}, ${r.requestedById}, 'PROCESSING', ${r.rule},
+              ${r.createdAt}, 1, ${r.createdAt})
+      RETURNING *`;
+    if (!row) throw new Error('refunds.insertByRule: no row returned');
+    return toRecord(row);
+  }
+
   async insert(tx: Tx, r: NewRefund): Promise<RefundRecord> {
     const [row] = await tx<Row[]>`
       INSERT INTO refunds (payment_id, booking_id, amount_paise, reason_code, reason_note,
@@ -93,6 +129,19 @@ export class RefundsRepository {
       RETURNING *`;
     if (!row) throw new Error('refunds.insert: no row returned');
     return toRecord(row);
+  }
+
+  /**
+   * PROCESSING refunds with no gateway id yet, last sent (or, never sent, put in PROCESSING)
+   * before `before`: the ones a crash or a thrown gateway call may have left behind. Oldest first.
+   */
+  async unsent(db: Db, before: Date, limit: number): Promise<string[]> {
+    const rows = await db<{ id: string }[]>`
+      SELECT id FROM refunds
+      WHERE status = 'PROCESSING' AND provider_refund_id IS NULL
+        AND coalesce(last_sent_at, processing_at) < ${before}
+      ORDER BY coalesce(last_sent_at, processing_at), id LIMIT ${limit}`;
+    return rows.map((r) => r.id);
   }
 
   async find(db: Db, id: string): Promise<RefundRecord | null> {
@@ -173,6 +222,35 @@ export class RefundsRepository {
       UPDATE refunds
          SET status = 'REJECTED', rejected_by = ${staffId}, rejected_at = ${at}, decision_note = ${note}
        WHERE id = ${id} AND status = 'REQUESTED'`;
+  }
+
+  /**
+   * REQUESTED or FAILED → REJECTED because something larger replaced it (ADR-0030: a complete data
+   * loss refunds everything). Returns false when the refund had already moved on.
+   */
+  async supersede(tx: Tx, id: string, staffId: string, note: string, at: Date): Promise<boolean> {
+    const rows = await tx`
+      UPDATE refunds
+         SET status = 'REJECTED', rejected_by = ${staffId}, rejected_at = ${at}, decision_note = ${note}
+       WHERE id = ${id} AND status IN ('REQUESTED', 'FAILED')`;
+    return rows.count === 1;
+  }
+
+  /** Just before each gateway send: the resend wait counts from here (addendum 0019). */
+  async markSent(db: Db, id: string, at: Date): Promise<void> {
+    await db`UPDATE refunds SET last_sent_at = ${at} WHERE id = ${id} AND status = 'PROCESSING'`;
+  }
+
+  /**
+   * REQUESTED or FAILED → REJECTED with no staff rejecter: a refund the published rule decided
+   * replaces it (the client cancelled). `rejected_by_rule` stands in for rejected_by (addendum 0019).
+   */
+  async supersedeByRule(tx: Tx, id: string, note: string, at: Date): Promise<boolean> {
+    const rows = await tx`
+      UPDATE refunds
+         SET status = 'REJECTED', rejected_by_rule = true, rejected_at = ${at}, decision_note = ${note}
+       WHERE id = ${id} AND status IN ('REQUESTED', 'FAILED')`;
+    return rows.count === 1;
   }
 
   /** FAILED → PROCESSING: a new gateway attempt (new receipt). */

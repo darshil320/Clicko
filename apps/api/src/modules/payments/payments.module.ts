@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../common/clock';
 import { ENV, type Env } from '../../config/env';
+import { PaymentAccountErasure } from './account-erasure';
 import { AuthHoldsService } from './auth-holds.service';
 import { PAYMENT_GATEWAY, type PaymentGatewayPort } from './gateways/payment-gateway.port';
 import { RazorpayGateway } from './gateways/razorpay.gateway';
@@ -53,7 +54,14 @@ function gatewayFor(env: Env, clock: Clock): PaymentGatewayPort {
     RefundTargetsRepository,
     CreditNotesRepository,
     PaymentRefundsService,
+    PaymentAccountErasure,
   ],
-  exports: [PaymentsService, AuthHoldsService, PaymentRefundsService, PAYMENT_GATEWAY],
+  exports: [
+    PaymentsService,
+    AuthHoldsService,
+    PaymentRefundsService,
+    PAYMENT_GATEWAY,
+    PaymentAccountErasure,
+  ],
 })
 export class PaymentsModule {}

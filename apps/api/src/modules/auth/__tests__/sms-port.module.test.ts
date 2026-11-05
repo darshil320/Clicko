@@ -20,6 +20,8 @@ const MSG91_OTP = {
   MSG91_DLT_ENTITY_ID: '1201160000000000000',
   MSG91_OTP_FLOW_ID: '65f0a1b2c3d4e5f6a7b8c9d0',
   MSG91_OTP_DLT_TEMPLATE_ID: '1107172000000000042',
+  MSG91_DELETE_OTP_FLOW_ID: '65f0a1b2c3d4e5f6a7b8c9d1',
+  MSG91_DELETE_OTP_DLT_TEMPLATE_ID: '1107172000000000043',
 };
 
 /** A test-mode environment with no database or Redis behind it (nothing connects at compile). */

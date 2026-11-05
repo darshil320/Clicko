@@ -99,6 +99,15 @@ export const DispatchOutcome = z.enum([
 ]);
 export type DispatchOutcome = z.infer<typeof DispatchOutcome>;
 
-/** Why a payout is owed (addendum 0017, ADR-0027 D5). */
-export const PayoutBasis = z.enum(['DELIVERED', 'DATA_LOSS', 'ACCESS_DENIED', 'CLIENT_ABSENT']);
+/**
+ * Why a payout is owed (addendum 0017, ADR-0027 D5). CLIENT_CANCELLED (addendum 0019): the client
+ * cancelled after this photographer accepted and Clickco kept part of the advance.
+ */
+export const PayoutBasis = z.enum([
+  'DELIVERED',
+  'DATA_LOSS',
+  'ACCESS_DENIED',
+  'CLIENT_ABSENT',
+  'CLIENT_CANCELLED',
+]);
 export type PayoutBasis = z.infer<typeof PayoutBasis>;

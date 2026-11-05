@@ -57,6 +57,9 @@ export class AcceptanceCaptureService {
     await this.holds.withLock(hold.id, async () => {
       const current = await this.holds.held(this.sql, bookingId);
       if (current?.id !== hold.id) return;
+      // Again under the lease: the booking may have gone back to dispatch (or been cancelled)
+      // since the first look. record() re-checks under the booking lock too (security review).
+      if (!(await this.captureExpected(bookingId))) return;
       const result = await this.holds.capture(current);
       if (result === 'UNKNOWN') throw new CaptureUnknownError(hold.id);
       if (result === 'DECLINED') {
@@ -74,13 +77,28 @@ export class AcceptanceCaptureService {
     return (await this.assignments.engagedForBooking(this.sql, bookingId)) !== null;
   }
 
-  /** Lock order booking → payment (ADR-0012 D4). */
+  /**
+   * Lock order booking → payment (ADR-0012 D4). The status is read again under the lock: the
+   * capture was decided before the gateway call, and the booking may since have gone back to
+   * dispatch (the photographer cancelled) or been cancelled. Then the money is booked without an
+   * invoice and flagged for a refund, as the webhook path does (security review M1).
+   */
   private async record(tx: Tx, bookingId: string, hold: PaymentRecord, now: Date): Promise<void> {
-    await this.bookings.lock(tx, bookingId);
-    const basis = await this.bookings.quoteSnapshotTotals(tx, bookingId);
+    const booking = await this.bookings.lock(tx, bookingId);
+    const expected = ACCEPTED_STATUSES.includes(booking.status);
+    const basis = expected ? await this.bookings.quoteSnapshotTotals(tx, bookingId) : null;
     const rec = await this.holds.recordCapture(tx, hold.id, now, basis);
     if (rec.kind !== 'ALREADY_RECORDED') {
       await this.bookings.addAmountPaid(tx, bookingId, rec.amountPaise);
+    }
+    if (!expected && rec.kind === 'RECORDED') {
+      this.logger.warn(`Held payment captured on a ${booking.status} booking ${bookingId}`);
+      await this.payments.flagForReviewOnce(
+        tx,
+        hold,
+        `HELD_PAYMENT_CAPTURED_WHILE_${booking.status}`,
+        rec.amountPaise,
+      );
     }
   }
 

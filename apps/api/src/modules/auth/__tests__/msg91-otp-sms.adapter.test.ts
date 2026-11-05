@@ -9,6 +9,8 @@ import { SmsSendError } from '../sms/sms.port';
 const PHONE = '+919812345678';
 const CODE = '424242';
 const OTP_FLOW = { flowId: '65f0a1b2c3d4e5f6a7b8c9d0', dltTemplateId: '1107172000000000042' };
+/** ADR-0030: the account-deletion code has its own DLT template (it must not read as a sign-in). */
+const DELETE_FLOW = { flowId: '65f0a1b2c3d4e5f6a7b8c9d1', dltTemplateId: '1107172000000000043' };
 const CREDENTIALS = { authKey: 'msg91-auth-key-test', senderId: 'CLICKO' };
 
 class RecordingLogger {
@@ -21,7 +23,14 @@ class RecordingLogger {
 function setup(fetch: FetchLike, timeoutMs?: number) {
   const logger = new RecordingLogger();
   const client = new Msg91FlowClient(CREDENTIALS, fetch, timeoutMs);
-  return { adapter: new Msg91OtpSmsAdapter(OTP_FLOW, client, logger), logger };
+  return {
+    adapter: new Msg91OtpSmsAdapter(
+      { signIn: OTP_FLOW, accountDelete: DELETE_FLOW },
+      client,
+      logger,
+    ),
+    logger,
+  };
 }
 
 /** A fetch that never answers: only the request's abort signal ends it (a provider timeout). */
@@ -51,6 +60,19 @@ function expectNoPii(lines: readonly string[]): void {
 }
 
 describe('MSG91 OTP SMS adapter (SMS_ADAPTER=dlt, ADR-0029 D1)', () => {
+  it('picks the template by purpose: sign-in for LOGIN and PRO_LOGIN, its own for a deletion', async () => {
+    const { fetch, requests } = fixtureFetch(MSG91_FIXTURES.sent);
+    const { adapter } = setup(fetch);
+    await adapter.sendOtp(PHONE, CODE, 'LOGIN');
+    await adapter.sendOtp(PHONE, CODE, 'PRO_LOGIN');
+    await adapter.sendOtp(PHONE, CODE, 'ACCOUNT_DELETE');
+    await adapter.sendOtp(PHONE, CODE);
+    const flows = requests.map(
+      (r) => (JSON.parse(String(r.body)) as { template_id: string }).template_id,
+    );
+    expect(flows).toEqual([OTP_FLOW.flowId, OTP_FLOW.flowId, DELETE_FLOW.flowId, OTP_FLOW.flowId]);
+  });
+
   it('sends the OTP flow: auth key header, DLT sender, digits-only number, the code as ##otp##', async () => {
     const { fetch, requests } = fixtureFetch(MSG91_FIXTURES.sent);
     const { adapter, logger } = setup(fetch);

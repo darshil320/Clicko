@@ -11,6 +11,7 @@ import { ServiceabilityModule } from '../serviceability/serviceability.module';
 import { AcceptanceCaptureService } from './acceptance-capture.service';
 import { AssignmentReads } from './assignment-reads.service';
 import { AssignmentsService } from './assignments.service';
+import { DispatchReleaseService } from './cancellation-release.service';
 import { DispatchSubscribers } from './dispatch.subscribers';
 import { DispatchDeskService } from './dispatch-desk.service';
 import { DispatchEngine } from './dispatch-engine.service';
@@ -37,7 +38,8 @@ import { VenuePoints } from './venue-points';
  * incentive) and serviceability (venue fallback); the PostGIS queries live in
  * repositories/ (eligibility, geofence); the safety module's reader names the photographers a
  * client blocked (ADR-0027 D4). AssignmentsService is the on-site write path for the
- * onsite module (ADR-0013 D1). The dev desk controller is in DevToolsModule.
+ * onsite module (ADR-0013 D1); DispatchReleaseService lets go of a booking the client cancels.
+ * The dev desk controller is in DevToolsModule.
  */
 @Module({
   imports: [
@@ -73,6 +75,7 @@ import { VenuePoints } from './venue-points';
     DispatchDeskService,
     DispatchSubscribers,
     AssignmentReads,
+    DispatchReleaseService,
   ],
   exports: [
     DispatchTimersService,
@@ -80,6 +83,7 @@ import { VenuePoints } from './venue-points';
     DispatchDeskService,
     AssignmentReads,
     AssignmentsService,
+    DispatchReleaseService,
   ],
 })
 export class DispatchModule {}

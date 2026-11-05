@@ -19,10 +19,12 @@ class Jobs implements JobScheduler {
 
 class Sms implements SmsPort {
   sent: Array<{ phone: string; code: string }> = [];
+  purposes: string[] = [];
   fail = false;
-  async sendOtp(phone: string, code: string) {
+  async sendOtp(phone: string, code: string, purpose = 'LOGIN') {
     if (this.fail) throw new Error('gateway down');
     this.sent = [...this.sent, { phone, code }];
+    this.purposes = [...this.purposes, purpose];
   }
 }
 
@@ -66,6 +68,31 @@ describe('OtpDelivery (ADR-0012 D8: SMS off the request path)', () => {
     });
     await delivery.deliver(jobs.queued[0]?.data ?? {});
     expect(sms.sent).toEqual([{ phone: PHONE, code: '111222' }]);
+  });
+
+  it('carries the purpose to the SMS, sealed: a deletion code goes out on its own template', async () => {
+    const { jobs, sms, delivery } = setup();
+    await delivery.enqueue({
+      challengeId: 'ch-del',
+      phone: PHONE,
+      code: '565656',
+      deliver: true,
+      expiresAt,
+      purpose: 'ACCOUNT_DELETE',
+    });
+    expect(JSON.stringify(jobs.queued[0]?.data)).not.toContain('ACCOUNT_DELETE');
+    await delivery.deliver(jobs.queued[0]?.data ?? {});
+    expect(sms.purposes).toEqual(['ACCOUNT_DELETE']);
+    // A job queued before the purpose existed is a sign-in code.
+    await delivery.enqueue({
+      challengeId: 'ch-old',
+      phone: PHONE,
+      code: '575757',
+      deliver: true,
+      expiresAt,
+    });
+    await delivery.deliver(jobs.queued[1]?.data ?? {});
+    expect(sms.purposes).toEqual(['ACCOUNT_DELETE', 'LOGIN']);
   });
 
   it('a decoy (number we will not reveal) is queued the same way but never sent', async () => {

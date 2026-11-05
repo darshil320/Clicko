@@ -35,6 +35,8 @@ export interface NewBooking {
   readonly quoteExpiresAt: Date;
   readonly modelReleaseConsent: boolean;
   readonly modelReleaseConsentAt: Date | null;
+  /** The account phone's promo key (ADR-0030; kept after the account is deleted). */
+  readonly clientPhoneKey: string | null;
   readonly createdAt: Date;
 }
 
@@ -87,14 +89,14 @@ export class BookingsRepository {
         venue_pincode, venue_address, venue_landmark, travel_zone, travel_distance_km,
         booker_name, booker_phone, subject_name, subject_phone, gallery_recipient, special_requirements,
         ruleset_id, total_paise, advance_paise, balance_paise, quote_expires_at,
-        model_release_consent, model_release_consent_at, created_at)
+        model_release_consent, model_release_consent_at, client_phone_key, created_at)
       VALUES (
         ${b.userId}, ${b.cityId}, ${b.categoryId}, ${b.tier}, ${b.scheduledStart}, ${b.scheduledHours},
         ${b.emergencyBand}, ${b.venuePincode}, ${b.venueAddress}, ${b.venueLandmark}, ${b.travelZone},
         ${b.travelDistanceKm}, ${b.bookerName}, ${b.bookerPhone}, ${b.subjectName}, ${b.subjectPhone},
         ${b.galleryRecipient}, ${b.specialRequirements}, ${b.rulesetId}, ${pg(b.totalPaise)},
         ${pg(b.advancePaise)}, ${pg(b.balancePaise)}, ${b.quoteExpiresAt},
-        ${b.modelReleaseConsent}, ${b.modelReleaseConsentAt}, ${b.createdAt})
+        ${b.modelReleaseConsent}, ${b.modelReleaseConsentAt}, ${b.clientPhoneKey}, ${b.createdAt})
       RETURNING id`;
     if (!row) throw new Error('insertBooking: no row returned');
     return row.id;

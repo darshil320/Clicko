@@ -97,6 +97,18 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0019 is byte-identical to docs/schema-addenda/0019-client-cancellation-payout.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0019_client_cancellation_payout.sql')).toBe(
+      read('docs/schema-addenda/0019-client-cancellation-payout.sql'),
+    );
+  });
+
+  it('0020 is byte-identical to docs/schema-addenda/0020-account-deletion.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0020_account_deletion.sql')).toBe(
+      read('docs/schema-addenda/0020-account-deletion.sql'),
+    );
+  });
+
   it('0014 is byte-identical to docs/schema-addenda/0014-performance-indexes.sql', () => {
     expect(read('apps/api/src/infra/db/migrations/0014_performance_indexes.sql')).toBe(
       read('docs/schema-addenda/0014-performance-indexes.sql'),
@@ -123,6 +135,8 @@ describe('migrations mirror the specification (ADR-0006)', () => {
       '0016_reviews_ugc.sql',
       '0017_payout_basis.sql',
       '0018_outbox_claim_token.sql',
+      '0019_client_cancellation_payout.sql',
+      '0020_account_deletion.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

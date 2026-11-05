@@ -302,10 +302,13 @@ describe.runIf(TEST_DATABASE_URL)('checkout end to end (booking → pay → webh
       idempotencyKey: 'pay-cancelled-01',
     });
     expect(pay.json.error.code).toBe('BOOKING_NOT_PAYABLE');
+    // Paid: the T&C §3 ladder applies, so the refund from the quote must be confirmed
+    // (cancellations.e2e.test.ts covers the ladder itself).
     const confirmed = await e2e.call('POST', `/bookings/${bookingId}/cancel`, {
       token,
       idempotencyKey: 'cancel-booking-03',
     });
-    expect(confirmed.json.error.code).toBe('CANCEL_NOT_AVAILABLE');
+    expect(confirmed.status).toBe(422);
+    expect(confirmed.json.error.code).toBe('CANCELLATION_CONFIRMATION_REQUIRED');
   });
 });

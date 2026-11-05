@@ -99,7 +99,7 @@ export class OtpService {
     });
 
     try {
-      await this.delivery.enqueue({ challengeId: id, phone, code, deliver, expiresAt });
+      await this.delivery.enqueue({ challengeId: id, phone, code, deliver, expiresAt, purpose });
     } catch (error) {
       // The queue (Redis) is down — the same for every number, so this reveals nothing. The row
       // stays and counts toward rate limits. Name only: errors can carry the request.

@@ -59,6 +59,7 @@ export const BASIS: Readonly<Record<PayoutBasis, string>> = {
   DATA_LOSS: 'Files lost',
   ACCESS_DENIED: 'Access denied',
   CLIENT_ABSENT: "Client didn't attend",
+  CLIENT_CANCELLED: 'Client cancelled late',
 };
 
 /** The release confirm: "₹5,200 will be paid to Asha Patel in the next batch." */
