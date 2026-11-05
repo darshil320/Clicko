@@ -66,13 +66,16 @@ cd apps/api && TEST_DATABASE_URL=postgres://clickco:clickco_local_only@localhost
 ```
 Last full run: API 1,700 tests green (3 runs in a row), typecheck 17/17.
 
-**Launch gaps found in S12 (code, no owner input needed):**
-- A paid booking cannot be cancelled by anyone, so the T&C refund ladder is unreachable.
-- The client app has no account deletion (Apple guideline 5.1.1(v); DPDP).
-- No staff route reaches DATA_LOSS.
-- **Uncommitted:** the D5 app screens (booking money section, support tickets, Pro paid transfers)
-  are half-done in apps/client and apps/pro. The owner stopped that agent; ask before finishing or
-  discarding them.
+**Launch gaps found in S12: closed** (`3aa1ae9`, ADR-0030/0031, migrations 0019/0020):
+- client cancellation with the T&C ladder (peak <7 d = flat 50%), rule refunds, send sweep;
+- client account deletion (own DLT OTP template, erasure list, promo phone-HMAC);
+- complete and partial DATA_LOSS staff routes with four-eyes.
+App screens for cancellation and deletion are NOT built yet (API only). The D5 screens are
+committed (`e262dbb`).
+
+**API follow-ups:** tickets don't return the client's own message, there is no in-app ticket
+reply, and BookingDetail has no `deliveredAt`. Photographer deletion; media purge on DATA_LOSS; a
+data-loss notification; a retention sweep once the owner sets periods.
 
 **Owner-gated launch blockers:** the Google Drive storage adapter is a stub (needs Google Workspace
 + Shared Drive, gate S7); approve `@sentry/node`, `@sentry/react-native`, `posthog-react-native`,
@@ -136,7 +139,7 @@ T=$(gh auth token --user darshil320) && git -c credential.helper= -c "credential
 - **Every money route:** idempotent.
 - **Every state change:** emits an outbox event in the same transaction.
 - **Specs:** `docs/clickco-*.md/.sql` are read-only. New tables go to `docs/schema-addenda/NNNN`
-  first, then a byte-identical migration. Next free number: **0019**.
+  first, then a byte-identical migration. Next free number: **0021**.
 - **Admin routes:** StaffGuard + `@Roles` + city scope + `@Audited` + `AuditService.record` in the
   same transaction. The desk list and role matrix live only in
   `packages/contracts/src/admin-desks.ts`.
@@ -153,7 +156,9 @@ T=$(gh auth token --user darshil320) && git -c credential.helper= -c "credential
 |---|---|
 | Mobile push | Approve `expo-notifications`. |
 | GitHub | `gh auth refresh -h github.com -s workflow --user darshil320` so the CI workflow can be pushed. |
-| Payouts | Confirm the undelivered-shoot payout amounts (ADR-0027 D5a) and the ABANDONED rule. |
+| Payouts | Confirm the undelivered-shoot payout amounts (ADR-0027 D5a), the ABANDONED rule, the late-cancellation photographer share (`CLIENT_CANCELLATION_PAYOUT`), the peak-season dates, and whether losses on Clickco storage count toward the G-13 cap. |
+| DLT | Register templates: login OTP, account-deletion OTP, `BOOKING_CANCELLED`, `PRO_JOB_CANCELLED`, plus every lifecycle SMS in `MSG91_TEMPLATES`. |
+| Retention | How long tickets, complaints and equipment claims are kept after an account is deleted. |
 | Penalties | Amounts for no-show and late cancellation (flat per type?). Today they deduct nothing. |
 | CA | GST on credit notes issued after the s.34(2) deadline. |
 | CA | TDS on gross vs net. |
