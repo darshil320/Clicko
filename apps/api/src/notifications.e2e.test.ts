@@ -344,6 +344,8 @@ describe.runIf(TEST_DATABASE_URL)(
         }),
       });
       expect(assigned?.text).not.toContain(PRO_PHONE.slice(3));
+      // v2: Meta refuses a body that starts with a variable.
+      expect(assigned?.text).toMatch(/^Your photographer Meera will shoot your booking CLK-/);
       const [binding] = await e2e.db.sql<
         { assignment_id: string; user_id: string; virtual_number: string; closes_at: Date | null }[]
       >`SELECT assignment_id, user_id, virtual_number, closes_at FROM call_bindings
@@ -437,6 +439,7 @@ describe.runIf(TEST_DATABASE_URL)(
       await drainOutbox(e2e);
       await sendDue();
       expect(lastWhatsApp()?.templateCode).toBe('PHOTOGRAPHER_ON_THE_WAY');
+      expect(lastWhatsApp()?.text).toMatch(/^Your photographer Meera is on the way to your/);
 
       setNow(e2e, new Date(START.getTime() - 10 * MIN));
       expect((await proCall('check-in', fixAt(0.05, 0, SURAT_CENTRE))).status).toBe(200);
@@ -446,6 +449,7 @@ describe.runIf(TEST_DATABASE_URL)(
         templateCode: 'CHECKED_IN',
         variables: expect.objectContaining({ photographerName: 'Meera' }),
       });
+      expect(lastWhatsApp()?.text).toMatch(/^Your photographer Meera has arrived for your/);
 
       setNow(e2e, new Date(START.getTime() + 5 * MIN));
       expect((await proCall('start')).status).toBe(200);
@@ -476,6 +480,10 @@ describe.runIf(TEST_DATABASE_URL)(
       const [binding] = await e2e.db.sql<{ closes_at: Date | null }[]>`
         SELECT closes_at FROM call_bindings WHERE assignment_id = ${assignmentId}`;
       expect(binding?.closes_at).toEqual(new Date(checkedOutAt.getTime() + 2 * HOUR));
+      const versions = await e2e.db.sql<{ template_code: string; template_version: number }[]>`
+        SELECT DISTINCT template_code, template_version FROM notification_sends
+        WHERE template_code IN ('PHOTOGRAPHER_ASSIGNED', 'PHOTOGRAPHER_ON_THE_WAY', 'CHECKED_IN')`;
+      expect(versions.map((v) => v.template_version)).toEqual([2, 2, 2]);
       const types = (await sends()).filter((r) => r.recipient_kind === 'USER');
       expect(new Set(types.map((r) => r.template_code))).toEqual(
         new Set([

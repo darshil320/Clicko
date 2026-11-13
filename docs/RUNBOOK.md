@@ -789,7 +789,7 @@ pnpm --filter @clickco/api staff:create <email> "<full name>" SUPER_ADMIN
 
 > Hi <first name>, this is Clickco support. We had a technical problem on <date> from <time> to
 > <time> IST that affected your booking <REF>. <One line: what happened to it.> Next: <we deliver by
-> … / your refund of ₹… is on its way, 5–7 working days / nothing, your booking stands>. We are
+> … / your refund of ₹… is on its way, 7–10 working days (T&C §3.9) / nothing, your booking stands>. We are
 > sorry. Reply here with any question.
 
 ### 12.3 Photographer

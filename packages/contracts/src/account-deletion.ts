@@ -28,6 +28,8 @@ export const AccountDeletionBlocker = z.object({
   bookingId: Uuid,
   /** CLK-…, as the app shows it. */
   reference: z.string(),
+  /** When the booking's shoot is (or was) scheduled, so the screen needs no second call. */
+  scheduledStart: IsoDateTime,
   /** One plain sentence for the screen. */
   message: z.string(),
 });

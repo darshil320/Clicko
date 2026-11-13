@@ -128,14 +128,20 @@ export function ticketMessageEffect(
 /** The client's own care entry points (ADR-0027 D5). Owner rulings change these, not code. */
 export const CLIENT_CARE_CONFIG = {
   /**
-   * Per IP on the client care writes (replaces the global 120/min for these routes; in memory per
-   * instance until the throttler moves to Redis, ADR-0027 D6). The daily cap below is shared.
+   * Per IP bucket, one budget shared by the client care writes (raise a ticket, reply, report a
+   * quality issue), in place of the global 120/min on those routes. Counted in Redis (the
+   * throttler storage), so shared across instances; the daily caps below are per client.
    */
   writesPerMinutePerIp: 10,
   /** Tickets one client may raise in 24 h (counted in Postgres: shared across instances). */
   ticketsPerUserPerDay: 5,
   /** GET /me/tickets answers the newest this many. */
   ticketListLimit: 50,
+  /**
+   * Replies one client may post in the app in 24 h, across their tickets (counted in Postgres
+   * under the client's lock, like the ticket cap).
+   */
+  ticketRepliesPerUserPerDay: 20,
   /** DELIVERED lasts 30 days, then the booking closes (ADR-0016 D10 LINK_REVOKE). */
   qualityReportWindowDays: 30,
 } as const;

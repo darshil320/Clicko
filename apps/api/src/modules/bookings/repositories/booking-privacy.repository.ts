@@ -7,18 +7,21 @@ export interface ClientBookingFacts {
   readonly bookingId: string;
   readonly reference: string;
   readonly status: BookingStatus;
+  readonly scheduledStart: Date;
 }
 
 interface Row {
   id: string;
   reference: string;
   status: BookingStatus;
+  scheduled_start: Date;
 }
 
 const toFacts = (r: Row): ClientBookingFacts => ({
   bookingId: r.id,
   reference: r.reference,
   status: r.status,
+  scheduledStart: r.scheduled_start,
 });
 
 /**
@@ -37,7 +40,7 @@ export const ERASED_BOOKING = {
 export class BookingPrivacyRepository {
   async forClient(db: Db, userId: string): Promise<ClientBookingFacts[]> {
     const rows = await db<Row[]>`
-      SELECT id, reference, status FROM bookings WHERE user_id = ${userId}
+      SELECT id, reference, status, scheduled_start FROM bookings WHERE user_id = ${userId}
       ORDER BY created_at, id`;
     return rows.map(toFacts);
   }
@@ -45,7 +48,7 @@ export class BookingPrivacyRepository {
   /** Every booking of the client under FOR UPDATE (id order, the same as any other locker). */
   async lockForClient(tx: Tx, userId: string): Promise<ClientBookingFacts[]> {
     const rows = await tx<Row[]>`
-      SELECT id, reference, status FROM bookings WHERE user_id = ${userId}
+      SELECT id, reference, status, scheduled_start FROM bookings WHERE user_id = ${userId}
       ORDER BY id FOR UPDATE`;
     return rows.map(toFacts);
   }

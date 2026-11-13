@@ -1,4 +1,9 @@
-import { type ProEarnings, ProEarnings as ProEarningsSchema } from '@clickco/contracts';
+import {
+  type EndedEarlyJob,
+  type PayoutBasis,
+  type ProEarnings,
+  ProEarnings as ProEarningsSchema,
+} from '@clickco/contracts';
 import { fromPaiseBigint } from '@clickco/utils';
 import { Inject, Injectable } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../common/clock';
@@ -11,6 +16,14 @@ import { bucketEarnings } from './rules/earnings';
 /** Lifetime checked-out jobs read for the totals. */
 const MAX_JOBS_SCANNED = 2_000;
 
+/** Outcomes that pay without a check-out (ADR-0031 D3, ADR-0027 D5a): listed on their own. */
+const ENDED_EARLY: ReadonlySet<PayoutBasis> = new Set<PayoutBasis>([
+  'CLIENT_CANCELLED',
+  'ACCESS_DENIED',
+]);
+const endedEarlyBasis = (basis: PayoutBasis): basis is EndedEarlyJob['payoutBasis'] =>
+  ENDED_EARLY.has(basis);
+
 /** Paid, or held back: either way no longer pending. */
 const isSettled = (p: ProPayoutFact | undefined): boolean =>
   p?.status === 'PAID' || p?.status === 'WITHHELD';
@@ -20,7 +33,8 @@ const isSettled = (p: ProPayoutFact | undefined): boolean =>
  * (incentive included) plus extension/waiting payout shares until a payout is accrued, then the
  * payout itself — plus shoots that ended without a check-out but still pay (access denied), and
  * the transfers already paid with their TDS. Payout facts come from the payouts module's own
- * reader. Pending is everything neither paid nor withheld.
+ * reader. Pending is everything neither paid nor withheld. Jobs that ended before a check-out but
+ * pay (a client cancellation after acceptance, access denied) are listed with their payout too.
  */
 @Injectable()
 export class EarningsService {
@@ -63,11 +77,20 @@ export class EarningsService {
       ];
     });
     const listed = new Set(jobs.map((j) => j.a.bookingId));
-    // Shoots that ended without a check-out but still pay (access denied), by when they ended.
-    const unlisted = [...paid.payouts]
-      .filter(([bookingId]) => !listed.has(bookingId))
-      .map(([, p]) => ({ endedAt: p.outcomeAt, totalPaise: p.payingPaise, settled: isSettled(p) }));
-    const totals = bucketEarnings([...jobs, ...unlisted], now);
+    // Shoots that ended without a check-out but still pay, by when they ended.
+    const unlisted = [...paid.payouts].filter(([bookingId]) => !listed.has(bookingId));
+    const totals = bucketEarnings(
+      [
+        ...jobs,
+        ...unlisted.map(([, p]) => ({
+          endedAt: p.outcomeAt,
+          totalPaise: p.payingPaise,
+          settled: isSettled(p),
+        })),
+      ],
+      now,
+    );
+    const endedEarlyJobs = await this.endedEarly(unlisted);
     return ProEarningsSchema.parse({
       basis: 'EXPECTED',
       asOf: now.toISOString(),
@@ -88,6 +111,36 @@ export class EarningsService {
         ...(j.payout ? { payoutStatus: j.payout.status, payoutBasis: j.payout.basis } : {}),
       })),
       paidTransfers: paid.paidTransfers,
+      endedEarlyJobs,
+    });
+  }
+
+  /** The client-cancelled and access-denied jobs with their payout, newest first. */
+  private async endedEarly(
+    unlisted: ReadonlyArray<readonly [string, ProPayoutFact]>,
+  ): Promise<EndedEarlyJob[]> {
+    const early = unlisted
+      .filter(([, p]) => endedEarlyBasis(p.basis))
+      .sort(([, a], [, b]) => b.outcomeAt.getTime() - a.outcomeAt.getTime())
+      .slice(0, ONSITE_CONFIG.earningsJobs);
+    if (early.length === 0) return [];
+    const summaries = await this.bookings.offerSummaries(early.map(([bookingId]) => bookingId));
+    const byId = new Map(summaries.map((s) => [s.bookingId, s]));
+    return early.flatMap(([bookingId, p]) => {
+      const booking = byId.get(bookingId);
+      if (!booking || !endedEarlyBasis(p.basis)) return [];
+      return [
+        {
+          bookingId,
+          bookingReference: booking.reference,
+          categoryCode: booking.categoryCode,
+          scheduledStart: booking.scheduledStart.toISOString(),
+          endedAt: p.outcomeAt.toISOString(),
+          payoutBasis: p.basis,
+          payoutStatus: p.status,
+          totalPayoutPaise: fromPaiseBigint(p.payingPaise),
+        },
+      ];
     });
   }
 }

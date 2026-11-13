@@ -31,6 +31,7 @@ interface ViewRow {
   city_id: string;
   venue_address: string;
   created_at: Date;
+  delivered_at: Date | null;
 }
 
 const toView = (r: ViewRow): BookingView => ({
@@ -51,6 +52,7 @@ const toView = (r: ViewRow): BookingView => ({
   venueAddress: r.venue_address,
   createdAt: r.created_at,
   scheduledHours: hoursFromNumeric(r.scheduled_hours),
+  deliveredAt: r.delivered_at,
 });
 
 type Where = postgres.PendingQuery<postgres.Row[]>;
@@ -66,7 +68,7 @@ export class BookingReadsRepository {
       SELECT b.id, b.reference, b.status, b.user_id, b.emergency_band, b.scheduled_start,
              b.scheduled_hours, b.total_paise, b.advance_paise, b.balance_paise, b.amount_paid_paise,
              b.quote_expires_at, b.tier, cat.code AS category_code, b.city_id,
-             b.venue_address, b.created_at
+             b.venue_address, b.created_at, b.delivered_at
       FROM bookings b
       JOIN categories cat ON cat.id = b.category_id
       WHERE ${where}

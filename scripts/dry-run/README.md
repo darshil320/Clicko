@@ -96,6 +96,7 @@ load-test stack (`loadtest/README.md`). On staging or production, step 2 fails w
 It needs the dev seed (`pnpm --filter @clickco/api db:seed:dev`): photographers and staff.
 
 ### Last run (4 Nov 2026, local API on :4000)
+
 Booking CLK-1008, Professional · Food · 2 h in Surat, booked 125 minutes ahead (HOURS_UNDER_3:
 authorise-only, captured on acceptance). Steps 1–11 ran at 06:37 UTC and paused at check-out.
 The run resumed with `--resume --max-wait-minutes 30` and finished at 10:43 UTC:

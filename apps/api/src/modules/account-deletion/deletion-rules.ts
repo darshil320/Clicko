@@ -62,6 +62,7 @@ export interface ClientBooking {
   readonly bookingId: string;
   readonly reference: string;
   readonly status: BookingStatus;
+  readonly scheduledStart: Date;
 }
 
 /**
@@ -76,6 +77,7 @@ export function blockersFor(
     kind,
     bookingId: b.bookingId,
     reference: b.reference,
+    scheduledStart: b.scheduledStart.toISOString(),
     message: MESSAGES[kind](b.reference),
   });
   const open = bookings.flatMap((b) => {

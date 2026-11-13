@@ -45,6 +45,11 @@ export const JOB = {
   MEDIA_QUOTA_MONITOR: 'media.quota-monitor',
   /** Repeatable (hourly): reclaims staged parts of upload sessions idle for 24 h (security review M5). */
   MEDIA_UPLOAD_REAPER: 'media.upload-reaper',
+  /**
+   * Immediate, once per booking: a lost shoot (`booking.data_loss`, ADR-0030) keeps no files —
+   * originals, exports and staged upload parts are deleted through StoragePort.
+   */
+  MEDIA_DATA_LOSS_PURGE: 'media.data-loss-purge',
   /** Delayed: one SLA clock is due (ADR-0016 D6). */
   SLA_CLOCK_DUE: 'sla.clock-due',
   /** Repeatable: fires overdue armed clocks whose job was lost. */
@@ -80,6 +85,7 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.MEDIA_INTEGRITY_AUDIT]: QUEUE.MEDIA,
   [JOB.MEDIA_QUOTA_MONITOR]: QUEUE.MEDIA,
   [JOB.MEDIA_UPLOAD_REAPER]: QUEUE.MEDIA,
+  [JOB.MEDIA_DATA_LOSS_PURGE]: QUEUE.MEDIA,
   [JOB.SLA_CLOCK_DUE]: QUEUE.SLA,
   [JOB.SLA_SWEEP]: QUEUE.SLA,
   [JOB.CHECKOUT_STALE_SWEEP]: QUEUE.CHECKOUT,
@@ -103,6 +109,9 @@ export const JOB_OPTIONS: Partial<Readonly<Record<JobName, JobOptions>>> = {
   // A provider outage (WhatsApp, MSG91, Expo): 20 s, 40 s, 80 s, 160 s, 320 s — about 10 minutes
   // in all; every failed attempt is a FAILED notification_sends row.
   [JOB.NOTIFICATION_SEND]: { attempts: 6, backoffMs: 20_000 },
+  // A storage outage (or Drive's rate limit): 1, 2, 4 … 128 min, about 4 hours in all; the last
+  // failure is reported (job-failure) so ops can run it again.
+  [JOB.MEDIA_DATA_LOSS_PURGE]: { attempts: 8, backoffMs: 60_000 },
 };
 
 export interface RepeatableJob {

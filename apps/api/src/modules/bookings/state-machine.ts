@@ -98,6 +98,15 @@ export function isTerminal(status: BookingStatus): boolean {
 }
 
 /**
+ * Ended without a delivery (cancelled, no-show, access denied, files lost, abandoned): the balance
+ * is never collected, so the client is shown none as due. CLOSED is the only terminal status
+ * reached through a delivery. Money still owed either way is settled by staff ("To settle").
+ */
+export function endedWithoutDelivery(status: BookingStatus): boolean {
+  return isTerminal(status) && status !== 'CLOSED';
+}
+
+/**
  * DOMAIN §3: `booking.<status>`, except creation (`booking.drafted`) and the return to dispatch
  * from an accepted state (`booking.redispatching`, ADR-0011).
  */

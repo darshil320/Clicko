@@ -329,10 +329,29 @@ export const ProPaidTransfer = z.object({
 export type ProPaidTransfer = z.infer<typeof ProPaidTransfer>;
 
 /**
+ * A job that ended before a check-out but still pays (ADR-0031 D3, ADR-0027 D5a): the client
+ * cancelled after the photographer accepted, or the venue denied access. Listed with its payout
+ * the way checked-out jobs show theirs.
+ */
+export const EndedEarlyJob = z.object({
+  bookingId: Uuid,
+  bookingReference: z.string(),
+  categoryCode: z.string(),
+  scheduledStart: IsoDateTime,
+  /** When it ended: the cancellation, or the confirmed access denial. */
+  endedAt: IsoDateTime,
+  payoutBasis: PayoutBasis.extract(['CLIENT_CANCELLED', 'ACCESS_DENIED']),
+  payoutStatus: ProPayoutStatus,
+  /** The payout's gross; 0 while it is withheld. */
+  totalPayoutPaise: MoneyPaise,
+});
+export type EndedEarlyJob = z.infer<typeof EndedEarlyJob>;
+
+/**
  * GET /pro/earnings — what each checked-out job pays, and (ADR-0027 D5) the transfers already
  * paid. The period totals and `pendingPayoutPaise` also count shoots that ended without a
- * check-out but still pay (access denied), by the day they ended; pending leaves out what is
- * paid or withheld.
+ * check-out but still pay (a client cancellation, access denied), by the day they ended; those
+ * are listed in `endedEarlyJobs`. Pending leaves out what is paid or withheld.
  */
 export const ProEarnings = z.object({
   basis: z.literal('EXPECTED'),
@@ -344,6 +363,8 @@ export const ProEarnings = z.object({
   jobs: z.array(EarningsJob),
   /** Newest first, at most 20. Optional so older payloads still parse. */
   paidTransfers: z.array(ProPaidTransfer).optional(),
+  /** Newest first. Optional so older payloads still parse. */
+  endedEarlyJobs: z.array(EndedEarlyJob).optional(),
 });
 export type ProEarnings = z.infer<typeof ProEarnings>;
 

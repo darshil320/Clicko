@@ -554,6 +554,44 @@ describe.runIf(TEST_DATABASE_URL)('client cancellation and the T&C §3 refund la
         ].sort(),
       );
     });
+
+    it('the client sees nothing more to pay on the cancelled booking', async () => {
+      const detail = await e2e.call('GET', `/bookings/${ids.C}`, { token: await userToken() });
+      expect(detail.status).toBe(200);
+      expect(detail.json.data.booking).toMatchObject({
+        status: 'CANCELLED_CLIENT',
+        balancePaise: 0,
+      });
+      expect(detail.json.data.booking.amountPaidPaise).toBeGreaterThan(0);
+      expect(detail.json.data.deliveredAt).toBeNull();
+      const list = await e2e.call('GET', '/bookings', { token: await userToken() });
+      const listed = (list.json.data as Json[]).find((b) => b.id === ids.C);
+      expect(listed?.balancePaise).toBe(0);
+      // A booking still on its way keeps its balance (A is cancelled already; K is not).
+      const live = (list.json.data as Json[]).find((b) => b.id === ids.K);
+      expect(live?.balancePaise).toBeGreaterThan(0);
+    });
+
+    it('the photographer sees the cancelled job in Earnings with its payout', async () => {
+      const [payout] = await payoutOf(ids.C);
+      const event = await cancelledEvent(ids.C);
+      const res = await e2e.call('GET', '/pro/earnings', {
+        token: await tokenFor(e2e, 'PHOTOGRAPHER', proA),
+      });
+      expect(res.status).toBe(200);
+      expect((res.json.data.jobs as Json[]).map((j) => j.bookingId)).not.toContain(ids.C);
+      expect(res.json.data.endedEarlyJobs).toContainEqual({
+        bookingId: ids.C,
+        bookingReference: expect.stringMatching(/^CLK-/),
+        categoryCode: 'FOOD',
+        scheduledStart: tenAm('03-12').toISOString(),
+        endedAt: event?.occurred_at.toISOString(),
+        payoutBasis: 'CLIENT_CANCELLED',
+        payoutStatus: 'DUE',
+        totalPayoutPaise: Number(payout?.gross),
+      });
+      expect(res.json.data.pendingPayoutPaise).toBeGreaterThanOrEqual(Number(payout?.gross));
+    });
   });
 
   describe('T&C §3.1 under 24 hours: no refund', () => {

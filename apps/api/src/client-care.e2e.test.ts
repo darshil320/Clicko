@@ -205,9 +205,9 @@ describe.runIf(TEST_DATABASE_URL)('client care and money entry points (ADR-0027 
     });
   });
 
-  describe('support tickets: POST and GET /me/tickets', () => {
-    let first: Json;
+  let first: Json;
 
+  describe('support tickets: POST and GET /me/tickets', () => {
     it('raises a ticket with or without a booking, both statutory clocks set from receipt', async () => {
       const res = await asClient(owner, 'POST', '/me/tickets', {
         body: { category: 'APP_ISSUE', message: '  The app crashes when I open my photos.  ' },
@@ -328,9 +328,236 @@ describe.runIf(TEST_DATABASE_URL)('client care and money entry points (ADR-0027 
       expect(res.status).toBe(200);
       expect(res.json.data.map((t: Json) => t.category)).toEqual(['GRIEVANCE', 'APP_ISSUE']);
       expect(res.json.data[1]).toEqual(first);
+      // The list stays light: the conversation is read one ticket at a time.
+      expect(res.json.data[1]).not.toHaveProperty('messages');
+      // HANDOVER §3 follow-up: the client's own words come back with the ticket.
+      const thread = await asClient(owner, 'GET', `/me/tickets/${first.id}`);
+      expect(thread.json.data.messages).toEqual([
+        {
+          id: expect.any(String),
+          authorKind: 'CUSTOMER',
+          body: 'The app crashes when I open my photos.',
+          createdAt: first.receivedAt,
+        },
+      ]);
       const theirs = await asClient(other, 'GET', '/me/tickets');
       expect(theirs.json.data).toHaveLength(5);
       expect(theirs.json.data.map((t: Json) => t.id)).not.toContain(first.id);
+    });
+  });
+
+  describe('the conversation: GET /me/tickets/:id and POST /me/tickets/:id/messages', () => {
+    const WORDS = 'Where is the refund for the extra hour?';
+    const SUPPORT_REPLY = 'We are checking with the bank and will update you.';
+    let ticket: Json;
+    const staffMessage = (kind: 'REPLY' | 'NOTE', body: string) =>
+      asStaff(qm, `/admin/care/tickets/${ticket.id}/messages`, { kind, body });
+    const reply = (userId: string, ticketId: string, message: string, key?: string) =>
+      asClient(userId, 'POST', `/me/tickets/${ticketId}/messages`, {
+        body: { message },
+        ...(key ? { key } : {}),
+      });
+
+    it('shows my words and support replies oldest first; never an internal note or who wrote it', async () => {
+      e2e.advance(60_000);
+      const raised = await asClient(owner, 'POST', '/me/tickets', {
+        body: { bookingId: paid.id, category: 'BILLING', message: WORDS },
+      });
+      expect(raised.status).toBe(201);
+      ticket = raised.json.data;
+      e2e.advance(60_000);
+      expect((await staffMessage('NOTE', STAFF_NOTE)).status).toBe(200);
+      e2e.advance(60_000);
+      expect((await staffMessage('REPLY', SUPPORT_REPLY)).status).toBe(200);
+
+      const res = await asClient(owner, 'GET', `/me/tickets/${ticket.id}`);
+      expect(res.status).toBe(200);
+      expect(res.json.data).toMatchObject({
+        id: ticket.id,
+        status: 'AWAITING_CUSTOMER',
+        acknowledgedAt: e2e.now().toISOString(),
+      });
+      expect(res.json.data.messages).toEqual([
+        {
+          id: expect.any(String),
+          authorKind: 'CUSTOMER',
+          body: WORDS,
+          createdAt: ticket.receivedAt,
+        },
+        {
+          id: expect.any(String),
+          authorKind: 'STAFF',
+          body: SUPPORT_REPLY,
+          createdAt: e2e.now().toISOString(),
+        },
+      ]);
+      expect(JSON.stringify(res.json)).not.toContain(STAFF_NOTE);
+      const list = await asClient(owner, 'GET', '/me/tickets');
+      const { messages: _thread, ...summary } = res.json.data;
+      expect(list.json.data[0]).toEqual(summary);
+      expect(JSON.stringify(list.json)).not.toContain(STAFF_NOTE);
+    });
+
+    it("someone else's ticket is 404 like a missing one; a bad id is 400", async () => {
+      const theirs = await asClient(other, 'GET', `/me/tickets/${ticket.id}`);
+      expect([theirs.status, theirs.json.error.code]).toEqual([404, 'TICKET_NOT_FOUND']);
+      const missing = await asClient(
+        owner,
+        'GET',
+        '/me/tickets/6f1c1e0a-2a4b-4c55-9a77-0d6c0f2b9e10',
+      );
+      expect([missing.status, missing.json.error.code]).toEqual([404, 'TICKET_NOT_FOUND']);
+      expect((await asClient(owner, 'GET', '/me/tickets/not-a-uuid')).status).toBe(400);
+      const replyTheirs = await reply(other, ticket.id, 'Let me in on this one.');
+      expect([replyTheirs.status, replyTheirs.json.error.code]).toEqual([404, 'TICKET_NOT_FOUND']);
+      const staffSession = await e2e.call('GET', `/me/tickets/${ticket.id}`, {
+        token: await staffToken(e2e, qm),
+      });
+      expect(staffSession.status).toBe(403);
+    });
+
+    it('a reply hands the ticket back to support; the statutory deadlines do not move', async () => {
+      e2e.advance(60_000);
+      const key = idem();
+      const res = await reply(owner, ticket.id, '  The bank says nothing arrived yet.  ', key);
+      expect(res.status).toBe(201);
+      // A small answer (the idempotency store keeps it): the message and the ticket's status.
+      expect(res.json.data).toEqual({
+        ticketId: ticket.id,
+        status: 'IN_PROGRESS',
+        message: {
+          id: expect.any(String),
+          authorKind: 'CUSTOMER',
+          body: 'The bank says nothing arrived yet.',
+          createdAt: e2e.now().toISOString(),
+        },
+      });
+      const after = await asClient(owner, 'GET', `/me/tickets/${ticket.id}`);
+      expect(after.json.data).toMatchObject({
+        status: 'IN_PROGRESS',
+        receivedAt: ticket.receivedAt,
+        ackDueAt: ticket.ackDueAt,
+        resolveDueAt: ticket.resolveDueAt,
+      });
+      expect(after.json.data.messages.map((m: Json) => [m.authorKind, m.body])).toEqual([
+        ['CUSTOMER', WORDS],
+        ['STAFF', SUPPORT_REPLY],
+        ['CUSTOMER', 'The bank says nothing arrived yet.'],
+      ]);
+      // A retried tap replays the answer: one message, not two.
+      const replay = await reply(owner, ticket.id, '  The bank says nothing arrived yet.  ', key);
+      expect(replay.json.data).toEqual(res.json.data);
+      const [count] = await e2e.db.sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM ticket_messages
+        WHERE ticket_id = ${ticket.id} AND author_kind = 'CUSTOMER'`;
+      expect(count?.n).toBe(2);
+      // Outbox: the change is an event, without the client's words.
+      const events = await e2e.db.sql<{ payload: Json }[]>`
+        SELECT payload FROM domain_events WHERE event_type = 'ticket.client_replied'
+          AND aggregate_id = ${ticket.id}`;
+      expect(events).toHaveLength(1);
+      expect(events[0]?.payload).toMatchObject({
+        ticket_id: ticket.id,
+        user_id: owner,
+        status_before: 'AWAITING_CUSTOMER',
+        status_after: 'IN_PROGRESS',
+      });
+      expect(JSON.stringify(events[0]?.payload)).not.toContain('bank says');
+      // Support sees it as the customer's message, on the record.
+      const desk = await e2e.call('GET', `/admin/care/tickets/${ticket.id}`, {
+        token: await staffToken(e2e, qm),
+      });
+      expect(desk.json.data.status).toBe('IN_PROGRESS');
+      expect(desk.json.data.messages.at(-1)).toMatchObject({
+        authorKind: 'CUSTOMER',
+        body: 'The bank says nothing arrived yet.',
+        isInternal: false,
+      });
+    });
+
+    it('refuses an empty or too long reply and one without an idempotency key', async () => {
+      const empty = await reply(owner, ticket.id, '    ');
+      expect([empty.status, empty.json.error.code]).toEqual([400, 'VALIDATION_FAILED']);
+      expect((await reply(owner, ticket.id, 'x'.repeat(2_001))).status).toBe(400);
+      const noKey = await asClient(owner, 'POST', `/me/tickets/${ticket.id}/messages`, {
+        body: { message: 'Hello?' },
+        key: null,
+      });
+      expect([noKey.status, noKey.json.error.code]).toEqual([400, 'IDEMPOTENCY_KEY_REQUIRED']);
+    });
+
+    it('a resolved ticket takes no more replies (409); the resolution shows in the thread', async () => {
+      e2e.advance(60_000);
+      const resolved = await asStaff(qm, `/admin/care/tickets/${ticket.id}/resolve`, {
+        summary: 'Refund traced and sent again.',
+      });
+      expect(resolved.status).toBe(200);
+      const late = await reply(owner, ticket.id, 'Thanks, but one more thing.');
+      expect([late.status, late.json.error.code]).toEqual([409, 'TICKET_CLOSED']);
+      const res = await asClient(owner, 'GET', `/me/tickets/${ticket.id}`);
+      expect(res.json.data).toMatchObject({
+        status: 'RESOLVED',
+        resolutionSummary: 'Refund traced and sent again.',
+      });
+      expect(res.json.data.messages.at(-1)).toMatchObject({
+        authorKind: 'SYSTEM',
+        body: 'Resolved: Refund traced and sent again.',
+      });
+      expect(res.json.data.messages).toHaveLength(4);
+    });
+
+    it('at most 20 replies a day per client (429), counted on the server', async () => {
+      const [mine] = (await asClient(racer, 'GET', '/me/tickets')).json.data as Json[];
+      if (!mine) throw new Error('the racer has no ticket');
+      for (let i = 0; i < 20; i += 1) {
+        const ok = await reply(racer, mine.id, `Follow-up number ${i}`);
+        expect(ok.status, `reply ${i}`).toBe(201);
+      }
+      const capped = await reply(racer, mine.id, 'One reply too many today');
+      expect([capped.status, capped.json.error.code]).toEqual([429, 'RATE_LIMITED']);
+      // The OPEN ticket stays OPEN: a client message never acknowledges it.
+      const res = await asClient(racer, 'GET', `/me/tickets/${mine.id}`);
+      expect(res.json.data).toMatchObject({ status: 'OPEN', acknowledgedAt: null });
+      expect(res.json.data.messages).toHaveLength(21);
+    });
+  });
+
+  describe('the per-IP limit on client care writes', () => {
+    it('is one budget of 10 a minute shared by tickets, replies and quality reports', async () => {
+      const ip = { 'x-forwarded-for': '10.9.250.1' };
+      const post = async (path: string, body: unknown) =>
+        e2e.call('POST', path, {
+          token: await tokenFor(e2e, 'USER', owner),
+          headers: ip,
+          idempotencyKey: idem(),
+          body,
+        });
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        statuses.push(
+          (await post(`/me/tickets/${first.id}/messages`, { message: `Still there? ${i}` })).status,
+        );
+        statuses.push(
+          (await post(`/bookings/${paid.id}/quality-issue`, { complaint: 'Blurry photos again.' }))
+            .status,
+        );
+      }
+      expect(statuses.filter((st) => st === 429)).toEqual([]);
+      const over = await post('/me/tickets', { category: 'OTHER', message: 'An eleventh write' });
+      expect(over.status).toBe(429);
+    });
+  });
+
+  describe('GET /bookings/:id — when the photos were delivered', () => {
+    it('carries deliveredAt once delivered, null before', async () => {
+      const [row] = await e2e.db.sql<{ delivered_at: Date }[]>`
+        SELECT delivered_at FROM bookings WHERE id = ${delivered}`;
+      const res = await asClient(owner, 'GET', `/bookings/${delivered}`);
+      expect(res.status).toBe(200);
+      expect(res.json.data.deliveredAt).toBe(row?.delivered_at.toISOString());
+      const early = await asClient(owner, 'GET', `/bookings/${paid.id}`);
+      expect(early.json.data.deliveredAt).toBeNull();
+      expect(early.json.data.booking.balancePaise).toBeGreaterThan(0);
     });
   });
 

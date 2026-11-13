@@ -98,5 +98,35 @@ describe('on-site contracts (ADR-0013)', () => {
     });
     expect(detail.pendingExtensions).toBeUndefined();
     expect(detail.charges).toBeUndefined();
+    expect(detail.deliveredAt).toBeUndefined();
+  });
+
+  it('BookingDetail carries when the photos were delivered (null before)', () => {
+    const base = BookingDetail.parse({
+      booking: {
+        id: '1b4e28ba-2fa1-11d2-883f-0016d3cca427',
+        reference: 'CLK-1001',
+        status: 'DELIVERED',
+        tier: 'PROFESSIONAL',
+        categoryCode: 'FOOD',
+        cityName: 'Surat',
+        scheduledStart: '2026-11-15T06:30:00.000Z',
+        scheduledHours: 2,
+        emergencyBand: 'NONE',
+        venueAddress: '4 Athwalines',
+        totalPaise: 1_000_000,
+        advancePaise: 500_000,
+        balancePaise: 500_000,
+        amountPaidPaise: 1_000_000,
+        quoteExpiresAt: null,
+        createdAt: '2026-11-10T06:30:00.000Z',
+      },
+      timeline: [],
+      invoices: [],
+      deliveredAt: '2026-11-16T06:30:00.000Z',
+    });
+    expect(base.deliveredAt).toBe('2026-11-16T06:30:00.000Z');
+    expect(BookingDetail.safeParse({ ...base, deliveredAt: null }).success).toBe(true);
+    expect(BookingDetail.safeParse({ ...base, deliveredAt: 'yesterday' }).success).toBe(false);
   });
 });

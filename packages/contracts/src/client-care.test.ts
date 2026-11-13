@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AccountDeletionBlocker,
   ClientBookingMoney,
   ClientQualityIssueBody,
   ClientTicketBody,
+  ClientTicketList,
+  ClientTicketReply,
+  ClientTicketReplyBody,
+  ClientTicketThread,
+  EndedEarlyJob,
   ProEarnings,
   ProPaidTransfer,
 } from './index.js';
@@ -77,5 +83,83 @@ describe('client care and money contracts (ADR-0027 D5)', () => {
     };
     expect(ProEarnings.safeParse(earnings).success).toBe(true);
     expect(ProEarnings.safeParse({ ...earnings, paidTransfers: [transfer] }).success).toBe(true);
+  });
+
+  it('a ticket reply is 1–2,000 characters, trimmed; the thread carries no internal flag', () => {
+    expect(ClientTicketReplyBody.parse({ message: '  Still waiting  ' })).toEqual({
+      message: 'Still waiting',
+    });
+    expect(ClientTicketReplyBody.safeParse({ message: '   ' }).success).toBe(false);
+    expect(ClientTicketReplyBody.safeParse({ message: 'x'.repeat(2_001) }).success).toBe(false);
+    const thread = {
+      id: UUID,
+      reference: 'TKT-1042',
+      category: 'BILLING',
+      subject: 'Billing',
+      bookingId: null,
+      status: 'IN_PROGRESS',
+      receivedAt: AT,
+      ackDueAt: AT,
+      acknowledgedAt: AT,
+      resolveDueAt: AT,
+      resolvedAt: null,
+      resolutionSummary: null,
+      messages: [
+        { id: UUID, authorKind: 'CUSTOMER', body: 'Charged twice.', createdAt: AT },
+        { id: UUID, authorKind: 'STAFF', body: 'Refund on its way.', createdAt: AT },
+      ],
+    };
+    const parsed = ClientTicketThread.parse({
+      ...thread,
+      messages: [{ ...thread.messages[0], isInternal: false, authorId: UUID }],
+    });
+    // Unknown keys are stripped: an internal flag or a staff id never reaches the app.
+    expect(parsed.messages[0]).toEqual(thread.messages[0]);
+    expect(ClientTicketThread.safeParse(thread).success).toBe(true);
+    // The list carries no conversation: a ticket's thread is read one at a time.
+    const listed = ClientTicketList.parse([thread]);
+    expect(listed[0]).not.toHaveProperty('messages');
+    const reply = { ticketId: UUID, status: 'IN_PROGRESS', message: thread.messages[0] };
+    expect(ClientTicketReply.parse(reply)).toEqual(reply);
+  });
+
+  it('a job that ended before a check-out lists its payout basis, status and amount', () => {
+    const job = {
+      bookingId: UUID,
+      bookingReference: 'CLK-1004',
+      categoryCode: 'FOOD',
+      scheduledStart: AT,
+      endedAt: AT,
+      payoutBasis: 'CLIENT_CANCELLED',
+      payoutStatus: 'DUE',
+      totalPayoutPaise: 125_000,
+    };
+    expect(EndedEarlyJob.safeParse(job).success).toBe(true);
+    expect(EndedEarlyJob.safeParse({ ...job, payoutBasis: 'DELIVERED' }).success).toBe(false);
+    expect(EndedEarlyJob.safeParse({ ...job, totalPayoutPaise: 1.5 }).success).toBe(false);
+    const earnings = {
+      basis: 'EXPECTED',
+      asOf: AT,
+      todayPaise: 0,
+      weekPaise: 0,
+      monthPaise: 0,
+      pendingPayoutPaise: 0,
+      jobs: [],
+    };
+    expect(ProEarnings.parse({ ...earnings, endedEarlyJobs: [job] }).endedEarlyJobs).toEqual([job]);
+    expect(ProEarnings.parse(earnings).endedEarlyJobs).toBeUndefined();
+  });
+
+  it('an account deletion blocker names its booking and when it is scheduled', () => {
+    const blocker = {
+      kind: 'BOOKING_IN_PROGRESS',
+      bookingId: UUID,
+      reference: 'CLK-1004',
+      scheduledStart: AT,
+      message: 'CLK-1004 is paid and not finished yet.',
+    };
+    expect(AccountDeletionBlocker.safeParse(blocker).success).toBe(true);
+    const { scheduledStart: _, ...withoutDate } = blocker;
+    expect(AccountDeletionBlocker.safeParse(withoutDate).success).toBe(false);
   });
 });

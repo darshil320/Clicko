@@ -33,6 +33,11 @@ export const MEDIA_CONFIG = {
   idleSessionReclaimHours: 24,
   /** Sessions looked at per reaper run. */
   reaperBatch: 100,
+  /**
+   * A lost shoot's purge (ADR-0030) repeats until a pass deletes nothing; past this many passes the
+   * job fails and BullMQ retries it (an export racing the purge lands at most one more file).
+   */
+  dataLossPurgePasses: 5,
 } as const;
 
 /** Where a new upload session may open (ADR-0014 D2). */

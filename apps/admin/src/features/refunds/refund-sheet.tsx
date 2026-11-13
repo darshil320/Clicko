@@ -257,8 +257,8 @@ export function RefundSheet({
                 {amount} goes back to {refund.clientName}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                It is refunded to {refund.paidWith} now and usually reaches them in 5–7 working
-                days. A GST credit note is issued against the invoice. This cannot be undone.
+                It is refunded to {refund.paidWith} now and reaches them within 7–10 working days
+                (T&C §3.9). A GST credit note is issued against the invoice. This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             {needsCode ? (

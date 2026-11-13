@@ -70,7 +70,11 @@ export class TicketDeskService {
     );
     const [references, staff] = await Promise.all([
       this.references([ticket]),
-      this.context.staff.of([ticket.assignedTo, ...messages.map((m) => m.authorId)]),
+      // Staff names only: a client's own reply carries their user id, never a staff lookup.
+      this.context.staff.of([
+        ticket.assignedTo,
+        ...messages.filter((m) => m.authorKind === 'STAFF').map((m) => m.authorId),
+      ]),
     ]);
     return toTicketDetail(ticket, messages, references, staff);
   }

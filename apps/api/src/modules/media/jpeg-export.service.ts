@@ -136,7 +136,8 @@ export class JpegExportService {
       });
       return false;
     });
-    // Another run exported this RAW first: drop the surplus copy (permanent delete, Invariant 6).
+    // Another run exported this RAW first, or it was purged (a lost shoot): drop the surplus copy
+    // (permanent delete, Invariant 6).
     if (duplicate) await this.storage.permanentlyDelete([stored.objectId]);
   }
 
@@ -169,6 +170,15 @@ export class JpegExportService {
 
   private async alertFailure(bookingId: string, raw: MediaAssetRecord, error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    // The booking left PROCESSING mid-run (a lost shoot's purge removed the RAW): not an export
+    // fault, so no HIGH alert; the retry stops at NOT_PROCESSING.
+    const booking = await this.bookings.one(bookingId).catch(() => null);
+    if (booking && booking.status !== 'PROCESSING') {
+      this.logger.warn(
+        `JPEG export of ${raw.id} stopped: booking ${bookingId} is ${booking.status}`,
+      );
+      return;
+    }
     this.logger.error(
       `JPEG export failed for ${raw.originalFilename} (booking ${bookingId}): ${message}`,
     );

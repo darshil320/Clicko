@@ -14,6 +14,7 @@ const preview = {
       kind: 'BOOKING_IN_PROGRESS',
       bookingId: UUID,
       reference: 'CLK-1004',
+      scheduledStart: '2026-12-12T10:00:00+05:30',
       message: 'CLK-1004 is paid and not finished yet.',
     },
   ],

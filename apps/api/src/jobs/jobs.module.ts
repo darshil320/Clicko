@@ -8,6 +8,7 @@ import { OnsiteModule } from '../modules/onsite/onsite.module';
 import { RefundsModule } from '../modules/refunds/refunds.module';
 import { SlaModule } from '../modules/sla/sla.module';
 import { CheckoutSweepProcessor } from './checkout-sweep.processor';
+import { DataLossPurgeProcessor } from './data-loss-purge.processor';
 import { DispatchTimersProcessor } from './dispatch-timers.processor';
 import { IntegrityAuditProcessor } from './integrity-audit.processor';
 import { JpegExportProcessor } from './jpeg-export.processor';
@@ -41,6 +42,7 @@ import { UploadReaperProcessor } from './upload-reaper.processor';
     IntegrityAuditProcessor,
     QuotaMonitorProcessor,
     UploadReaperProcessor,
+    DataLossPurgeProcessor,
     SlaProcessor,
     CheckoutSweepProcessor,
     NotificationSendProcessor,

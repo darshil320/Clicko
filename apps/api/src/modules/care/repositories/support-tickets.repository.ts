@@ -73,6 +73,26 @@ const COLUMNS = `t.id, t.reference, t.raised_by_kind, t.user_id, t.photographer_
   (SELECT max(m.created_at) FROM ticket_messages m WHERE m.ticket_id = t.id) AS last_message_at,
   (SELECT count(*)::int FROM ticket_messages m WHERE m.ticket_id = t.id) AS message_count`;
 
+interface MessageRow {
+  id: string;
+  ticket_id: string;
+  author_kind: TicketAuthor;
+  author_id: string | null;
+  body: string;
+  is_internal: boolean;
+  created_at: Date;
+}
+
+const toMessage = (r: MessageRow): TicketMessageRecord => ({
+  id: r.id,
+  ticketId: r.ticket_id,
+  authorKind: r.author_kind,
+  authorId: r.author_id,
+  body: r.body,
+  isInternal: r.is_internal,
+  createdAt: r.created_at,
+});
+
 const DONE: readonly TicketStatus[] = ['RESOLVED', 'CLOSED'];
 
 /** The statutory clock that is running: acknowledgement until acknowledged, then resolution. */
@@ -109,10 +129,13 @@ export class SupportTicketsRepository {
       readonly isInternal: boolean;
       readonly at: Date;
     },
-  ): Promise<void> {
-    await tx`
+  ): Promise<string> {
+    const [row] = await tx<{ id: string }[]>`
       INSERT INTO ticket_messages (ticket_id, author_kind, author_id, body, is_internal, created_at)
-      VALUES (${m.ticketId}, ${m.authorKind}, ${m.authorId}, ${m.body}, ${m.isInternal}, ${m.at})`;
+      VALUES (${m.ticketId}, ${m.authorKind}, ${m.authorId}, ${m.body}, ${m.isInternal}, ${m.at})
+      RETURNING id`;
+    if (!row) throw new Error('ticket_messages insert returned nothing');
+    return row.id;
   }
 
   /** The tickets a client raised, newest first (their own only: by user_id). */
@@ -123,6 +146,36 @@ export class SupportTicketsRepository {
       ORDER BY t.received_at DESC, t.id DESC
       LIMIT ${limit}`;
     return rows.map(toRecord);
+  }
+
+  /** One ticket the client raised themselves (by user_id); null for anyone else's. */
+  async findForUser(db: Db, id: string, userId: string): Promise<TicketRecord | null> {
+    const [row] = await db<Row[]>`
+      SELECT ${db.unsafe(COLUMNS)} FROM support_tickets t
+      WHERE t.id = ${id} AND t.user_id = ${userId}`;
+    return row ? toRecord(row) : null;
+  }
+
+  /** The same, locked for the rest of the transaction. */
+  async lockForUser(tx: Tx, id: string, userId: string): Promise<TicketRecord | null> {
+    const [row] = await tx<Row[]>`
+      SELECT ${tx.unsafe(COLUMNS)} FROM support_tickets t
+      WHERE t.id = ${id} AND t.user_id = ${userId}
+      FOR UPDATE OF t`;
+    return row ? toRecord(row) : null;
+  }
+
+  /**
+   * Messages the client wrote in the app (author = their account) since `since`, across all their
+   * tickets: the daily reply cap. The caller holds the client's lock.
+   */
+  async countClientRepliesSince(tx: Tx, userId: string, since: Date): Promise<number> {
+    const [row] = await tx<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM ticket_messages m
+      JOIN support_tickets t ON t.id = m.ticket_id
+      WHERE t.user_id = ${userId} AND m.author_kind = 'CUSTOMER' AND m.author_id = ${userId}
+        AND m.created_at >= ${since}`;
+    return row?.n ?? 0;
   }
 
   /** Tickets this client raised since `since` (the daily cap; caller holds the client's lock). */
@@ -149,29 +202,25 @@ export class SupportTicketsRepository {
   }
 
   async messages(db: Db, ticketId: string): Promise<TicketMessageRecord[]> {
-    const rows = await db<
-      {
-        id: string;
-        ticket_id: string;
-        author_kind: TicketAuthor;
-        author_id: string | null;
-        body: string;
-        is_internal: boolean;
-        created_at: Date;
-      }[]
-    >`
+    const rows = await db<MessageRow[]>`
       SELECT id, ticket_id, author_kind, author_id, body, is_internal, created_at
       FROM ticket_messages WHERE ticket_id = ${ticketId}
       ORDER BY created_at, id`;
-    return rows.map((r) => ({
-      id: r.id,
-      ticketId: r.ticket_id,
-      authorKind: r.author_kind,
-      authorId: r.author_id,
-      body: r.body,
-      isInternal: r.is_internal,
-      createdAt: r.created_at,
-    }));
+    return rows.map(toMessage);
+  }
+
+  /**
+   * The conversation the client may read on these tickets: never an internal staff note
+   * (is_internal), filtered in SQL. Oldest first within each ticket.
+   */
+  async publicMessages(db: Db, ticketIds: readonly string[]): Promise<TicketMessageRecord[]> {
+    if (ticketIds.length === 0) return [];
+    const rows = await db<MessageRow[]>`
+      SELECT id, ticket_id, author_kind, author_id, body, is_internal, created_at
+      FROM ticket_messages
+      WHERE ticket_id IN ${db([...ticketIds])} AND is_internal = false
+      ORDER BY ticket_id, created_at, id`;
+    return rows.map(toMessage);
   }
 
   /**

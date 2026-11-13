@@ -291,6 +291,46 @@ describe('event map (ADR-0027 D2)', () => {
     expect(await resolve('ticket.raised', byStaff)).toEqual([]);
   });
 
+  it('data loss → the client, with what comes back; never the staff note', async () => {
+    const lost = event('booking.data_loss', {
+      loss_kind: 'COMPLETE',
+      affected_proportion_bps: 10_000,
+      refund_amount_paise: 576_725,
+      note: 'Both cards corrupted',
+    });
+    const c = ctx({ booking: facts({ status: 'DATA_LOSS' }) });
+    const i = await only('booking.data_loss', lost, c);
+    expect(i.recipient).toEqual({ kind: 'USER', id: USER });
+    expect(i.variables).toEqual({ bookingRef: 'CLK-1042', amount: '₹5,767.25' });
+    expect(i.data).toEqual({ template: 'DATA_LOSS_CLIENT', bookingId: BOOKING });
+    // Nothing left to send back (it all went back already): no "₹0", the send is skipped.
+    const [none] = await resolve(
+      'booking.data_loss',
+      event('booking.data_loss', { ...lost.payload, refund_amount_paise: 0 }),
+      c,
+    );
+    expect(none?.variables.amount).toBeNull();
+    // `PARTIAL` on booking.data_loss is reserved (ADR-0030 D2): not this message.
+    expect(
+      await resolve(
+        'booking.data_loss',
+        event('booking.data_loss', { ...lost.payload, loss_kind: 'PARTIAL' }),
+        c,
+      ),
+    ).toEqual([]);
+
+    const partial = event('booking.partial_data_loss', {
+      loss_kind: 'PARTIAL',
+      affected_proportion_bps: 7_000,
+      refund_amount_paise: 700_000,
+      refunded_now_paise: 500_000,
+      due_after_balance_paise: 200_000,
+    });
+    const p = await only('booking.partial_data_loss', partial, ctx({ booking: facts() }));
+    expect(p.variables).toEqual({ bookingRef: 'CLK-1042' });
+    expect(p.data).toEqual({ template: 'PARTIAL_DATA_LOSS_CLIENT', bookingId: BOOKING });
+  });
+
   it('client cancelled → the client and the photographer who held the job; never the money', async () => {
     const cancelled = event('booking.cancelled_client', {
       reason: 'CLIENT_CANCELLED',

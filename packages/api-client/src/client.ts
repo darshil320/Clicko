@@ -14,6 +14,9 @@ import {
   ClientTicket,
   type ClientTicketBody,
   ClientTicketList,
+  ClientTicketReply,
+  type ClientTicketReplyBody,
+  ClientTicketThread,
   type CreateBookingBody,
   CreateBookingResponse,
   type JoinWaitlistBody,
@@ -204,9 +207,20 @@ export function createApiClient(options: ApiClientOptions) {
      * retried tap replays the first answer instead of raising a second ticket.
      */
     care: {
-      /** Your tickets, newest first, with both statutory deadlines. */
+      /** Your tickets, newest first, with both statutory deadlines (no conversation: see `ticket`). */
       tickets: () =>
         http.request({ method: 'GET', path: '/me/tickets', schema: ClientTicketList, auth: true }),
+      /**
+       * One of your tickets with its conversation: your messages and support's replies, oldest
+       * first (staff notes never appear). 404 TICKET_NOT_FOUND when it is not yours.
+       */
+      ticket: async (ticketId: string) =>
+        http.request({
+          method: 'GET',
+          path: `/me/tickets/${uuidSegment(ticketId)}`,
+          schema: ClientTicketThread,
+          auth: true,
+        }),
       /** 429 RATE_LIMITED after 5 in a day; 404 BOOKING_NOT_FOUND for a booking not yours. */
       raiseTicket: (body: ClientTicketBody, { idempotencyKey }: Idempotent) =>
         http.request({
@@ -214,6 +228,23 @@ export function createApiClient(options: ApiClientOptions) {
           path: '/me/tickets',
           body,
           schema: ClientTicket,
+          auth: true,
+          idempotencyKey,
+        }),
+      /**
+       * Answers support on your own open ticket; returns the message and the ticket's status. 409 TICKET_CLOSED once
+       * it is resolved, 429 RATE_LIMITED past the daily cap, 404 TICKET_NOT_FOUND when not yours.
+       */
+      replyToTicket: async (
+        ticketId: string,
+        body: ClientTicketReplyBody,
+        { idempotencyKey }: Idempotent,
+      ) =>
+        http.request({
+          method: 'POST',
+          path: `/me/tickets/${uuidSegment(ticketId)}/messages`,
+          body,
+          schema: ClientTicketReply,
           auth: true,
           idempotencyKey,
         }),

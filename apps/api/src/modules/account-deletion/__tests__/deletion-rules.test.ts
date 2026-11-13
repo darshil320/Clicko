@@ -79,24 +79,28 @@ describe('which bookings stop a deletion (ADR-0030)', () => {
 });
 
 describe('blockersFor', () => {
+  const AT_A = new Date('2026-12-12T04:30:00.000Z');
+  const AT_B = new Date('2026-11-02T04:30:00.000Z');
   const bookings = [
-    { bookingId: A, reference: 'CLK-1004', status: 'DISPATCHING' as const },
-    { bookingId: B, reference: 'CLK-1005', status: 'CLOSED' as const },
+    { bookingId: A, reference: 'CLK-1004', status: 'DISPATCHING' as const, scheduledStart: AT_A },
+    { bookingId: B, reference: 'CLK-1005', status: 'CLOSED' as const, scheduledStart: AT_B },
   ];
 
-  it('names each booking in one plain sentence, money still being settled included', () => {
+  it('names each booking and its date in one plain sentence, money being settled included', () => {
     const blockers = blockersFor(bookings, [B, B]);
     expect(blockers).toEqual([
       {
         kind: 'BOOKING_IN_PROGRESS',
         bookingId: A,
         reference: 'CLK-1004',
+        scheduledStart: AT_A.toISOString(),
         message: expect.stringContaining('CLK-1004'),
       },
       {
         kind: 'MONEY_BEING_SETTLED',
         bookingId: B,
         reference: 'CLK-1005',
+        scheduledStart: AT_B.toISOString(),
         message: expect.stringContaining('CLK-1005'),
       },
     ]);
@@ -108,9 +112,12 @@ describe('blockersFor', () => {
   });
 
   it('an empty list when nothing is open', () => {
-    expect(blockersFor([{ bookingId: B, reference: 'CLK-1005', status: 'CLOSED' }], [])).toEqual(
-      [],
-    );
+    expect(
+      blockersFor(
+        [{ bookingId: B, reference: 'CLK-1005', status: 'CLOSED', scheduledStart: AT_B }],
+        [],
+      ),
+    ).toEqual([]);
   });
 });
 

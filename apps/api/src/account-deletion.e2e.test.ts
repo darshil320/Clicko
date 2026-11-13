@@ -165,6 +165,8 @@ describe.runIf(TEST_DATABASE_URL)('client account deletion', () => {
           kind: 'BOOKING_IN_PROGRESS',
           bookingId: paid.id,
           reference: paid.reference,
+          // The app shows the date without a second call.
+          scheduledStart: paid.scheduledStart,
         },
       ],
       forfeitedCreditPaise: 0,

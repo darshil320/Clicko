@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertTransition,
   canTransition,
+  endedWithoutDelivery,
   eventTypeFor,
   IllegalTransitionError,
   isTerminal,
@@ -149,5 +150,23 @@ describe('booking state machine (DOMAIN.md §2)', () => {
 
   it('keeps QUALITY_ESCALATION open until the Quality Manager closes it', () => {
     expect(isTerminal('QUALITY_ESCALATION')).toBe(false);
+  });
+});
+
+describe('endedWithoutDelivery (nothing more is payable on the booking)', () => {
+  it('is every terminal status but CLOSED (the only one reached through a delivery)', () => {
+    expect(STATUSES.filter(endedWithoutDelivery).sort()).toEqual(
+      [
+        'ABANDONED',
+        'ACCESS_DENIED',
+        'CANCELLED_CLIENT',
+        'CANCELLED_PRO',
+        'DATA_LOSS',
+        'PRO_NO_SHOW',
+      ].sort(),
+    );
+    for (const s of ['BALANCE_PENDING', 'DELIVERED', 'CLOSED', 'UNSAFE_SITE', 'QA'] as const) {
+      expect(endedWithoutDelivery(s), s).toBe(false);
+    }
   });
 });

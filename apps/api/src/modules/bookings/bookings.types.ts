@@ -45,6 +45,8 @@ export interface BookingView extends BookingRow {
   readonly scheduledHours: number;
   readonly venueAddress: string;
   readonly createdAt: Date;
+  /** When the download links opened (BALANCE_PENDING → DELIVERED); null before. */
+  readonly deliveredAt: Date | null;
 }
 
 export interface CreateQuotedInput {

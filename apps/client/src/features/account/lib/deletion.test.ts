@@ -9,6 +9,7 @@ const blocker = (overrides: Partial<AccountDeletionBlocker> = {}): AccountDeleti
   kind: 'BOOKING_IN_PROGRESS',
   bookingId: BOOKING_ID,
   reference: 'CLK-8F3K2Q',
+  scheduledStart: '2026-11-12T05:30:00.000Z',
   message:
     'CLK-8F3K2Q is paid and not finished yet. You can delete your account once it is, or contact support.',
   ...overrides,

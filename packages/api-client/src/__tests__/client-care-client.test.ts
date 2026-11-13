@@ -23,6 +23,11 @@ const ticket = {
   resolutionSummary: null,
 };
 
+const thread = {
+  ...ticket,
+  messages: [{ id: UUID_2, authorKind: 'CUSTOMER', body: 'I was charged twice.', createdAt: AT }],
+};
+
 const money = {
   bookingId: UUID_2,
   refunds: [
@@ -99,6 +104,36 @@ describe('client money and care (ADR-0027 D5)', () => {
     expect(calls[0]).toMatchObject({ url: `${BASE}/me/tickets`, method: 'POST', body });
     expect(calls[0]?.headers['idempotency-key']).toBe(KEY);
     expect(calls[1]).toMatchObject({ url: `${BASE}/me/tickets`, method: 'GET' });
+  });
+
+  it('opens one ticket and replies on it with an Idempotency-Key', async () => {
+    const reply = {
+      ticketId: UUID,
+      status: 'IN_PROGRESS',
+      message: { id: UUID, authorKind: 'CUSTOMER', body: 'Still waiting.', createdAt: AT },
+    };
+    const replies = [ok(thread), ok(reply, 201), fail(409, 'TICKET_CLOSED', 'Closed')];
+    const { api, calls } = clientApi(() => replies.shift() ?? ok(null));
+    expect(await api.care.ticket(UUID)).toEqual(thread);
+    expect(
+      await api.care.replyToTicket(UUID, { message: 'Still waiting.' }, { idempotencyKey: KEY }),
+    ).toEqual(reply);
+    expect(calls[0]).toMatchObject({ url: `${BASE}/me/tickets/${UUID}`, method: 'GET' });
+    expect(calls[1]).toMatchObject({
+      url: `${BASE}/me/tickets/${UUID}/messages`,
+      method: 'POST',
+      body: { message: 'Still waiting.' },
+    });
+    expect(calls[1]?.headers['idempotency-key']).toBe(KEY);
+    const closed = await rejection(
+      api.care.replyToTicket(UUID, { message: 'Hello?' }, { idempotencyKey: KEY }),
+    );
+    expect(closed).toMatchObject({ status: 409, code: 'TICKET_CLOSED' });
+    expect(await rejection(api.care.ticket('../admin'))).toMatchObject({ code: 'INVALID_ID' });
+    expect(
+      await rejection(api.care.replyToTicket('../x', { message: 'Hi' }, { idempotencyKey: KEY })),
+    ).toMatchObject({ code: 'INVALID_ID' });
+    expect(calls).toHaveLength(3);
   });
 
   it('surfaces the daily ticket cap and the quality window as codes', async () => {

@@ -216,6 +216,38 @@ export class UploadSessionsRepository {
       WHERE id = ${p.sessionId}`;
   }
 
+  /**
+   * Closes every open session of a booking (ABORTED, with the reason), under row locks: a part or a
+   * file arriving afterwards is refused, and a file verified in flight drops its own copy. Returns
+   * how many it closed.
+   */
+  async abortOpenForBooking(tx: Tx, bookingId: string, reason: string, now: Date): Promise<number> {
+    const locked = await tx<{ id: string }[]>`
+      SELECT id FROM upload_sessions
+      WHERE booking_id = ${bookingId} AND status IN ${tx([...ACTIVE])}
+      ORDER BY id FOR UPDATE`;
+    if (locked.length === 0) return 0;
+    await tx`
+      UPDATE upload_sessions
+      SET status = 'ABORTED', failure_reason = ${reason}, last_activity_at = ${now},
+          completed_at = NULL
+      WHERE id IN ${tx(locked.map((r) => r.id))}`;
+    return locked.length;
+  }
+
+  /**
+   * The storage sessions holding staged parts for this booking: every file not verified, in any of
+   * its sessions (open or not), so a retried purge finds them again.
+   */
+  async pendingStorageSessions(db: Db, bookingId: string): Promise<string[]> {
+    const rows = await db<{ storage_session_id: string }[]>`
+      SELECT DISTINCT f.value->>'storageSessionId' AS storage_session_id
+      FROM upload_sessions s, jsonb_each(s.completed_parts->'files') AS f
+      WHERE s.booking_id = ${bookingId} AND f.value->>'status' = 'PENDING'
+        AND f.value->>'storageSessionId' IS NOT NULL`;
+    return rows.map((r) => r.storage_session_id);
+  }
+
   async finish(
     tx: Tx,
     sessionId: string,

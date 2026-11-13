@@ -141,9 +141,15 @@ owns addendum **0020** and touches no refund rule; refunds are asked for through
   fields, `ticket_messages`), quality complaints and equipment claims kept? With a period, a
   sweep can erase them; until then they are kept and the app says so.
 - Masking the full UPI id on every payment, not only a deleted client's (store README B9).
-- Purging media left on a DATA_LOSS booking: its clocks are cancelled, so nothing purges it. A
-  media purge job is needed.
-- A client notification for `booking.data_loss` and `booking.partial_data_loss`.
+- ~~Purging media left on a DATA_LOSS booking~~ done 5 Nov: `booking.data_loss` queues the BullMQ
+  job `media.data-loss-purge` (media queue, one job id per booking, 8 tries). It runs only on a
+  booking that is DATA_LOSS: closes its open upload sessions (ABORTED), aborts every staged part's
+  storage session, and permanently deletes every media asset (RAW, JPEG, exports, video) through
+  StoragePort, repeating until a pass finds nothing (every kind, as for ABANDONED). An export
+  finishing after the purge is not recorded and deletes its own copy.
+- ~~A client notification~~ done 5 Nov: DATA_LOSS_CLIENT v1 (the reference and the amount coming
+  back; skipped when nothing is left to refund) and PARTIAL_DATA_LOSS_CLIENT v1 (the reference
+  only: the refunds follow as REFUND_ISSUED). Both need Meta and DLT registration.
 - **Owner question:** does a loss on Clickco's own storage (not the photographer's cards) count
   toward the photographer's G-13 cap? Today every DATA_LOSS counts.
 - `RuleRefund.requestedBy` allows USER or SYSTEM only, so a data-loss refund is recorded as

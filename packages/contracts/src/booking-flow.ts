@@ -98,7 +98,8 @@ export const InvoiceView = z.object({
 /**
  * GET /bookings/:id — owner only. `pendingExtensions` (awaiting the client's approval) and `charges`
  * (approved extensions, waiting time) arrive with on-site operations (ADR-0013); optional so older
- * consumers keep parsing.
+ * consumers keep parsing. `booking.balancePaise` is 0 once the booking ended without a delivery
+ * (cancelled, no-show, access denied, files lost, abandoned): nothing more is payable on it.
  */
 export const BookingDetail = z.object({
   booking: BookingSummary,
@@ -106,6 +107,11 @@ export const BookingDetail = z.object({
   invoices: z.array(InvoiceView),
   pendingExtensions: z.array(BookingPendingExtension).optional(),
   charges: z.array(BookingCharge).optional(),
+  /**
+   * When the photos were delivered (the download links opened); null before. The API always sends
+   * it; optional so older payloads still parse.
+   */
+  deliveredAt: IsoDateTime.nullable().optional(),
 });
 export type BookingDetail = z.infer<typeof BookingDetail>;
 

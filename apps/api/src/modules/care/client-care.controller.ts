@@ -1,14 +1,19 @@
+import { createHash } from 'node:crypto';
 import {
   ClientQualityIssue,
   ClientQualityIssueBody,
   ClientTicket,
   ClientTicketBody,
   ClientTicketList,
+  ClientTicketReply,
+  ClientTicketReplyBody,
+  ClientTicketThread,
   Uuid,
 } from '@clickco/contracts';
 import {
   Body,
   Controller,
+  type ExecutionContext,
   ForbiddenException,
   Get,
   HttpCode,
@@ -27,17 +32,36 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import type { Subject } from '../auth/token.service';
 import { UsersService } from '../users/users.service';
 import { CLIENT_CARE_CONFIG } from './care-rules';
-import { toClientQualityIssue, toClientTicket } from './client-views';
+import {
+  toClientQualityIssue,
+  toClientTicket,
+  toClientTicketReply,
+  toClientTicketThread,
+} from './client-views';
 import { QualityService } from './quality.service';
 import { TicketsService } from './tickets.service';
 
-const WRITES = { default: { limit: CLIENT_CARE_CONFIG.writesPerMinutePerIp, ttl: 60_000 } };
+/**
+ * One budget per IP bucket shared by the three client care writes (the throttler's own key is per
+ * route, which would give 10 a minute to each). Hashed like the throttler's default key.
+ */
+const sharedCareWritesKey = (_context: ExecutionContext, tracker: string, name: string): string =>
+  createHash('sha256').update(`client-care-writes:${name}:${tracker}`).digest('hex');
+
+const WRITES = {
+  default: {
+    limit: CLIENT_CARE_CONFIG.writesPerMinutePerIp,
+    ttl: 60_000,
+    generateKey: sharedCareWritesKey,
+  },
+};
 
 /**
  * The client's own way into customer care (ADR-0027 D5, SA-02): raise a support ticket, see their
- * tickets and the 48 h / 30 d clocks, report a quality issue on a delivered booking. Writes are
- * @Idempotent (a retried tap never raises a second ticket or issue) and limited per IP and, for
- * tickets, per client per day.
+ * tickets with the 48 h / 30 d clocks and the conversation (never staff notes), answer support on
+ * an open ticket, report a quality issue on a delivered booking. Writes are @Idempotent (a retried
+ * tap never raises a second ticket, reply or issue) and limited per IP and, for tickets and
+ * replies, per client per day.
  */
 @Controller()
 // Audit L1: USER sessions of accounts that are not blocked, checked on every request.
@@ -81,6 +105,30 @@ export class ClientCareController {
   async mine(@CurrentSubject() s: Subject) {
     const tickets = await this.tickets.listForClient(s.id);
     return ok(ClientTicketList.parse(tickets.map(toClientTicket)));
+  }
+
+  @Get('me/tickets/:id')
+  async one(@CurrentSubject() s: Subject, @Param('id', new ZodValidationPipe(Uuid)) id: string) {
+    const thread = await this.tickets.threadForClient(s.id, id);
+    return ok(ClientTicketThread.parse(toClientTicketThread(thread.ticket, thread.messages)));
+  }
+
+  /** 409 TICKET_CLOSED once resolved; 404 for a ticket that is not the caller's. */
+  @Post('me/tickets/:id/messages')
+  @HttpCode(201)
+  @Throttle(WRITES)
+  @Idempotent()
+  async reply(
+    @CurrentSubject() s: Subject,
+    @Param('id', new ZodValidationPipe(Uuid)) id: string,
+    @Body(new ZodValidationPipe(ClientTicketReplyBody)) body: ClientTicketReplyBody,
+  ) {
+    const reply = await this.tickets.replyForClient(
+      { userId: s.id, ticketId: id, message: body.message },
+      this.clock(),
+    );
+    // Only the new message and the status: the idempotency store never keeps support's replies.
+    return ok(ClientTicketReply.parse(toClientTicketReply(reply)));
   }
 
   @Post('bookings/:id/quality-issue')

@@ -6,6 +6,7 @@ import { TokenModule } from '../auth/token.module';
 import { BookingsModule } from '../bookings/bookings.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { PhotographersModule } from '../photographers/photographers.module';
+import { DataLossPurgeService } from './data-loss-purge.service';
 import { IntegrityAuditService } from './integrity-audit.service';
 import { MediaSubscribers } from './media.subscribers';
 import { MediaExportModule } from './media-export.module';
@@ -51,6 +52,7 @@ import { UploadSessionsService } from './upload-sessions.service';
     QuotaMonitorService,
     UploadReaperService,
     MediaRetentionService,
+    DataLossPurgeService,
     MediaSubscribers,
   ],
   exports: [
@@ -59,6 +61,7 @@ import { UploadSessionsService } from './upload-sessions.service';
     QuotaMonitorService,
     UploadReaperService,
     MediaRetentionService,
+    DataLossPurgeService,
   ],
 })
 export class MediaModule {}

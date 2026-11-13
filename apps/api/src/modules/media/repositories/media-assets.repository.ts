@@ -155,8 +155,16 @@ export class MediaAssetsRepository {
   }
 
   /** Serialises two exports of one RAW; returns whether a derived JPEG already exists. */
+  /**
+   * True when the export of this RAW must not be recorded: another run already recorded one, or
+   * the RAW was purged meanwhile (a lost shoot, ADR-0030). Holds the RAW row FOR SHARE, so a purge
+   * marking it waits for this transaction and then sees the export it recorded.
+   */
   async lockDerivation(tx: Tx, rawAssetId: string): Promise<boolean> {
     await tx`SELECT pg_advisory_xact_lock(hashtext(${`jpeg-export:${rawAssetId}`}))`;
+    const [raw] = await tx<{ purged: boolean }[]>`
+      SELECT purged_at IS NOT NULL AS purged FROM media_assets WHERE id = ${rawAssetId} FOR SHARE`;
+    if (!raw || raw.purged) return true;
     const [row] = await tx`SELECT 1 FROM media_assets WHERE derived_from_asset_id = ${rawAssetId}`;
     return row !== undefined;
   }

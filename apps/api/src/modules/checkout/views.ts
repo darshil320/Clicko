@@ -9,9 +9,14 @@ import {
 } from '@clickco/contracts';
 import { fromPaiseBigint } from '@clickco/utils';
 import type { BookingView, TimelineEntry } from '../bookings/bookings.types';
+import { endedWithoutDelivery } from '../bookings/state-machine';
 import type { GatewayName } from '../payments/gateways/payment-gateway.port';
 import type { InvoiceRecord, PaymentRecord } from '../payments/payments.types';
 
+/**
+ * The client's view of their booking. A booking that ended without a delivery shows no balance:
+ * nothing more is payable on it in the app (the stored column keeps the split of the price).
+ */
 export function toBookingSummary(v: BookingView, cityName: string): BookingSummary {
   return BookingSummary.parse({
     id: v.id,
@@ -26,7 +31,7 @@ export function toBookingSummary(v: BookingView, cityName: string): BookingSumma
     venueAddress: v.venueAddress,
     totalPaise: fromPaiseBigint(v.totalPaise),
     advancePaise: fromPaiseBigint(v.advancePaise),
-    balancePaise: fromPaiseBigint(v.balancePaise),
+    balancePaise: fromPaiseBigint(endedWithoutDelivery(v.status) ? 0n : v.balancePaise),
     amountPaidPaise: fromPaiseBigint(v.amountPaidPaise),
     quoteExpiresAt: v.quoteExpiresAt?.toISOString() ?? null,
     createdAt: v.createdAt.toISOString(),
@@ -68,6 +73,7 @@ export function toBookingDetail(
     invoices: invoices.map(toInvoiceJson),
     pendingExtensions: onsite.pendingExtensions,
     charges: onsite.charges,
+    deliveredAt: view.deliveredAt?.toISOString() ?? null,
   });
 }
 

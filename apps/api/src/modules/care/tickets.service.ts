@@ -3,6 +3,7 @@ import {
   RESOLVE_DUE_SOON_MS,
   type TicketCategory,
   type TicketRaisedBy,
+  type TicketStatus,
   ticketDeadlines,
   ticketStatusAfter,
 } from '@clickco/contracts';
@@ -30,6 +31,10 @@ import { SupportTicketsRepository } from './repositories/support-tickets.reposit
 
 const NOT_FOUND = { code: 'TICKET_NOT_FOUND', message: 'Ticket not found' };
 const DONE = { code: 'TICKET_RESOLVED', message: 'This ticket is already resolved' };
+const CLOSED_FOR_CLIENT = {
+  code: 'TICKET_CLOSED',
+  message: 'This request is closed. Raise a new one if you still need help.',
+};
 const BOOKING_NOT_FOUND = { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' };
 const DAY_MS = 86_400_000;
 
@@ -42,6 +47,29 @@ export interface ClientTicketInput {
   readonly category: TicketCategory;
   readonly message: string;
 }
+
+/** A client answering on one of their own tickets in the app. */
+export interface ClientReplyInput {
+  readonly userId: string;
+  readonly ticketId: string;
+  readonly message: string;
+}
+
+/** A ticket and the part of its conversation the client may read (never internal notes). */
+export interface ClientTicketThreadRecord {
+  readonly ticket: TicketRecord;
+  readonly messages: readonly TicketMessageRecord[];
+}
+
+/** What the client's reply answers with: the message as stored and the ticket's new status. */
+export interface ClientReplyRecord {
+  readonly ticketId: string;
+  readonly status: TicketStatus;
+  readonly message: TicketMessageRecord;
+}
+
+const rateLimited = (message: string) =>
+  new HttpException({ code: 'RATE_LIMITED', message }, HttpStatus.TOO_MANY_REQUESTS);
 
 export interface NewTicketInput {
   readonly raisedBy: TicketRaisedBy;
@@ -89,13 +117,8 @@ export class TicketsService {
         new Date(now.getTime() - DAY_MS),
       );
       if (today >= CLIENT_CARE_CONFIG.ticketsPerUserPerDay) {
-        throw new HttpException(
-          {
-            code: 'RATE_LIMITED',
-            message:
-              'You have raised several tickets today. We will get back to you on those first.',
-          },
-          HttpStatus.TOO_MANY_REQUESTS,
+        throw rateLimited(
+          'You have raised several tickets today. We will get back to you on those first.',
         );
       }
       const id = await this.repo.insert(tx, {
@@ -145,9 +168,79 @@ export class TicketsService {
     });
   }
 
-  /** The client's own tickets, newest first. */
+  /** The client's own tickets, newest first (the conversation is read per ticket). */
   listForClient(userId: string): Promise<TicketRecord[]> {
     return this.repo.forUser(this.sql, userId, CLIENT_CARE_CONFIG.ticketListLimit);
+  }
+
+  /** One of the client's own tickets (someone else's is 404, like a missing one). */
+  async threadForClient(userId: string, ticketId: string): Promise<ClientTicketThreadRecord> {
+    const ticket = await this.repo.findForUser(this.sql, ticketId, userId);
+    if (!ticket) throw new NotFoundException(NOT_FOUND);
+    return { ticket, messages: await this.repo.publicMessages(this.sql, [ticket.id]) };
+  }
+
+  /**
+   * The client answers on their own ticket (ADR-0026 D6 care rules). Like a customer message staff
+   * log, it hands an AWAITING_CUSTOMER (or ACKNOWLEDGED) ticket back to support as IN_PROGRESS; an
+   * OPEN one stays OPEN and is not acknowledged by it. The statutory deadlines run from receipt
+   * (T&C §12), so a reply never moves them. Refused once resolved or closed. At most
+   * CLIENT_CARE_CONFIG.ticketRepliesPerUserPerDay a day, counted under the same per-client lock as
+   * the ticket cap. The message, the status and `ticket.client_replied` commit together.
+   */
+  async replyForClient(r: ClientReplyInput, now: Date): Promise<ClientReplyRecord> {
+    return this.sql.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`care:tickets:user:${r.userId}`}))`;
+      const ticket = await this.repo.lockForUser(tx, r.ticketId, r.userId);
+      if (!ticket) throw new NotFoundException(NOT_FOUND);
+      const effect = ticketMessageEffect(ticket.status, 'CUSTOMER', ticket.acknowledgedAt !== null);
+      if (!effect) throw new ConflictException(CLOSED_FOR_CLIENT);
+      const today = await this.repo.countClientRepliesSince(
+        tx,
+        r.userId,
+        new Date(now.getTime() - DAY_MS),
+      );
+      if (today >= CLIENT_CARE_CONFIG.ticketRepliesPerUserPerDay) {
+        throw rateLimited('You have sent a lot of messages today. We will reply to those first.');
+      }
+      const messageId = await this.repo.insertMessage(tx, {
+        ticketId: ticket.id,
+        authorKind: 'CUSTOMER',
+        authorId: r.userId,
+        body: r.message,
+        isInternal: false,
+        at: now,
+      });
+      if (effect.status !== ticket.status) {
+        await this.repo.update(tx, ticket.id, { status: effect.status });
+      }
+      // No message text in the event (ids and statuses only).
+      await appendDomainEvent(tx, {
+        eventType: 'ticket.client_replied',
+        aggregateKind: 'support_ticket',
+        aggregateId: ticket.id,
+        occurredAt: now,
+        payload: {
+          ticket_id: ticket.id,
+          reference: ticket.reference,
+          user_id: r.userId,
+          booking_id: ticket.bookingId,
+          message_id: messageId,
+          status_before: ticket.status,
+          status_after: effect.status,
+        },
+      });
+      const message: TicketMessageRecord = {
+        id: messageId,
+        ticketId: ticket.id,
+        authorKind: 'CUSTOMER',
+        authorId: r.userId,
+        body: r.message,
+        isInternal: false,
+        createdAt: now,
+      };
+      return { ticketId: ticket.id, status: effect.status, message };
+    });
   }
 
   page(q: TicketPageQuery): Promise<TicketRecord[]> {

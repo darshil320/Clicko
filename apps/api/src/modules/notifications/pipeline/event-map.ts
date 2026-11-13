@@ -278,6 +278,29 @@ export const EVENT_MAP: readonly EventMapping[] = [
     },
   },
   {
+    // ADR-0030 D2: staff confirmed the shoot's files lost; everything paid and not already on its
+    // way back goes back by rule (T&C §5.5). Nothing left to send back (a partial loss refunded
+    // it all before): the amount is null and the send is skipped rather than saying "₹0". Never
+    // the staff note.
+    eventType: 'booking.data_loss',
+    template: 'DATA_LOSS_CLIENT',
+    resolve: toClient('DATA_LOSS_CLIENT', async (b, event) => {
+      if (str(event, 'loss_kind') !== 'COMPLETE') return null; // PARTIAL is reserved here
+      const amount = int(event, 'refund_amount_paise');
+      return {
+        bookingRef: b.reference,
+        amount: amount !== null && amount > 0 ? formatRupees(amount) : null,
+      };
+    }),
+  },
+  {
+    // Part of the shoot lost; the booking carries on to delivery. The refunds (now, and after the
+    // balance) are told by REFUND_ISSUED as each is processed.
+    eventType: 'booking.partial_data_loss',
+    template: 'PARTIAL_DATA_LOSS_CLIENT',
+    resolve: toClient('PARTIAL_DATA_LOSS_CLIENT', async (b) => ({ bookingRef: b.reference })),
+  },
+  {
     eventType: 'refund.processed',
     template: 'REFUND_ISSUED',
     resolve: toClient(

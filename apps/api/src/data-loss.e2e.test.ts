@@ -1,12 +1,26 @@
-import type { StaffRole } from '@clickco/contracts';
+import { createHash } from 'node:crypto';
+import { MEDIA_LIMITS, type StaffRole } from '@clickco/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { JobRegistry } from './infra/queues/job-registry';
+import { JOB } from './infra/queues/queue-names';
+import { STORAGE_PORT, type StoragePort } from './infra/storage/storage.port';
 import { SecretBox } from './modules/admin/auth/secret-box';
 import { base32Decode } from './modules/admin/auth/totp';
 import { BookingsService } from './modules/bookings/bookings.service';
-import { walkTo } from './modules/media/__tests__/media-fixtures';
+import { fakeFile, SIGNATURES, walkTo } from './modules/media/__tests__/media-fixtures';
+import {
+  NOTIFICATION_SMS_PORT,
+  WHATSAPP_PORT,
+} from './modules/notifications/channels/channel.ports';
+import type {
+  ConsoleNotificationSmsAdapter,
+  ConsoleWhatsAppAdapter,
+} from './modules/notifications/channels/console-channels';
+import { formatRupees } from './modules/notifications/templates/variables';
 import { RefundsService } from './modules/refunds/refunds.service';
 import { ReviewsService } from './modules/refunds/reviews.service';
 import { SlaService } from './modules/sla/sla.service';
+import { type UploadFile, uploadAll } from './test-support/delivery-fixtures';
 import { drainOutbox } from './test-support/dispatch-fixtures';
 import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
 import {
@@ -28,7 +42,7 @@ const TOTP = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 const NOTE = 'Both cards corrupted; the photographer sent the card reader logs';
 
 type Who = 'qm' | 'qm2' | 'cm' | 'cmMumbai' | 'ops' | 'readOnly' | 'finance' | 'admin';
-type Which = 'uploading' | 'processing' | 'qa' | 'early';
+type Which = 'uploading' | 'processing' | 'qa' | 'early' | 'staged' | 'media';
 
 /**
  * ADR-0030 D2 — the staff routes to a lost shoot (DOMAIN §2: UPLOADING / PROCESSING / QA, STAFF
@@ -140,6 +154,8 @@ describe.runIf(TEST_DATABASE_URL)('data loss confirmed by staff', () => {
       ['processing', 5],
       ['qa', 6],
       ['early', 7],
+      ['staged', 8],
+      ['media', 9],
     ] as const) {
       const booked = await bookAndPay(e2e, clientId, new Date(NOW.getTime() + days * DAY));
       b[which] = { id: booked.id as string, reference: booked.reference as string };
@@ -524,6 +540,235 @@ describe.runIf(TEST_DATABASE_URL)('data loss confirmed by staff', () => {
       outcome: 'NO_ACTION',
       note: 'Superseded by data loss',
       resolved_by: staff.qm,
+    });
+  });
+
+  /**
+   * ADR-0030 follow-ups: a lost shoot keeps no files. `booking.data_loss` queues one purge job per
+   * booking (BullMQ, the media queue) that deletes every original, export and staged upload part
+   * through StoragePort, and is safe to run twice. The client is told, with what comes back.
+   */
+  describe('the lost shoot’s files are purged and the client is told', () => {
+    const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+    const FILES: UploadFile[] = [
+      {
+        clientFileId: 'raw',
+        name: 'IMG_0001.CR3',
+        kind: 'RAW_PHOTO',
+        bytes: fakeFile(64_000, 21, SIGNATURES.CR3),
+      },
+      {
+        clientFileId: 'jpg',
+        name: 'IMG_0002.JPG',
+        kind: 'JPEG_PHOTO',
+        bytes: fakeFile(32_000, 22, SIGNATURES.JPEG),
+      },
+    ];
+    const STAGED = fakeFile(48_000, 23, SIGNATURES.CR3);
+    let storage: StoragePort;
+    let stagedSessionId: string;
+    let stagedStorageSession: string;
+    const proToken = () => tokenFor(e2e, 'PHOTOGRAPHER', pro);
+    const assets = async (which: Which) =>
+      e2e.db.sql<{ kind: string; purged: boolean; derived: boolean }[]>`
+        SELECT kind, purged_at IS NOT NULL AS purged, derived_from_asset_id IS NOT NULL AS derived
+        FROM media_assets WHERE booking_id = ${b[which].id} ORDER BY created_at, id`;
+    const runPurges = () =>
+      e2e.scheduler.runDue(e2e.get(JobRegistry), e2e.now(), JOB.MEDIA_DATA_LOSS_PURGE);
+    const purgeNow = (which: Which) =>
+      e2e
+        .get(JobRegistry)
+        .processorFor(JOB.MEDIA_DATA_LOSS_PURGE)
+        ?.process({ bookingId: b[which].id });
+
+    beforeAll(async () => {
+      storage = e2e.get(STORAGE_PORT);
+      // UPLOADING: two files verified, a third only partly sent (its part waits in staging).
+      await walkTo(e2e, b.staged.id, assignments.staged as string, 'CHECKED_OUT', 3);
+      const token = await proToken();
+      const opened = await e2e.call('POST', `/pro/bookings/${b.staged.id}/upload-sessions`, {
+        token,
+        idempotencyKey: idemKey('staged-open'),
+        body: {
+          files: [
+            ...FILES.map((f) => ({ ...f, bytes: f.bytes.length })),
+            { clientFileId: 'raw2', name: 'IMG_0003.CR3', kind: 'RAW_PHOTO', bytes: STAGED.length },
+          ].map((f) => ({
+            clientFileId: f.clientFileId,
+            name: f.name,
+            sizeBytes: f.bytes,
+            kind: f.kind,
+            lastModified: 1_700_000_000_000,
+          })),
+          declaredFrameCount: 3,
+        },
+      });
+      expect(opened.status).toBe(201);
+      stagedSessionId = opened.json.data.sessionId as string;
+      const put = (fileId: string, bytes: Buffer) =>
+        e2e.call('PUT', `/pro/upload-sessions/${stagedSessionId}/files/${fileId}/parts/1`, {
+          token,
+          rawBody: bytes,
+          headers: { 'content-type': 'application/octet-stream', 'x-part-sha256': sha(bytes) },
+        });
+      for (const f of FILES) {
+        expect(f.bytes.length).toBeLessThan(MEDIA_LIMITS.partSizeBytes);
+        expect((await put(f.clientFileId, f.bytes)).status).toBe(200);
+        const done = await e2e.call(
+          'POST',
+          `/pro/upload-sessions/${stagedSessionId}/files/${f.clientFileId}/complete`,
+          { token, idempotencyKey: idemKey('staged-file'), body: { sha256: sha(f.bytes) } },
+        );
+        expect(done.status).toBe(200);
+      }
+      expect((await put('raw2', STAGED)).status).toBe(200);
+      const [doc] = await e2e.db.sql<{ storage_session: string }[]>`
+        SELECT completed_parts->'files'->'raw2'->>'storageSessionId' AS storage_session
+        FROM upload_sessions WHERE id = ${stagedSessionId}`;
+      stagedStorageSession = doc?.storage_session ?? '';
+      expect(await storage.listParts(stagedStorageSession)).toHaveLength(1);
+      // An orphan: stored, but its media_assets row never written (a crash in between).
+      const orphan = Buffer.from('orphaned export bytes');
+      await storage.putObject(
+        {
+          bookingId: b.staged.id,
+          bookingRef: b.staged.reference,
+          yearMonth: '2026-12',
+          relativePath: 'Photos-JPEG/orphan.jpg',
+          fileName: 'orphan.jpg',
+          contentType: 'image/jpeg',
+          kind: 'JPEG',
+          sizeBytes: orphan.length,
+        },
+        [orphan],
+      );
+      expect(await storage.listObjects(b.staged.id)).toHaveLength(3);
+      // Another booking's object must survive the purge.
+      await storage.putObject(
+        {
+          bookingId: b.early.id,
+          bookingRef: b.early.reference,
+          yearMonth: '2026-12',
+          relativePath: 'Photos-JPEG/keep.jpg',
+          fileName: 'keep.jpg',
+          contentType: 'image/jpeg',
+          kind: 'JPEG',
+          sizeBytes: orphan.length,
+        },
+        [orphan],
+      );
+
+      // QA: uploaded, then exported (RAW → JPEG) by the export job.
+      await walkTo(e2e, b.media.id, assignments.media as string, 'CHECKED_OUT', 2);
+      await uploadAll(e2e, token, b.media.id, FILES, 2);
+      await drainOutbox(e2e);
+      await e2e.scheduler.runDue(e2e.get(JobRegistry), e2e.now(), JOB.MEDIA_JPEG_EXPORT);
+      await drainOutbox(e2e);
+      expect(await status('staged')).toBe('UPLOADING');
+      expect(await status('media')).toBe('QA');
+    }, 120_000);
+
+    it('a purge job for a booking that is not lost deletes nothing', async () => {
+      await purgeNow('media');
+      expect((await assets('media')).map((a) => a.purged)).toEqual([false, false, false]);
+      expect(await storage.listObjects(b.media.id)).toHaveLength(3);
+    });
+
+    it('confirming the loss queues one purge per booking; it deletes originals, exports and staged parts', async () => {
+      expect((await confirm('qm', 'staged', 'finance')).status).toBe(200);
+      expect((await confirm('qm', 'media', 'finance')).status).toBe(200);
+      await drainOutbox(e2e);
+      await drainOutbox(e2e); // a redelivered event schedules nothing new
+      // One job per lost booking, the earlier ones in this file included.
+      const queued = e2e.scheduler.pending(JOB.MEDIA_DATA_LOSS_PURGE);
+      expect(queued.map((j) => j.jobId).sort()).toEqual(
+        (['uploading', 'processing', 'qa', 'staged', 'media'] as const)
+          .map((which) => `media-data-loss-purge-${b[which].id}`)
+          .sort(),
+      );
+      expect((await assets('media')).map((a) => [a.kind, a.derived]).sort()).toEqual([
+        ['JPEG_PHOTO', false],
+        ['JPEG_PHOTO', true],
+        ['RAW_PHOTO', false],
+      ]);
+
+      expect(await runPurges()).toBe(5);
+
+      for (const which of ['staged', 'media'] as const) {
+        expect((await assets(which)).every((a) => a.purged)).toBe(true);
+        expect(await storage.listObjects(b[which].id)).toEqual([]);
+      }
+      expect(await assets('staged')).toHaveLength(2);
+      expect(await storage.listObjects(b.early.id)).toHaveLength(1);
+      const [session] = await e2e.db.sql<{ status: string; failure_reason: string }[]>`
+        SELECT status, failure_reason FROM upload_sessions WHERE id = ${stagedSessionId}`;
+      expect(session?.status).toBe('ABORTED');
+      expect(session?.failure_reason).toMatch(/lost/i);
+      await expect(storage.listParts(stagedStorageSession)).rejects.toThrow();
+    });
+
+    it('running it again is a no-op; the photographer can no longer upload to the lost booking', async () => {
+      await expect(purgeNow('staged')).resolves.toBeUndefined();
+      await expect(purgeNow('media')).resolves.toBeUndefined();
+      expect((await assets('staged')).every((a) => a.purged)).toBe(true);
+      const late = await e2e.call(
+        'PUT',
+        `/pro/upload-sessions/${stagedSessionId}/files/raw2/parts/1`,
+        {
+          token: await proToken(),
+          rawBody: STAGED,
+          headers: { 'content-type': 'application/octet-stream', 'x-part-sha256': sha(STAGED) },
+        },
+      );
+      expect(late.status).toBe(409);
+      expect(await storage.listObjects(b.staged.id)).toEqual([]);
+    });
+
+    it('the client is told: what comes back on a complete loss; a partial loss in plain words', async () => {
+      await drainOutbox(e2e);
+      await e2e.scheduler.runDue(e2e.get(JobRegistry), e2e.now(), JOB.NOTIFICATION_SEND);
+      const sends = await e2e.db.sql<
+        { template_code: string; booking_id: string; status: string; channel: string | null }[]
+      >`
+        SELECT template_code, booking_id, status, channel FROM notification_sends
+        WHERE template_code IN ('DATA_LOSS_CLIENT', 'PARTIAL_DATA_LOSS_CLIENT')
+          AND recipient_kind = 'USER' AND recipient_id = ${clientId}`;
+      const sent = (code: string, which: Which) =>
+        sends.some(
+          (r) => r.template_code === code && r.booking_id === b[which].id && r.status === 'SENT',
+        );
+      for (const which of ['uploading', 'processing', 'staged', 'media'] as const) {
+        expect(sent('DATA_LOSS_CLIENT', which), which).toBe(true);
+      }
+      expect(sent('PARTIAL_DATA_LOSS_CLIENT', 'qa')).toBe(true);
+      // Its complete loss came after everything paid had gone back: no "₹0 is coming back".
+      expect(sent('DATA_LOSS_CLIENT', 'qa')).toBe(false);
+
+      const [event] = await e2e.db.sql<{ payload: Json }[]>`
+        SELECT payload FROM domain_events
+        WHERE event_type = 'booking.data_loss' AND aggregate_id = ${b.staged.id}`;
+      const sentMessages = [
+        ...e2e.get<ConsoleWhatsAppAdapter>(WHATSAPP_PORT).sent,
+        ...e2e.get<ConsoleNotificationSmsAdapter>(NOTIFICATION_SMS_PORT).sent,
+      ];
+      const message = sentMessages.find(
+        (m) =>
+          m.templateCode === 'DATA_LOSS_CLIENT' && m.variables.bookingRef === b.staged.reference,
+      );
+      expect(message?.variables).toEqual({
+        bookingRef: b.staged.reference,
+        amount: formatRupees(event?.payload.refund_amount_paise as number),
+      });
+      expect(message?.text).toMatch(/^We are sorry/);
+      expect(message?.text).not.toContain(NOTE);
+    });
+
+    it('the client sees nothing more to pay on the lost booking', async () => {
+      const detail = await e2e.call('GET', `/bookings/${b.media.id}`, {
+        token: await tokenFor(e2e, 'USER', clientId),
+      });
+      expect(detail.json.data.booking).toMatchObject({ status: 'DATA_LOSS', balancePaise: 0 });
+      expect(detail.json.data.deliveredAt).toBeNull();
     });
   });
 

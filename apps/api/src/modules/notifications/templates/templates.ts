@@ -42,6 +42,12 @@ export interface TemplateDef<V extends z.ZodRawShape = z.ZodRawShape> {
   /** The text as approved; `{name}` placeholders. The SMS/DLT template mirrors it. */
   readonly text: string;
   /**
+   * The WhatsApp body when it must differ from `text`: a link travels in the URL button, never in
+   * the body. Its placeholders are `bodyOrder`, in order. Meta refuses a body that starts or ends
+   * with a variable.
+   */
+  readonly whatsappText?: string;
+  /**
    * The push body when it must differ from `text`: a push shows on the lock screen and passes
    * through Expo, FCM and APNs, so it never carries a delivery link (`{link}`). The app deep-links
    * with the push data (bookingId) instead.
@@ -76,13 +82,14 @@ export const TEMPLATES = {
     title: 'Booking confirmed',
     text: 'Your Clickco booking {bookingRef} for {when} is confirmed. We will share your photographer once one is assigned.',
   }),
+  // v2: Meta refuses a body that starts with a variable (v1 began with the name).
   PHOTOGRAPHER_ASSIGNED: template({
     code: 'PHOTOGRAPHER_ASSIGNED',
-    version: 1,
+    version: 2,
     category: 'transactional',
     audience: 'CLIENT',
     channels: CLIENT_MESSAGING,
-    whatsappName: 'photographer_assigned_v1',
+    whatsappName: 'photographer_assigned_v2',
     variables: z
       .object({
         bookingRef: BookingRef,
@@ -93,31 +100,31 @@ export const TEMPLATES = {
       .strict(),
     bodyOrder: ['photographerName', 'bookingRef', 'when', 'callNumber'],
     title: 'Photographer assigned',
-    text: '{photographerName} will shoot your booking {bookingRef} on {when}. Call them from the Clickco app: calls show {callNumber} and your number stays private.',
+    text: 'Your photographer {photographerName} will shoot your booking {bookingRef} on {when}. Call them from the Clickco app: calls show {callNumber} and your number stays private.',
   }),
   PHOTOGRAPHER_ON_THE_WAY: template({
     code: 'PHOTOGRAPHER_ON_THE_WAY',
-    version: 1,
+    version: 2,
     category: 'transactional',
     audience: 'CLIENT',
     channels: CLIENT_MESSAGING,
-    whatsappName: 'photographer_on_the_way_v1',
+    whatsappName: 'photographer_on_the_way_v2',
     variables: z.object({ bookingRef: BookingRef, photographerName: FirstName }).strict(),
     bodyOrder: ['photographerName', 'bookingRef'],
     title: 'On the way',
-    text: '{photographerName} is on the way to your Clickco shoot {bookingRef}.',
+    text: 'Your photographer {photographerName} is on the way to your Clickco shoot {bookingRef}.',
   }),
   CHECKED_IN: template({
     code: 'CHECKED_IN',
-    version: 1,
+    version: 2,
     category: 'transactional',
     audience: 'CLIENT',
     channels: CLIENT_MESSAGING,
-    whatsappName: 'photographer_checked_in_v1',
+    whatsappName: 'photographer_checked_in_v2',
     variables: z.object({ bookingRef: BookingRef, photographerName: FirstName }).strict(),
     bodyOrder: ['photographerName', 'bookingRef'],
     title: 'Photographer has arrived',
-    text: '{photographerName} has arrived for your Clickco shoot {bookingRef}.',
+    text: 'Your photographer {photographerName} has arrived for your Clickco shoot {bookingRef}.',
   }),
   EXTENSION_REQUESTED: template({
     code: 'EXTENSION_REQUESTED',
@@ -179,19 +186,22 @@ export const TEMPLATES = {
     urlButton: 'linkToken',
     title: 'Your photos are here',
     text: 'Your photos for {bookingRef} are ready: {link}',
+    // The link is the URL button's suffix (`urlButton`), never part of the WhatsApp body.
+    whatsappText: 'Your photos for {bookingRef} are ready.',
     pushText: 'Your photos for {bookingRef} are ready. Open Clickco to see them.',
   }),
+  // v2: the timing follows T&C v2 §3.9 (7–10 working days; v1 said 5–7).
   REFUND_ISSUED: template({
     code: 'REFUND_ISSUED',
-    version: 1,
+    version: 2,
     category: 'transactional',
     audience: 'CLIENT',
     channels: CLIENT_MESSAGING,
-    whatsappName: 'refund_issued_v1',
+    whatsappName: 'refund_issued_v2',
     variables: z.object({ bookingRef: BookingRef, amount: Rupees }).strict(),
     bodyOrder: ['amount', 'bookingRef'],
     title: 'Refund processed',
-    text: 'A refund of {amount} for booking {bookingRef} has been processed. It can take 5–7 working days to reach your account.',
+    text: 'A refund of {amount} for booking {bookingRef} has been processed. It can take 7–10 working days to reach your account.',
   }),
   BOOKING_CANCELLED: template({
     code: 'BOOKING_CANCELLED',
@@ -204,6 +214,34 @@ export const TEMPLATES = {
     bodyOrder: ['bookingRef', 'when'],
     title: 'Booking cancelled',
     text: 'Your Clickco booking {bookingRef} for {when} has been cancelled as you asked. Any refund due is on its way to your original payment method, and we will message you when it is processed.',
+  }),
+  // ADR-0030 D2: staff confirmed every file of the shoot lost; everything paid goes back by rule
+  // (T&C §5.5). REFUND_ISSUED follows once the gateway confirms the refund.
+  DATA_LOSS_CLIENT: template({
+    code: 'DATA_LOSS_CLIENT',
+    version: 1,
+    category: 'transactional',
+    audience: 'CLIENT',
+    channels: CLIENT_MESSAGING,
+    whatsappName: 'data_loss_client_v1',
+    variables: z.object({ bookingRef: BookingRef, amount: Rupees }).strict(),
+    bodyOrder: ['bookingRef', 'amount'],
+    title: 'Photos could not be recovered',
+    text: 'We are sorry: the photos from your Clickco shoot {bookingRef} could not be recovered. A refund of {amount} is on its way to your original payment method, and we will message you when it is processed.',
+  }),
+  // ADR-0030 D2: part of the shoot is lost. The share owed is refunded as far as it can be now and
+  // the rest after the balance, each with its own REFUND_ISSUED; the booking carries on.
+  PARTIAL_DATA_LOSS_CLIENT: template({
+    code: 'PARTIAL_DATA_LOSS_CLIENT',
+    version: 1,
+    category: 'transactional',
+    audience: 'CLIENT',
+    channels: CLIENT_MESSAGING,
+    whatsappName: 'partial_data_loss_client_v1',
+    variables: z.object({ bookingRef: BookingRef }).strict(),
+    bodyOrder: ['bookingRef'],
+    title: 'Some photos could not be recovered',
+    text: 'We are sorry: some of the photos from your Clickco shoot {bookingRef} could not be recovered. You will get a refund for the part that was lost, and the rest of your photos will be delivered as usual.',
   }),
   CREDIT_ISSUED: template({
     code: 'CREDIT_ISSUED',

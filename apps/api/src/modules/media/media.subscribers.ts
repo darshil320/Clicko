@@ -7,9 +7,14 @@ import { JOB } from '../../infra/queues/queue-names';
 /** BullMQ job id for a booking's export: the same id twice is one job (at-least-once safe). */
 export const jpegExportJobId = (bookingId: string): string => `jpeg-export-${bookingId}`;
 
+/** BullMQ job id for a lost booking's purge: one job per booking however often the event comes. */
+export const dataLossPurgeJobId = (bookingId: string): string =>
+  `media-data-loss-purge-${bookingId}`;
+
 /**
- * booking.processing → the RAW → JPEG export job (ADR-0014 D4). Enqueue failures throw, so the
- * outbox retries the event; the job id makes a repeat delivery a no-op.
+ * booking.processing → the RAW → JPEG export job (ADR-0014 D4); booking.data_loss → the purge of
+ * everything the lost shoot stored (ADR-0030). Enqueue failures throw, so the outbox retries the
+ * event; the job id makes a repeat delivery a no-op.
  */
 @Injectable()
 export class MediaSubscribers implements OnModuleInit {
@@ -22,6 +27,18 @@ export class MediaSubscribers implements OnModuleInit {
   onModuleInit(): void {
     this.subscribers.subscribe('booking.processing', 'media.jpeg-export', (e) =>
       this.onProcessing(e),
+    );
+    this.subscribers.subscribe('booking.data_loss', 'media.data-loss-purge', (e) =>
+      this.onDataLoss(e),
+    );
+  }
+
+  async onDataLoss(event: PublishedEvent): Promise<void> {
+    await this.scheduler.runAt(
+      JOB.MEDIA_DATA_LOSS_PURGE,
+      { bookingId: event.aggregateId },
+      this.clock(),
+      dataLossPurgeJobId(event.aggregateId),
     );
   }
 

@@ -38,6 +38,76 @@ describe('template catalogue (ADR-0027 D2)', () => {
     expect(def.channels.length).toBeGreaterThan(0);
   });
 
+  it.each(TEMPLATE_CODES)('%s has a WhatsApp body Meta accepts', (code) => {
+    const def = templateOf(code);
+    if (!def) throw new Error('missing');
+    const body = def.whatsappText ?? def.text;
+    // Meta refuses a body that starts or ends with a variable, or has two side by side.
+    expect(body, code).not.toMatch(/^\s*\{/);
+    expect(body, code).not.toMatch(/\}\s*$/);
+    expect(body, code).not.toMatch(/\}\s*\{/);
+    // The body's {{1}}, {{2}} … are bodyOrder, in that order; a link only ever rides the button.
+    const names = [...body.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+    expect(names, code).toEqual([...def.bodyOrder]);
+  });
+
+  it('the photographer messages start with fixed text (v2, re-registered with Meta and DLT)', () => {
+    const vars = { bookingRef: 'CLK-1001', photographerName: 'Meera' };
+    const when = 'Sat 14 Nov, 4:30 pm';
+    const render = (code: string, v: Record<string, string>) => {
+      const def = templateOf(code);
+      if (!def) throw new Error('missing');
+      return [def.version, def.whatsappName, renderText(def, v, 'https://clickco.in')];
+    };
+    expect(render('PHOTOGRAPHER_ASSIGNED', { ...vars, when, callNumber: '+918047112233' })).toEqual(
+      [
+        2,
+        'photographer_assigned_v2',
+        'Your photographer Meera will shoot your booking CLK-1001 on Sat 14 Nov, 4:30 pm. Call them from the Clickco app: calls show +918047112233 and your number stays private.',
+      ],
+    );
+    expect(render('PHOTOGRAPHER_ON_THE_WAY', vars)).toEqual([
+      2,
+      'photographer_on_the_way_v2',
+      'Your photographer Meera is on the way to your Clickco shoot CLK-1001.',
+    ]);
+    expect(render('CHECKED_IN', vars)).toEqual([
+      2,
+      'photographer_checked_in_v2',
+      'Your photographer Meera has arrived for your Clickco shoot CLK-1001.',
+    ]);
+  });
+
+  it('refund timing follows T&C §3.9 (7–10 working days)', () => {
+    const def = templateOf('REFUND_ISSUED');
+    if (!def) throw new Error('missing');
+    expect([def.version, def.whatsappName]).toEqual([2, 'refund_issued_v2']);
+    expect(def.text).toContain('7–10 working days');
+    for (const code of TEMPLATE_CODES) expect(templateOf(code)?.text).not.toContain('5–7');
+  });
+
+  it('a lost shoot: the amount back on a complete loss, plain words on a partial one', () => {
+    const complete = templateOf('DATA_LOSS_CLIENT');
+    const partial = templateOf('PARTIAL_DATA_LOSS_CLIENT');
+    if (!complete || !partial) throw new Error('missing');
+    for (const def of [complete, partial]) {
+      expect([def.version, def.category, def.audience]).toEqual([1, 'transactional', 'CLIENT']);
+      expect(def.channels).toEqual(['WHATSAPP', 'SMS', 'PUSH']);
+    }
+    expect(
+      renderText(complete, { bookingRef: 'CLK-1001', amount: '₹5,767.25' }, 'https://x.in'),
+    ).toBe(
+      'We are sorry: the photos from your Clickco shoot CLK-1001 could not be recovered. A refund of ₹5,767.25 is on its way to your original payment method, and we will message you when it is processed.',
+    );
+    expect(renderText(partial, { bookingRef: 'CLK-1001' }, 'https://x.in')).toBe(
+      'We are sorry: some of the photos from your Clickco shoot CLK-1001 could not be recovered. You will get a refund for the part that was lost, and the rest of your photos will be delivered as usual.',
+    );
+    // Strict: no free text can ride along.
+    expect(() =>
+      validateVariables(complete, { bookingRef: 'CLK-1001', amount: '₹1', note: 'x' }),
+    ).toThrow(TemplateVariablesError);
+  });
+
   it('templateOf knows only catalogue codes', () => {
     expect(templateOf('BOOKING_CONFIRMED')?.code).toBe('BOOKING_CONFIRMED');
     expect(templateOf('toString')).toBeNull();
