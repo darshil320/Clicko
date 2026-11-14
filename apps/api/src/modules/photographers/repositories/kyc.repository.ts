@@ -54,6 +54,36 @@ export interface Verified {
   readonly today: string;
 }
 
+/** A document due for its DPDP purge: just what the sweep needs (no identifiers). */
+export interface DuePurge {
+  readonly id: string;
+  readonly photographerId: string;
+  readonly kind: DocumentKind;
+  /** The StoragePort object id. */
+  readonly storageKey: string;
+}
+
+interface DuePurgeRow {
+  id: string;
+  photographer_id: string;
+  kind: DocumentKind;
+  storage_key: string;
+}
+
+const DUE_COLUMNS = 'd.id, d.photographer_id, d.kind, d.storage_key';
+
+/** Due, unpurged, and the relationship has ended (never onboarded, or offboarded). */
+const dueClause = (db: Db, today: string) =>
+  db`d.purged_at IS NULL AND d.purge_after IS NOT NULL AND d.purge_after <= ${today}::date
+     AND p.status IN ('APPLICANT', 'OFFBOARDED')`;
+
+const toDuePurge = (r: DuePurgeRow): DuePurge => ({
+  id: r.id,
+  photographerId: r.photographer_id,
+  kind: r.kind,
+  storageKey: r.storage_key,
+});
+
 /**
  * photographer_documents (the KYC queue) and the manual verification ticks on photographers.
  * Never holds or returns a full identifier: last 4 only (Invariant 15).
@@ -159,6 +189,68 @@ export class KycRepository {
       WHERE d.photographer_id = ${photographerId} AND d.purged_at IS NULL
       ORDER BY d.uploaded_at DESC, d.id`;
     return rows.map(toDocument);
+  }
+
+  /**
+   * DPDP retention: the relationship ended — every unpurged document of the photographer is due
+   * for purge on `purgeAfter` (YYYY-MM-DD). Returns how many documents it covers.
+   */
+  async schedulePurge(tx: Tx, photographerId: string, purgeAfter: string): Promise<number> {
+    const rows = await tx`
+      UPDATE photographer_documents SET purge_after = ${purgeAfter}::date
+      WHERE photographer_id = ${photographerId} AND purged_at IS NULL
+      RETURNING id`;
+    return rows.length;
+  }
+
+  /** The relationship resumed (an application reopened): pending purges are called off. */
+  async cancelPurge(tx: Tx, photographerId: string): Promise<number> {
+    const rows = await tx`
+      UPDATE photographer_documents SET purge_after = NULL
+      WHERE photographer_id = ${photographerId} AND purged_at IS NULL AND purge_after IS NOT NULL
+      RETURNING id`;
+    return rows.length;
+  }
+
+  /**
+   * Unpurged documents due on or before `today` (IST), oldest first, `limit` at most. Only for a
+   * photographer whose relationship has ended (applicant or offboarded): a live photographer's
+   * documents are never purged, whatever a stray purge_after says.
+   */
+  async dueForPurge(db: Db, today: string, limit: number): Promise<DuePurge[]> {
+    const rows = await db<DuePurgeRow[]>`
+      SELECT ${db.unsafe(DUE_COLUMNS)}
+      FROM photographer_documents d JOIN photographers p ON p.id = d.photographer_id
+      WHERE ${dueClause(db, today)}
+      ORDER BY d.purge_after, d.id
+      LIMIT ${limit}`;
+    return rows.map(toDuePurge);
+  }
+
+  /**
+   * Locks one document if it is still due (null when reopened, purged or gone meanwhile). The
+   * photographer row is share-locked too, so a reopen cannot change their status mid-delete.
+   */
+  async lockDueForPurge(tx: Tx, id: string, today: string): Promise<DuePurge | null> {
+    const [row] = await tx<DuePurgeRow[]>`
+      SELECT ${tx.unsafe(DUE_COLUMNS)}
+      FROM photographer_documents d JOIN photographers p ON p.id = d.photographer_id
+      WHERE d.id = ${id} AND ${dueClause(tx, today)}
+      FOR UPDATE OF d SKIP LOCKED FOR SHARE OF p SKIP LOCKED`;
+    return row ? toDuePurge(row) : null;
+  }
+
+  /**
+   * The file is gone: record it and erase what identifies the person (last 4, the uploaded file
+   * name, the reviewer's free-text note). The review decision itself stays as the record.
+   */
+  async markPurged(tx: Tx, id: string, at: Date): Promise<boolean> {
+    const rows = await tx`
+      UPDATE photographer_documents
+      SET purged_at = ${at}, reference_last4 = NULL, original_filename = NULL, review_note = NULL
+      WHERE id = ${id} AND purged_at IS NULL
+      RETURNING id`;
+    return rows.length > 0;
   }
 
   /** PENDING, unpurged documents in the caller's cities — the Today count. */

@@ -1,7 +1,13 @@
 'use client';
 
 import { DevOtpResponse, newIdempotencyKey } from '@clickco/api-client';
-import { PhoneE164, ProVerifyOtpResponse, RequestOtpResponse } from '@clickco/contracts';
+import {
+  PhoneE164,
+  ProVerifyOtpResponse,
+  RequestOtpResponse,
+  SIGN_IN_NOTICE_VERSION,
+  type SignInConsent,
+} from '@clickco/contracts';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
 import { api, errorMessage } from '../../shared/api';
@@ -11,6 +17,11 @@ import { Callout } from '../../shared/ui';
 
 /** Development only: Next inlines NODE_ENV, so the helper does not exist in a production build. */
 const DEV = process.env.NODE_ENV === 'development';
+
+/** DPDP s.5, s.6(10), s.9: the notice is accepted, by an adult, before any code is sent. */
+const CONSENT: SignInConsent = { adultConfirmed: true, noticeVersion: SIGN_IN_NOTICE_VERSION };
+const PRIVACY_URL = 'https://clickco.in/privacy/';
+const TERMS_URL = 'https://clickco.in/terms/';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -37,6 +48,7 @@ export function SignIn() {
   const [phone, setPhone] = useState('+91');
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [code, setCode] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +57,10 @@ export function SignIn() {
     setError(null);
     if (!PhoneE164.safeParse(phone).success) {
       setError('Enter your mobile number as +91 followed by 10 digits');
+      return;
+    }
+    if (!agreed) {
+      setError('Confirm you are 18 or older and agree to the Privacy Policy to continue');
       return;
     }
     setBusy(true);
@@ -73,7 +89,13 @@ export function SignIn() {
         method: 'POST',
         path: '/pro/auth/otp/verify',
         schema: ProVerifyOtpResponse,
-        json: { challengeId, phone, code, deviceId: `portal-${newIdempotencyKey()}` },
+        json: {
+          challengeId,
+          phone,
+          code,
+          deviceId: `portal-${newIdempotencyKey()}`,
+          consent: CONSENT,
+        },
       });
       saveSession({
         accessToken: r.accessToken,
@@ -131,6 +153,26 @@ export function SignIn() {
                 onChange={(e) => setPhone(e.target.value.trim())}
               />
               <span className="hint">+91 followed by your 10-digit number</span>
+            </label>
+            <label className="consent">
+              <input
+                type="checkbox"
+                name="agree"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+              />
+              <span>
+                I am 18 or older and agree to the{' '}
+                <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </a>{' '}
+                and{' '}
+                <a href={TERMS_URL} target="_blank" rel="noopener noreferrer">
+                  Terms
+                </a>
+                . We keep verification documents, payout details and your location at check-in and
+                check-out; the Privacy Policy says why and for how long.
+              </span>
             </label>
             <button type="submit" className="block" disabled={busy}>
               {busy ? 'Sending…' : 'Send code'}

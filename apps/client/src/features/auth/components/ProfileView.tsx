@@ -1,10 +1,14 @@
 import { Avatar, Button, Card, ListRow, OfflineBanner, Screen, Section, Text } from '@clickco/ui';
+import FileText from 'lucide-react-native/icons/file-text';
 import LifeBuoy from 'lucide-react-native/icons/life-buoy';
+import Scale from 'lucide-react-native/icons/scale';
+import ShieldCheck from 'lucide-react-native/icons/shield-check';
 import UserX from 'lucide-react-native/icons/user-x';
 import { View } from 'react-native';
 import { API_URL, IS_DEV } from '@/shared/config';
 import { isOffline } from '@/shared/errors';
 import { formatPhone } from '@/shared/format/phone';
+import { openLegal } from '@/shared/legal';
 import { useSession } from '@/shared/session/store';
 import { useMe, useSignOut } from '../hooks';
 
@@ -56,6 +60,32 @@ export function ProfileView({ onGetHelp, onDeleteAccount }: ProfileViewProps) {
           testID="profile-get-help"
         />
       </Card>
+      <Section title="Legal">
+        <Card padding="list">
+          <ListRow
+            icon={ShieldCheck}
+            title="Privacy Policy"
+            subtitle="What we collect, your rights, withdrawing consent"
+            accessory="chevron"
+            onPress={() => openLegal('privacy')}
+            divider
+          />
+          <ListRow
+            icon={FileText}
+            title="Terms and refund policy"
+            accessory="chevron"
+            onPress={() => openLegal('terms')}
+            divider
+          />
+          <ListRow
+            icon={Scale}
+            title="Grievance Officer"
+            subtitle="Complaints: answered within 48 hours, resolved within 30 days"
+            accessory="chevron"
+            onPress={() => openLegal('grievance')}
+          />
+        </Card>
+      </Section>
       {IS_DEV ? (
         <Section title="Developer">
           <Card>

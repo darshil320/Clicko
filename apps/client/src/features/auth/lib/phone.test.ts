@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatCountdown, OtpForm, PhoneForm, secondsUntil, toE164 } from './phone';
+import {
+  formatCountdown,
+  OtpForm,
+  PhoneForm,
+  SIGN_IN_CONSENT,
+  secondsUntil,
+  toE164,
+} from './phone';
 
 describe('toE164', () => {
   it.each([
@@ -19,10 +26,10 @@ describe('toE164', () => {
 
 describe('sign-in forms', () => {
   it('validates the phone with a plain message', () => {
-    const result = PhoneForm.safeParse({ phone: '12345' });
+    const result = PhoneForm.safeParse({ phone: '12345', agree: true });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toBe('Enter your 10-digit mobile number');
-    expect(PhoneForm.safeParse({ phone: '98000 00777' }).success).toBe(true);
+    expect(PhoneForm.safeParse({ phone: '98000 00777', agree: true }).success).toBe(true);
   });
 
   it('validates the 6-digit code', () => {
@@ -39,5 +46,20 @@ describe('resend countdown', () => {
     expect(secondsUntil(30_000, 40_000)).toBe(0);
     expect(formatCountdown(27)).toBe('0:27');
     expect(formatCountdown(65)).toBe('1:05');
+  });
+});
+
+// DPDP s.5, s.9: notice before collection, and accounts are for adults (audit H, 14 Nov 2026).
+describe('sign-in consent', () => {
+  it('will not send a code until the person confirms they are 18+ and agrees', () => {
+    const result = PhoneForm.safeParse({ phone: '98000 00777', agree: false });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      'Confirm you are 18 or older and agree to the Privacy Policy to continue',
+    );
+  });
+
+  it('sends the confirmation and the notice version with the code', () => {
+    expect(SIGN_IN_CONSENT).toEqual({ adultConfirmed: true, noticeVersion: '2026-11-14' });
   });
 });

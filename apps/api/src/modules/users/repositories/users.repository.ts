@@ -44,8 +44,12 @@ export class UsersRepository {
    * Insert-or-fetch without touching an existing row (so updated_at is not bumped on every login).
    * A deleted account has no phone, so the same number later creates a fresh account.
    */
-  async findOrCreateByPhone(phone: string): Promise<{ user: PhoneUserRecord; isNew: boolean }> {
-    const [row] = await this.sql<(UserRow & { phone_e164: string; is_new: boolean })[]>`
+  async findOrCreateByPhone(
+    phone: string,
+    tx?: postgres.TransactionSql,
+  ): Promise<{ user: PhoneUserRecord; isNew: boolean }> {
+    const db = tx ?? this.sql;
+    const [row] = await db<(UserRow & { phone_e164: string; is_new: boolean })[]>`
       WITH ins AS (
         INSERT INTO users (phone_e164) VALUES (${phone})
         ON CONFLICT (phone_e164) DO NOTHING
@@ -57,11 +61,17 @@ export class UsersRepository {
       WHERE phone_e164 = ${phone} AND NOT EXISTS (SELECT 1 FROM ins)`;
     if (row) return { user: withPhone(row), isNew: row.is_new };
     // A concurrent first login inserted the row after this statement's snapshot; read it now.
-    const [existing] = await this.sql<(UserRow & { phone_e164: string })[]>`
+    const [existing] = await db<(UserRow & { phone_e164: string })[]>`
       SELECT id, phone_e164, full_name, is_blocked, deleted_at FROM users
       WHERE phone_e164 = ${phone}`;
     if (!existing) throw new Error('findOrCreateByPhone: no row after conflict');
     return { user: withPhone(existing), isNew: false };
+  }
+
+  /** Whether a live account holds this phone (a deleted one has none, so it is not counted). */
+  async existsByPhone(phone: string): Promise<boolean> {
+    const rows = await this.sql`SELECT 1 FROM users WHERE phone_e164 = ${phone}`;
+    return rows.length > 0;
   }
 
   async findById(id: string): Promise<UserRecord | null> {

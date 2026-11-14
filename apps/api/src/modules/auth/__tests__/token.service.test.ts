@@ -66,6 +66,9 @@ class FakeRefreshRepo implements RefreshTokenRepository {
     this.rows = this.rows.map((r) => (r === live ? { ...r, revokedAt: now } : r));
     return live ? { kind: live.subjectKind, id: live.subjectId } : null;
   }
+  async existsForSubject(kind: SubjectKind, id: string) {
+    return this.rows.some((r) => r.subjectKind === kind && r.subjectId === id);
+  }
 }
 
 const statusOf = async (p: Promise<unknown>) => {
@@ -98,6 +101,15 @@ describe('TokenService', () => {
     expect(pair.accessTokenExpiresAt).toBe(
       new Date(now.getTime() + TOKEN_POLICY.accessTtlMs).toISOString(),
     );
+  });
+
+  it('knows whether a subject has ever had a session, even a revoked one', async () => {
+    const pro = { kind: 'PHOTOGRAPHER', id: USER } as const;
+    expect(await tokens.hasSignedInBefore(pro)).toBe(false);
+    const pair = await tokens.issue(pro, null);
+    await tokens.revoke(pair.refreshToken);
+    expect(await tokens.hasSignedInBefore(pro)).toBe(true);
+    expect(await tokens.hasSignedInBefore({ kind: 'USER', id: USER })).toBe(false);
   });
 
   it('stores only a hash of the refresh token', async () => {

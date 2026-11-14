@@ -14,6 +14,7 @@ import { OTP_LIMITS, RedisOtpLimits } from './otp-limits';
 import { OTP_PEPPER } from './otp-tokens';
 import { ProAuthController } from './pro-auth.controller';
 import { OTP_REPOSITORY, PgOtpRepository } from './repositories/otp.repository';
+import { SignInService } from './sign-in.service';
 import { SMS_PORT } from './sms/sms.port';
 import { otpSmsAdapter } from './sms/sms-providers';
 import { TokenModule } from './token.module';
@@ -41,6 +42,7 @@ import { TokenModule } from './token.module';
     { provide: SMS_PORT, inject: [ENV, HTTP_FETCH], useFactory: otpSmsAdapter },
     OtpDelivery,
     OtpService,
+    SignInService,
     AuthAccountErasure,
   ],
   // OtpService: the account-deletion module re-confirms the client with a fresh code (ADR-0030).

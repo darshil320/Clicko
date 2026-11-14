@@ -1,10 +1,11 @@
 import { api } from '@/shared/api';
 import { assertDevBuild } from '@/shared/config';
+import { SIGN_IN_CONSENT } from './lib/phone';
 
 export const requestOtp = (phone: string) => api.auth.requestOtp({ phone, purpose: 'LOGIN' });
 
 export const verifyOtp = (input: { challengeId: string; phone: string; code: string }) =>
-  api.auth.verifyOtp(input);
+  api.auth.verifyOtp({ ...input, consent: SIGN_IN_CONSENT });
 
 export const fetchMe = () => api.me();
 

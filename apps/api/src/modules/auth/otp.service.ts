@@ -116,12 +116,17 @@ export class OtpService {
     };
   }
 
-  /** Resolves when the code is correct; throws 401 otherwise. Single use. */
+  /**
+   * Resolves when the code is correct; throws 401 otherwise. Single use. `beforeConsume` runs only
+   * once the code is known to be right, before it is used up: if it throws (CONSENT_REQUIRED), the
+   * code stays usable for the rest of its attempts — and only its holder ever sees the refusal.
+   */
   async verify(
     challengeId: string,
     phone: string,
     purpose: OtpPurpose,
     code: string,
+    beforeConsume?: () => Promise<void>,
   ): Promise<void> {
     const now = this.clock();
     // Audit L2: past the daily limit of wrong codes, even the right code is refused today.
@@ -137,6 +142,7 @@ export class OtpService {
       await this.guardedLimits(() => this.limits.recordVerifyFailure(phone));
       throw new UnauthorizedException(INVALID_CODE);
     }
+    if (beforeConsume) await beforeConsume();
     if (!(await this.repo.consume(challengeId, now))) {
       throw new UnauthorizedException(INVALID_CODE);
     }

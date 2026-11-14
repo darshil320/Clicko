@@ -5,8 +5,8 @@ describe('sitemap entries', () => {
   const entries = sitemapEntries();
   const urls = entries.map((e) => e.url);
 
-  it('lists home + /cities + 3 hubs + 21 city × category + 4 legal = 30 URLs', () => {
-    expect(entries).toHaveLength(1 + 1 + 3 + 21 + 4);
+  it('lists home + /cities + 3 hubs + 21 city × category + 5 legal = 31 URLs', () => {
+    expect(entries).toHaveLength(1 + 1 + 3 + 21 + 5);
   });
 
   it('has no duplicates', () => {

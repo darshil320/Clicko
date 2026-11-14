@@ -42,6 +42,7 @@ export const LEGAL_LINKS: readonly NavLink[] = [
   { label: 'Refund & Cancellation', href: '/refund-policy/' },
   { label: 'Privacy Policy', href: '/privacy/' },
   { label: 'Grievance Redressal', href: '/grievance/' },
+  { label: 'Delete your account', href: '/delete-account/' },
 ];
 
 /** Legal page paths, for the sitemap. */

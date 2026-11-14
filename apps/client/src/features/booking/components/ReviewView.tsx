@@ -26,6 +26,7 @@ import { categoryLabel } from '@/shared/catalogue';
 import { userMessage } from '@/shared/errors';
 import { formatDayMonth, formatTimeRange } from '@/shared/format/datetime';
 import { formatPhone } from '@/shared/format/phone';
+import { openLegal } from '@/shared/legal';
 import { screenState } from '@/shared/screen-state';
 import { useSession } from '@/shared/session/store';
 import { useCheckout, useQuote } from '../hooks';
@@ -72,6 +73,12 @@ function Breakdown({ quote }: { quote: PriceQuote }) {
           </Text>
         ) : null}
       </Card>
+      {view.peakSeason ? (
+        <Card className="gap-1" testID="peak-season">
+          <Text variant="bodyStrong">Peak season: stricter cancellation</Text>
+          <Text tone="secondary">{view.peakSeason}</Text>
+        </Card>
+      ) : null}
     </Section>
   );
 }
@@ -123,12 +130,50 @@ function TermsSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
       <View className="gap-4">
         <Text tone="secondary">Your advance confirms the booking and reserves a photographer.</Text>
         <Text tone="secondary">
-          Photos are delivered as RAW + JPEG within 48 hours of the shoot. Editing is not included.
+          Photos are delivered as RAW + JPEG within 48 hours of check-out, once the balance is paid.
+          Editing is not included.
         </Text>
-        <Text tone="secondary">
-          Cancellations and refunds follow the Clickco Terms & Conditions (v2, draft) — the full
-          text is at clickco.in/terms.
-        </Text>
+        <View className="gap-1">
+          <Text variant="bodyStrong">If you cancel</Text>
+          <Text tone="secondary">3 days or more before the shoot: your advance back in full.</Text>
+          <Text tone="secondary">24 to 72 hours before: 50% of your advance back.</Text>
+          <Text tone="secondary">Less than 24 hours before: no refund.</Text>
+          <Text tone="secondary">
+            Peak season, less than 7 days before: 50% of your advance back.
+          </Text>
+          <Text tone="secondary">
+            Same-day and emergency bookings: a full refund until a photographer accepts, none after.
+          </Text>
+          <Text tone="secondary">
+            Refunds reach your original payment method in 7–10 working days.
+          </Text>
+        </View>
+        <View className="flex-row flex-wrap gap-2">
+          <Button
+            label="Full terms"
+            variant="ghost"
+            size="compact"
+            onPress={() => openLegal('terms')}
+          />
+          <Button
+            label="Refund policy"
+            variant="ghost"
+            size="compact"
+            onPress={() => openLegal('refunds')}
+          />
+          <Button
+            label="Privacy"
+            variant="ghost"
+            size="compact"
+            onPress={() => openLegal('privacy')}
+          />
+          <Button
+            label="Grievances"
+            variant="ghost"
+            size="compact"
+            onPress={() => openLegal('grievance')}
+          />
+        </View>
         <Button label="Close" variant="secondary" onPress={onClose} />
       </View>
     </BottomSheet>
@@ -281,8 +326,8 @@ export function ReviewView({ locationLabel, onPaymentOpened, onStartOver }: Revi
             <Checkbox
               checked={field.value}
               onChange={field.onChange}
-              accessibilityLabel="Optional: Clickco may use photos from this shoot in its portfolio"
-              label="Optional: Clickco may feature photos from this shoot in its portfolio (model release)."
+              accessibilityLabel="Optional: Clickco may feature photos from this shoot in its portfolio"
+              label="Optional: Clickco may feature photos from this shoot in its portfolio (model release). We never feature a photo in which a child can be identified. You can withdraw this later."
               testID="model-release"
             />
           )}

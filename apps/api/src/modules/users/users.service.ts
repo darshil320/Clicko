@@ -29,8 +29,17 @@ export class UsersService {
     return user?.phone ? promoPhoneKey(this.pepper, user.phone) : null;
   }
 
-  findOrCreateByPhone(phone: string): Promise<{ user: PhoneUserRecord; isNew: boolean }> {
-    return this.repo.findOrCreateByPhone(phone);
+  /** `tx`: create inside the caller's transaction (sign-in, with its consent-log event). */
+  findOrCreateByPhone(
+    phone: string,
+    tx?: postgres.TransactionSql,
+  ): Promise<{ user: PhoneUserRecord; isNew: boolean }> {
+    return this.repo.findOrCreateByPhone(phone, tx);
+  }
+
+  /** Whether signing in with this phone reuses a live account (false: it would create one). */
+  hasLiveAccount(phone: string): Promise<boolean> {
+    return this.repo.existsByPhone(phone);
   }
 
   /** Deleted accounts too (deletedAt set, phone null): callers decide what that means. */

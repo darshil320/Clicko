@@ -155,6 +155,33 @@ describe('OtpService', () => {
     expect(await statusOf(service.verify(challengeId, PHONE, 'LOGIN', code))).toBe(401);
   });
 
+  it('a refusal before consuming leaves the right code usable (CONSENT_REQUIRED)', async () => {
+    const { challengeId } = await service.request(PHONE, 'LOGIN', '10.0.0.1');
+    const code = sms.sent[0]?.code ?? '';
+    const refusal = new HttpException({ code: 'CONSENT_REQUIRED', message: 'no' }, 422);
+    const refuse = async () => {
+      throw refusal;
+    };
+    await expect(service.verify(challengeId, PHONE, 'LOGIN', code, refuse)).rejects.toBe(refusal);
+    expect(repo.rows[0]?.consumedAt).toBeNull();
+    await expect(service.verify(challengeId, PHONE, 'LOGIN', code)).resolves.toBeUndefined();
+    expect(repo.rows[0]?.consumedAt).toEqual(now);
+  });
+
+  it('runs the pre-consume check only for the right code', async () => {
+    const { challengeId } = await service.request(PHONE, 'LOGIN', '10.0.0.1');
+    const code = sms.sent[0]?.code ?? '';
+    const wrong = code === '000000' ? '111111' : '000000';
+    let calls = 0;
+    const check = async () => {
+      calls += 1;
+    };
+    expect(await statusOf(service.verify(challengeId, PHONE, 'LOGIN', wrong, check))).toBe(401);
+    expect(calls).toBe(0);
+    await service.verify(challengeId, PHONE, 'LOGIN', code, check);
+    expect(calls).toBe(1);
+  });
+
   it('rejects a wrong code, the right code for another phone, and an expired code', async () => {
     const { challengeId } = await service.request(PHONE, 'LOGIN', '10.0.0.1');
     const code = sms.sent[0]?.code ?? '';

@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { TokenPair } from '@clickco/contracts';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { jwtVerify, SignJWT } from 'jose';
+import type postgres from 'postgres';
 import { CLOCK, type Clock } from '../../common/clock';
 import {
   REFRESH_TOKEN_REPOSITORY,
@@ -57,10 +58,18 @@ export class TokenService {
     this.key = new TextEncoder().encode(secret);
   }
 
-  async issue(subject: Subject, deviceId: string | null): Promise<TokenPair> {
+  /** `tx`: issue inside the caller's transaction (sign-in, with its consent-log event). */
+  async issue(
+    subject: Subject,
+    deviceId: string | null,
+    tx?: postgres.TransactionSql,
+  ): Promise<TokenPair> {
     const now = this.clock();
     const refresh = this.newRefresh(now, deviceId, subject.kind);
-    await this.repo.insert({ ...refresh.row, subjectKind: subject.kind, subjectId: subject.id });
+    await this.repo.insert(
+      { ...refresh.row, subjectKind: subject.kind, subjectId: subject.id },
+      tx,
+    );
     return this.pair(subject, now, refresh.token, refresh.row.expiresAt);
   }
 
@@ -83,6 +92,11 @@ export class TokenService {
     if (result.outcome !== 'ROTATED') throw new UnauthorizedException(SESSION_INVALID);
     const subject: Subject = { kind: result.subjectKind, id: result.subjectId };
     return { ...(await this.pair(subject, now, next.token, result.expiresAt)), subject };
+  }
+
+  /** Whether the subject has ever signed in (a photographer's first sign-in needs consent). */
+  hasSignedInBefore(subject: Subject): Promise<boolean> {
+    return this.repo.existsForSubject(subject.kind, subject.id);
   }
 
   /** Ends every session for a subject (blocked account, suspected theft). */

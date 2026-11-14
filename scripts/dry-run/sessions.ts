@@ -10,9 +10,14 @@ import {
   createApiClient,
   createProApiClient,
   type ProApiClient,
+  SIGN_IN_NOTICE_VERSION,
   type TokenStore,
 } from './sdk.js';
 import type { SavedTokens } from './state.js';
+
+/** The sign-in checkbox, ticked: a new account (or a photographer's first sign-in) needs it. */
+const DRY_RUN_CONSENT = { adultConfirmed: true, noticeVersion: SIGN_IN_NOTICE_VERSION } as const;
+
 import { secondsLeftInStep, totp } from './totp.js';
 
 /** A TokenStore in memory that reports every change, so the run file always has the latest. */
@@ -54,6 +59,7 @@ export async function signInClient(api: ApiClient, tokens: TokenStore, phone: st
     phone,
     code,
     deviceId: 'dry-run',
+    consent: DRY_RUN_CONSENT,
   });
   tokens.setTokens(session);
   return session.user;
@@ -67,6 +73,7 @@ export async function signInPro(api: ProApiClient, tokens: TokenStore, phone: st
     phone,
     code,
     deviceId: 'dry-run',
+    consent: DRY_RUN_CONSENT,
   });
   tokens.setTokens(session);
   return session.photographer;

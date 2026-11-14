@@ -1,4 +1,4 @@
-import { OtpCode, PhoneE164 } from '@clickco/contracts';
+import { OtpCode, PhoneE164, SIGN_IN_NOTICE_VERSION, type SignInConsent } from '@clickco/contracts';
 import { z } from 'zod';
 
 /**
@@ -22,7 +22,22 @@ export function toE164(input: string): string | null {
 
 export const PhoneForm = z.object({
   phone: z.string().refine((value) => toE164(value) !== null, 'Enter your 10-digit mobile number'),
+  agree: z
+    .boolean()
+    .refine(
+      (value) => value,
+      'Confirm you are 18 or older and agree to the Privacy Policy to continue',
+    ),
 });
+
+/**
+ * Sent with the code (DPDP s.6(10): we must be able to show the notice was accepted). The
+ * phone step cannot send a code unless `agree` is ticked, so every verify carries it.
+ */
+export const SIGN_IN_CONSENT: SignInConsent = {
+  adultConfirmed: true,
+  noticeVersion: SIGN_IN_NOTICE_VERSION,
+};
 export type PhoneForm = z.infer<typeof PhoneForm>;
 
 export const OtpForm = z.object({

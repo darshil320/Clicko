@@ -4,7 +4,7 @@ import { walkTo } from './modules/media/__tests__/media-fixtures';
 import { RefundsService } from './modules/refunds/refunds.service';
 import { ReviewsService } from './modules/refunds/reviews.service';
 import { drainOutbox } from './test-support/dispatch-fixtures';
-import { type E2eApp, type Json, startE2eApp } from './test-support/e2e-app';
+import { type E2eApp, type Json, startE2eApp, TEST_SIGN_IN_CONSENT } from './test-support/e2e-app';
 import {
   acceptOffer,
   bookAndPay,
@@ -49,18 +49,22 @@ describe.runIf(TEST_DATABASE_URL)('client account deletion', () => {
   let confirmBody: { challengeId: string; code: string };
   const confirmKey = idemKey('delete-account');
 
-  const signIn = async (phone: string): Promise<Session> => {
+  const verifyFresh = async (phone: string, withConsent: boolean) => {
     const req = await e2e.call('POST', '/auth/otp/request', { body: { phone } });
     expect(req.status).toBe(200);
     await e2e.runDueJobs();
-    const res = await e2e.call('POST', '/auth/otp/verify', {
+    return e2e.call('POST', '/auth/otp/verify', {
       body: {
         challengeId: req.json.data.challengeId,
         phone,
         code: e2e.sms.last.get(phone),
         deviceId: 'device-e2e-0001',
+        ...(withConsent ? { consent: TEST_SIGN_IN_CONSENT } : {}),
       },
     });
+  };
+  const signIn = async (phone: string): Promise<Session> => {
+    const res = await verifyFresh(phone, true);
     expect(res.status).toBe(200);
     return res.json.data as Session;
   };
@@ -487,6 +491,11 @@ describe.runIf(TEST_DATABASE_URL)('client account deletion', () => {
   });
 
   it('the same phone signs up again later as a fresh, empty account', async () => {
+    e2e.advance(31_000);
+    // A new account again, so the sign-in notice must be agreed to again (DPDP s.6, s.9).
+    const refused = await verifyFresh(PHONE, false);
+    expect(refused.status).toBe(422);
+    expect(refused.json.error.code).toBe('CONSENT_REQUIRED');
     e2e.advance(31_000);
     const fresh = await signIn(PHONE);
     expect(fresh.user).toMatchObject({ phone: PHONE, fullName: null, isNew: true });

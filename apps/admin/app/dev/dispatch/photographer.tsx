@@ -1,6 +1,10 @@
 'use client';
 
-import type { ProOffer, ProVerifyOtpResponse } from '@clickco/contracts';
+import {
+  type ProOffer,
+  type ProVerifyOtpResponse,
+  SIGN_IN_NOTICE_VERSION,
+} from '@clickco/contracts';
 import { formatINR } from '@clickco/utils';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../src/dev/api';
@@ -45,7 +49,13 @@ export function PhotographerSim() {
     if (!code) return setMessage('No OTP — is this an ACTIVE photographer from the dev seed?');
     const v = await api<ProVerifyOtpResponse>('/pro/auth/otp/verify', {
       method: 'POST',
-      body: JSON.stringify({ challengeId: req.data.challengeId, phone, code }),
+      body: JSON.stringify({
+        challengeId: req.data.challengeId,
+        phone,
+        code,
+        // Dev harness only: the sign-in checkbox, ticked (a photographer's first sign-in needs it).
+        consent: { adultConfirmed: true, noticeVersion: SIGN_IN_NOTICE_VERSION },
+      }),
     });
     if (!v.ok) return setMessage(v.error.message);
     setToken(v.data.accessToken);

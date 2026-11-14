@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { OtpCode, TokenPair } from './auth.js';
+import { OtpCode, SignInConsent, TokenPair } from './auth.js';
 import { IsoDateTime, PhoneE164, Pincode, Uuid } from './common.js';
 import {
   AssignmentStatus,
@@ -27,6 +27,8 @@ export const ProOtpVerifyBody = z.object({
   phone: PhoneE164,
   code: OtpCode,
   deviceId: z.string().min(1).max(128).optional(),
+  /** The Pro app's sign-in checkbox: recorded when sent (a photographer account already exists). */
+  consent: SignInConsent.optional(),
 });
 export type ProOtpVerifyBody = z.infer<typeof ProOtpVerifyBody>;
 

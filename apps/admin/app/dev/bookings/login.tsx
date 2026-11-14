@@ -1,8 +1,12 @@
 'use client';
 
+import { SIGN_IN_NOTICE_VERSION } from '@clickco/contracts';
 import { useState } from 'react';
 import { api } from '../../../src/dev/api';
 import { type Session, saveSession } from '../../../src/dev/session';
+
+/** Dev harness only: the sign-in checkbox, ticked (a new account needs it). */
+const DEV_CONSENT = { adultConfirmed: true, noticeVersion: SIGN_IN_NOTICE_VERSION } as const;
 
 export function Login({ onLogin }: { readonly onLogin: (s: Session) => void }) {
   const [phone, setPhone] = useState('+919876543210');
@@ -23,7 +27,12 @@ export function Login({ onLogin }: { readonly onLogin: (s: Session) => void }) {
     setStep(`Verifying ${otp.data.code}…`);
     const verify = await api<{ accessToken: string }>('/auth/otp/verify', {
       method: 'POST',
-      body: JSON.stringify({ challengeId: req.data.challengeId, phone, code: otp.data.code }),
+      body: JSON.stringify({
+        challengeId: req.data.challengeId,
+        phone,
+        code: otp.data.code,
+        consent: DEV_CONSENT,
+      }),
     });
     if (!verify.ok) return fail(verify.error.message);
     const session = { accessToken: verify.data.accessToken, phone };

@@ -4,13 +4,13 @@ import { extractSection, loadTerms, renderTerms } from './render';
 
 const complete = {
   ...LEGAL,
-  registeredAddress: '12 Ring Road',
+  registeredAddress: '12 Ring Road, Surat, Gujarat 395002',
   privacyEmail: 'privacy@clickco.in',
   grievanceOfficer: {
     name: 'Ananya Iyer',
     email: 'grievance@clickco.in',
     phone: '+91 98765 43210',
-    address: '12 Ring Road, Surat',
+    address: '12 Ring Road, Surat, Gujarat 395002',
   },
 };
 

@@ -30,7 +30,8 @@ export type RotateResult =
   | { readonly outcome: 'NOT_FOUND' | 'EXPIRED' | 'REUSED' | 'GRACE' };
 
 export interface RefreshTokenRepository {
-  insert(row: RefreshTokenRow): Promise<void>;
+  /** `tx`: the caller's transaction (sign-in commits the session with its consent-log event). */
+  insert(row: RefreshTokenRow, tx?: postgres.TransactionSql): Promise<void>;
   /**
    * Atomically revokes `tokenHash` and inserts `replacement` for the same subject.
    * A token that was already revoked means it was stolen and replayed: every live
@@ -56,6 +57,8 @@ export interface RefreshTokenRepository {
     tokenHash: string,
     now: Date,
   ): Promise<{ readonly kind: SubjectKind; readonly id: string } | null>;
+  /** Whether the subject was ever issued a session (revoked and expired ones count). */
+  existsForSubject(kind: SubjectKind, id: string): Promise<boolean>;
 }
 
 export const REFRESH_TOKEN_REPOSITORY = Symbol('REFRESH_TOKEN_REPOSITORY');
@@ -64,8 +67,9 @@ export const REFRESH_TOKEN_REPOSITORY = Symbol('REFRESH_TOKEN_REPOSITORY');
 export class PgRefreshTokenRepository implements RefreshTokenRepository {
   constructor(@Inject(SQL) private readonly sql: postgres.Sql) {}
 
-  async insert(row: RefreshTokenRow): Promise<void> {
-    await this.sql`
+  async insert(row: RefreshTokenRow, tx?: postgres.TransactionSql): Promise<void> {
+    const db = tx ?? this.sql;
+    await db`
       INSERT INTO refresh_tokens (id, subject_kind, subject_id, token_hash, device_id, expires_at, created_at)
       VALUES (${row.id}, ${row.subjectKind}, ${row.subjectId}, ${row.tokenHash}, ${row.deviceId},
               ${row.expiresAt}, ${row.createdAt})`;
@@ -144,5 +148,11 @@ export class PgRefreshTokenRepository implements RefreshTokenRepository {
       WHERE token_hash = ${tokenHash} AND revoked_at IS NULL
       RETURNING subject_kind, subject_id`;
     return row ? { kind: row.subject_kind, id: row.subject_id } : null;
+  }
+
+  async existsForSubject(kind: SubjectKind, id: string): Promise<boolean> {
+    const rows = await this.sql`
+      SELECT 1 FROM refresh_tokens WHERE subject_kind = ${kind} AND subject_id = ${id} LIMIT 1`;
+    return rows.length > 0;
   }
 }

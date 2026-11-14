@@ -25,6 +25,7 @@ export {
   DeliveryFolderView,
   DeliveryView,
   DispatchDeskView,
+  SIGN_IN_NOTICE_VERSION,
   UploadPartResponse,
   UploadSessionView,
 } from '../../packages/contracts/src/index.js';

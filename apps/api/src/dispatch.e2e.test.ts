@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drainOutbox } from './test-support/dispatch-fixtures';
 import type { E2eApp, Json } from './test-support/e2e-app';
-import { startE2eApp } from './test-support/e2e-app';
+import { startE2eApp, TEST_SIGN_IN_CONSENT } from './test-support/e2e-app';
 import { insertPhotographer } from './test-support/photographer-fixtures';
 import { TEST_DATABASE_URL } from './test-support/scratch-db';
 
@@ -179,6 +179,7 @@ describe.runIf(TEST_DATABASE_URL)(
           challengeId: req.json.data.challengeId,
           phone: PRO_PHONE,
           code: e2e.sms.last.get(PRO_PHONE),
+          consent: TEST_SIGN_IN_CONSENT,
         },
       });
       expect(verify.json.data.photographer).toMatchObject({ displayName: 'Meera Joshi' });

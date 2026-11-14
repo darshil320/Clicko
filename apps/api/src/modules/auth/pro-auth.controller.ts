@@ -1,28 +1,13 @@
-import {
-  ProOtpRequestBody,
-  ProOtpVerifyBody,
-  type ProVerifyOtpResponse,
-  RefreshBody,
-} from '@clickco/contracts';
-import {
-  Body,
-  Controller,
-  ForbiddenException,
-  HttpCode,
-  Inject,
-  Ip,
-  Post,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ProOtpRequestBody, ProOtpVerifyBody, RefreshBody } from '@clickco/contracts';
+import { Body, Controller, ForbiddenException, HttpCode, Inject, Ip, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ok } from '../../common/envelope';
 import { clientIp } from '../../common/http/client-ip';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PhotographersService } from '../photographers/photographers.service';
 import { OtpService } from './otp.service';
+import { SignInService } from './sign-in.service';
 import { TokenService } from './token.service';
-
-const INVALID_CODE = { code: 'OTP_INVALID', message: 'The code is invalid or has expired' };
 
 /**
  * Photographer sign-in (ADR-0010): PRO_LOGIN OTP → a PHOTOGRAPHER session, for ACTIVE
@@ -37,6 +22,7 @@ export class ProAuthController {
     @Inject(OtpService) private readonly otp: OtpService,
     @Inject(TokenService) private readonly tokens: TokenService,
     @Inject(PhotographersService) private readonly photographers: PhotographersService,
+    @Inject(SignInService) private readonly signIn: SignInService,
   ) {}
 
   @Post('otp/request')
@@ -52,22 +38,7 @@ export class ProAuthController {
   @Post('otp/verify')
   @HttpCode(200)
   async verifyOtp(@Body(new ZodValidationPipe(ProOtpVerifyBody)) body: ProOtpVerifyBody) {
-    await this.otp.verify(body.challengeId, body.phone, 'PRO_LOGIN', body.code);
-    const photographer = await this.photographers.findActiveByPhone(body.phone);
-    if (!photographer) throw new UnauthorizedException(INVALID_CODE);
-    const pair = await this.tokens.issue(
-      { kind: 'PHOTOGRAPHER', id: photographer.id },
-      body.deviceId ?? null,
-    );
-    const response: ProVerifyOtpResponse = {
-      ...pair,
-      photographer: {
-        id: photographer.id,
-        displayName: photographer.fullName,
-        cityId: photographer.cityId,
-      },
-    };
-    return ok(response);
+    return ok(await this.signIn.pro(body));
   }
 
   /** Rotates a photographer session; a paused/suspended photographer loses every session. */

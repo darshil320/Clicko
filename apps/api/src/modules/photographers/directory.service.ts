@@ -10,6 +10,7 @@ import type postgres from 'postgres';
 import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
 import type { IdSubquery } from '../../infra/db/id-subquery';
+import { KycRetentionService } from './kyc-retention.service';
 import { DirectoryRepository } from './repositories/directory.repository';
 import { KycRepository } from './repositories/kyc.repository';
 import type {
@@ -36,6 +37,7 @@ export class PhotographerDirectoryService {
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(DirectoryRepository) private readonly repo: DirectoryRepository,
     @Inject(KycRepository) private readonly kyc: KycRepository,
+    @Inject(KycRetentionService) private readonly retention: KycRetentionService,
   ) {}
 
   page(filter: DirectoryFilter): Promise<DirectoryRecord[]> {
@@ -110,6 +112,14 @@ export class PhotographerDirectoryService {
         }
       }
       await this.repo.setStatus(tx, c.id, { to: rule.to, reason: c.reason, at: c.now });
+      if (rule.to === 'OFFBOARDED') {
+        // The relationship has ended: KYC documents are due for their DPDP purge.
+        await this.retention.schedule(tx, {
+          photographerId: c.id,
+          reason: 'OFFBOARDED',
+          now: c.now,
+        });
+      }
       await c.audit(tx, {
         before: { status: pro.status },
         after: { status: rule.to, action: c.action, reason: c.reason },

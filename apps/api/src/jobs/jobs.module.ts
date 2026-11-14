@@ -5,6 +5,7 @@ import { DispatchModule } from '../modules/dispatch/dispatch.module';
 import { MediaModule } from '../modules/media/media.module';
 import { NotificationsModule } from '../modules/notifications/notifications.module';
 import { OnsiteModule } from '../modules/onsite/onsite.module';
+import { PhotographersModule } from '../modules/photographers/photographers.module';
 import { RefundsModule } from '../modules/refunds/refunds.module';
 import { SlaModule } from '../modules/sla/sla.module';
 import { CheckoutSweepProcessor } from './checkout-sweep.processor';
@@ -12,6 +13,7 @@ import { DataLossPurgeProcessor } from './data-loss-purge.processor';
 import { DispatchTimersProcessor } from './dispatch-timers.processor';
 import { IntegrityAuditProcessor } from './integrity-audit.processor';
 import { JpegExportProcessor } from './jpeg-export.processor';
+import { KycPurgeProcessor } from './kyc-purge.processor';
 import { NotificationSendProcessor } from './notification-send.processor';
 import { OnsiteTimersProcessor } from './onsite-timers.processor';
 import { OtpSmsProcessor } from './otp-sms.processor';
@@ -32,6 +34,7 @@ import { UploadReaperProcessor } from './upload-reaper.processor';
     CheckoutModule,
     NotificationsModule,
     RefundsModule,
+    PhotographersModule,
   ],
   providers: [
     OutboxPublishProcessor,
@@ -47,6 +50,7 @@ import { UploadReaperProcessor } from './upload-reaper.processor';
     CheckoutSweepProcessor,
     NotificationSendProcessor,
     RefundSweepProcessor,
+    KycPurgeProcessor,
   ],
 })
 export class JobsModule {}

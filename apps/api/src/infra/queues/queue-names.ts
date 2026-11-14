@@ -17,6 +17,8 @@ export const QUEUE = {
   NOTIFICATIONS: 'notifications',
   /** Refund housekeeping (security review M2: refunds left unsent by a crash). */
   REFUNDS: 'refunds',
+  /** Supply housekeeping (DPDP: KYC documents purged once the relationship ends). */
+  SUPPLY: 'supply',
 } as const;
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
@@ -69,6 +71,11 @@ export const JOB = {
    * receipt and re-sent only after the safe wait — never blindly (security review M2).
    */
   REFUND_SEND_SWEEP: 'refunds.send-sweep',
+  /**
+   * Repeatable (daily): KYC documents whose purge_after (set when the relationship ended) has
+   * come are deleted through StoragePort and their identifiers erased (DPDP s.8(7)).
+   */
+  SUPPLY_KYC_PURGE: 'supply.kyc-purge',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -91,6 +98,7 @@ export const QUEUE_OF: Readonly<Record<JobName, QueueName>> = {
   [JOB.CHECKOUT_STALE_SWEEP]: QUEUE.CHECKOUT,
   [JOB.NOTIFICATION_SEND]: QUEUE.NOTIFICATIONS,
   [JOB.REFUND_SEND_SWEEP]: QUEUE.REFUNDS,
+  [JOB.SUPPLY_KYC_PURGE]: QUEUE.SUPPLY,
 };
 
 export interface JobOptions {
@@ -130,6 +138,8 @@ export const REPEATABLE_JOBS: readonly RepeatableJob[] = [
   { job: JOB.SLA_SWEEP, everyMs: 60_000 },
   { job: JOB.CHECKOUT_STALE_SWEEP, everyMs: 5 * 60_000 },
   { job: JOB.REFUND_SEND_SWEEP, everyMs: 2 * 60_000 },
+  // purge_after is a date: once a day is enough, one batch per run.
+  { job: JOB.SUPPLY_KYC_PURGE, everyMs: 24 * 3_600_000 },
 ];
 
 /** The outbox is drained by one job at a time; dispatch timers may overlap (they lock rows). */
@@ -146,4 +156,6 @@ export const WORKER_CONCURRENCY: Readonly<Record<QueueName, number>> = {
   [QUEUE.NOTIFICATIONS]: 4,
   // One sweep at a time; each refund also holds its own lease while at the gateway.
   [QUEUE.REFUNDS]: 1,
+  // One purge sweep at a time (each document is also locked while its file is deleted).
+  [QUEUE.SUPPLY]: 1,
 };

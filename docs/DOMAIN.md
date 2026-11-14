@@ -17,7 +17,7 @@ This is the file every future session should read before touching bookings, disp
 | `waitlist_entries` | A demand signal from a non-serviceable pincode; ranked by ops as the expansion roadmap. |
 | `categories` | A shoot type (Food, Wedding, Portrait, Product, Event, Real Estate, Corporate) with its own pricing uplift and certification requirement. |
 | `plan_deliverables` | What a plan tier promises (frames/hour, gear class, dual-card, RAW/JPEG/video inclusion, delivery hours), versioned per ruleset. |
-| `addons` | An optional paid extra (second shooter, drone, lighting kit, rush delivery) with its own eligibility rules. |
+| `addons` | An optional paid extra (second shooter, videographer — ADR-0032, drone, lighting kit, rush delivery) with its own eligibility rules. |
 | `pricing_rulesets` | A versioned, effective-dated container for every price-related table. A booking snapshots one ruleset and never reprices. |
 | `photographers` | A contracted vendor (never an employee) who shoots bookings; owns their own gear; manually verified. |
 | `photographer_applications` | The onboarding kanban stage for a prospective photographer. |
@@ -121,6 +121,10 @@ Representative payloads:
 | `booking.data_loss` | `loss_kind` (`COMPLETE`; `PARTIAL` is reserved — ADR-0030 D2), `affected_proportion_bps` (10000), `refund_amount_paise` |
 | `booking.partial_data_loss` (no transition) | `loss_kind` (`PARTIAL`), `affected_proportion_bps`, `refund_amount_paise` (the share owed), `refunded_now_paise`, `due_after_balance_paise` |
 | `sla.breached` | `clock_id`, `kind`, `delay_minutes`, `band`, `client_remedy_kind`, `client_remedy_paise` |
+| `user.consent_recorded` (no transition; aggregate `user`, or `photographer` from the Pro app) | `purpose` (`SIGN_IN_NOTICE`), `adultConfirmed` (`true`), `noticeVersion` (the notice's effective date) — never a phone, name or IP. The append-only consent log (DPDP s.6(10), s.9): written in the sign-in's transaction whenever the apps send `consent`; required (`CONSENT_REQUIRED`, 422) when the sign-in creates a client account or is a photographer's first |
+| `photographer.kyc_purge_scheduled` (no transition; aggregate `photographer`) | `photographer_id`, `purge_after` (date), `documents` (count), `reason` (`OFFBOARDED`, `APPLICATION_REJECTED`, `APPLICATION_WITHDRAWN`). Written when offboarding or a closed application sets `purge_after` on unpurged KYC documents (DPDP s.8(7), ADR-0033 D11) |
+| `photographer.kyc_purge_cancelled` (no transition; aggregate `photographer`) | `photographer_id`, `documents` (count). A reopened application cleared a pending `purge_after` |
+| `photographer_document.purged` (no transition; aggregate `photographer_document`) | `photographer_id`, `kind`, `purged_at`. The daily `supply.kyc-purge` sweep deleted the file through StoragePort and erased its identifiers; never a file name or key |
 
 Three independent subscribers is the expected fan-out pattern (e.g. `booking.checked_out` → SLA clock arming + upload reminder + client notification). Modules never call each other's write paths directly — only through injected services or by subscribing to events.
 

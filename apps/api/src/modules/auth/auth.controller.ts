@@ -1,9 +1,4 @@
-import {
-  RefreshBody,
-  RequestOtpBody,
-  VerifyOtpBody,
-  type VerifyOtpResponse,
-} from '@clickco/contracts';
+import { RefreshBody, RequestOtpBody, VerifyOtpBody } from '@clickco/contracts';
 import {
   Body,
   Controller,
@@ -20,6 +15,7 @@ import { clientIp } from '../../common/http/client-ip';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
+import { SignInService } from './sign-in.service';
 import { TokenService } from './token.service';
 
 @Controller('auth')
@@ -29,6 +25,7 @@ export class AuthController {
     @Inject(OtpService) private readonly otp: OtpService,
     @Inject(TokenService) private readonly tokens: TokenService,
     @Inject(UsersService) private readonly users: UsersService,
+    @Inject(SignInService) private readonly signIn: SignInService,
   ) {}
 
   @Post('otp/request')
@@ -43,17 +40,7 @@ export class AuthController {
   @Post('otp/verify')
   @HttpCode(200)
   async verifyOtp(@Body(new ZodValidationPipe(VerifyOtpBody)) body: VerifyOtpBody) {
-    await this.otp.verify(body.challengeId, body.phone, 'LOGIN', body.code);
-    const { user, isNew } = await this.users.findOrCreateByPhone(body.phone);
-    if (user.isBlocked) {
-      throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'This account is blocked' });
-    }
-    const pair = await this.tokens.issue({ kind: 'USER', id: user.id }, body.deviceId ?? null);
-    const response: VerifyOtpResponse = {
-      ...pair,
-      user: { id: user.id, phone: user.phone, fullName: user.fullName, isNew },
-    };
-    return ok(response);
+    return ok(await this.signIn.client(body));
   }
 
   @Post('refresh')

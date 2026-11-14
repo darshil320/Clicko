@@ -1,12 +1,16 @@
 import { Avatar, Button, Card, ListRow, Screen, Section, Text } from '@clickco/ui';
 import CircleAlert from 'lucide-react-native/icons/circle-alert';
 import CloudOff from 'lucide-react-native/icons/cloud-off';
+import FileText from 'lucide-react-native/icons/file-text';
+import Scale from 'lucide-react-native/icons/scale';
+import ShieldCheck from 'lucide-react-native/icons/shield-check';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { API_URL, IS_DEV } from '@/shared/config';
 import { humanMessage } from '@/shared/errors';
 import { formatDateTime } from '@/shared/format/datetime';
 import { formatPhone } from '@/shared/format/phone';
+import { openLegal } from '@/shared/legal';
 import { ACTION_LABEL } from '@/shared/offline/queue';
 import { flushQueue } from '@/shared/offline/runner';
 import { useOnsiteQueue } from '@/shared/offline/store';
@@ -100,6 +104,32 @@ export function ProfileView() {
         </View>
       </Card>
       {photographer ? <SyncSection photographerId={photographer.id} /> : null}
+      <Section title="Legal">
+        <Card padding="list">
+          <ListRow
+            icon={ShieldCheck}
+            title="Privacy Policy"
+            subtitle="Your documents, payouts, location and your rights"
+            accessory="chevron"
+            onPress={() => openLegal('privacy')}
+            divider
+          />
+          <ListRow
+            icon={FileText}
+            title="Terms"
+            accessory="chevron"
+            onPress={() => openLegal('terms')}
+            divider
+          />
+          <ListRow
+            icon={Scale}
+            title="Grievance Officer"
+            subtitle="Complaints: answered within 48 hours, resolved within 30 days"
+            accessory="chevron"
+            onPress={() => openLegal('grievance')}
+          />
+        </Card>
+      </Section>
       {IS_DEV ? (
         <Section title="Developer">
           <Card>

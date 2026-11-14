@@ -10,7 +10,7 @@ import { JobRegistry } from './infra/queues/job-registry';
 import { JOB_SCHEDULER } from './infra/queues/job-scheduler';
 import { QueueWorkers } from './infra/queues/queue-workers';
 import { SMS_PORT, type SmsPort } from './modules/auth/sms/sms.port';
-import { NO_QUEUE_WORKERS, TEST_REDIS_URL } from './test-support/e2e-app';
+import { NO_QUEUE_WORKERS, TEST_REDIS_URL, TEST_SIGN_IN_CONSENT } from './test-support/e2e-app';
 import { RecordingScheduler } from './test-support/recording-scheduler';
 import { createScratchDb, type ScratchDb, TEST_DATABASE_URL } from './test-support/scratch-db';
 
@@ -60,6 +60,7 @@ describe.runIf(TEST_DATABASE_URL)('API end to end (auth + serviceability)', () =
       challengeId: req.json.data.challengeId,
       phone,
       code: sms.last.get(phone),
+      consent: TEST_SIGN_IN_CONSENT,
     });
     return verify;
   };

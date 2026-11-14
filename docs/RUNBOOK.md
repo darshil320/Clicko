@@ -780,9 +780,9 @@ pnpm --filter @clickco/api staff:create <email> "<full name>" SUPER_ADMIN
      OR (resolved_at IS NULL AND resolve_due_at < now() + interval '3 days')
   ORDER BY ack_due_at;
   ```
-- Grievance Officer: **[OWNER: name, email, phone]** (not named yet, OD-06/09).
-- Personal data may have leaked: CERT-In expects a report within 6 hours of noticing a reportable
-  incident, and data-protection notice duties may apply. Call **[OWNER: lawyer contact]**.
+- Grievance Officer: **Mehang Desai**, Surat (named by Darshil, 14 Nov 2026). Email, phone and
+  street address: **[OWNER]**, also blocking `apps/web/src/legal/config.ts`.
+- Personal data may have leaked: follow **12.6** now. Do not wait for certainty.
 - Razorpay: support ticket from the dashboard (12.4).
 
 ### 12.2 Client: booking affected
@@ -813,7 +813,54 @@ pnpm --filter @clickco/api staff:create <email> "<full name>" SUPER_ADMIN
 ### 12.5 Grievance acknowledgement (within 48 hours)
 
 > Dear <name>, we have received your complaint <TKT-…> of <date>. Our Grievance Officer,
-> <[OWNER] name>, will reply within 30 days of receipt, sooner if we can. Contact: <[OWNER] email>.
+> Mehang Desai, will reply within 30 days of receipt, sooner if we can. Contact: <[OWNER] email>.
+
+### 12.6 Personal data breach (DPDP Act s.8(6), DPDP Rules r.7, CERT-In Directions 2022)
+
+A breach is any unauthorised processing, access, disclosure, change, loss or destruction of
+personal data, including by a vendor (Razorpay, Google Drive, MSG91, Meta, Exotel, Expo, Railway,
+Vercel). A wrong delivery link sent to the wrong client is a breach. Treat suspected as real until
+ruled out. Some DPDP Rules commence in phases; follow every step now regardless.
+
+**Clock starts when anyone at Clickco first notices.** Write that time down (IST) in the incident
+ticket. Never paste the leaked data itself into tickets, chat or logs.
+
+| By | Do |
+|---|---|
+| At once | Contain: revoke links (`delivery_links.revoked_at`), sign everyone out (8.2), rotate the exposed secret (8), disable the vendor key. Preserve logs: no deletes, no restores over evidence |
+| 6 hours | **CERT-In** report, if the incident is a reportable type (data breach or leak, unauthorised access, compromise of servers or apps). incident@cert-in.org.in, the form at cert-in.org.in |
+| Without delay | **Data Protection Board**: short intimation (template A) through the Board's online portal |
+| Without delay | **Every affected person**: message (template B) by SMS, WhatsApp (if opted in) or email, from the support channels in 12.1 |
+| 72 hours | **Data Protection Board**: detailed report (template C). Ask the Board in writing for more time if you need it, before the 72 hours end |
+| After | Post-incident review: root cause, the fix, and whether the retention windows (privacy notice) let us delete anything we should not have still held |
+
+Find who is affected with SQL by the leaked table and time window. Count them; list booking
+references, not phone numbers.
+
+**Template A, Board intimation (without delay)**
+
+> Data Fiduciary: Clicko (Clickco), <registered address>. Contact: Mehang Desai, <email>, <phone>.
+> We became aware on <date, time IST> of a personal data breach. Nature: <unauthorised access /
+> disclosure / loss>. Extent: about <n> Data Principals; data involved: <categories, e.g. names,
+> mobile numbers, venue addresses>. Time and place: <when it happened, which system or vendor>.
+> Likely impact: <e.g. unwanted calls, risk to venue privacy>. Contained at <time> by <action>.
+> A detailed report follows within 72 hours.
+
+**Template B, message to each affected person**
+
+> Clickco: on <date> some of your personal data (<categories>) was <exposed / accessed without
+> permission> because <one plain sentence>. What this may mean for you: <likely consequence>. What we
+> have done: <containment>. What you can do: <e.g. ignore calls claiming to be Clickco asking for
+> payment; we never ask for an OTP>. Questions: Mehang Desai, Grievance Officer, <email>, <phone>.
+
+**Template C, Board detailed report (within 72 hours)**
+
+1. Updated facts: what happened, when, how it was found, systems and vendors involved.
+2. Data and people affected: categories, counts, whether children's data or verification documents
+   were involved.
+3. Cause, and any person responsible if known.
+4. Measures taken to contain it and to stop it happening again.
+5. Copies or a summary of the intimations sent to affected people, with dates and channels.
 
 ---
 
@@ -843,4 +890,8 @@ What an operator needs that the code does not do (4 Nov 2026):
 11. **Backups unproven:** no restore drill; PITR on Railway not confirmed.
 12. **The Drive daily-upload count lives only in Redis;** no emergency purge or space tool.
 13. **Errors go to the console only** until Sentry is approved (ADR-0029).
-14. **Grievance Officer not named** (T&C section 12; [OWNER] placeholders here).
+14. **Grievance Officer's email, phone and street address missing** (named: Mehang Desai). The
+    production website build refuses to publish until they are in `apps/web/src/legal/config.ts`.
+15. **Log retention not configured:** the DPDP Rules (r.6) want logs of personal-data processing
+    kept for at least one year, and CERT-In wants ICT logs for 180 days in India. Railway's default
+    log retention is shorter: ship API logs to a drain with one-year retention before launch.

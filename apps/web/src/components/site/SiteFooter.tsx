@@ -2,10 +2,12 @@ import { CATEGORIES } from '../../content/categories';
 import { LAUNCH_CITIES } from '../../content/cities';
 import { CONTACT, LEGAL_LINKS, SITE } from '../../content/site';
 import { LEGAL } from '../../legal/config';
+import { sellerDisclosure } from '../../legal/disclosure';
 import { paths } from '../../lib/routes';
 import { BrandMark } from './BrandMark';
 
 const DEFAULT_CITY = LAUNCH_CITIES[0];
+const seller = sellerDisclosure();
 
 export function SiteFooter() {
   return (
@@ -64,12 +66,16 @@ export function SiteFooter() {
         </p>
         <div className="footer-legal">
           <p>
-            © {new Date().getFullYear()} {LEGAL.entityName}. {LEGAL.brandName} is operated by{' '}
-            {LEGAL.entityName}. Courts at {LEGAL.jurisdiction} have exclusive jurisdiction.
+            © {new Date().getFullYear()} {LEGAL.entityName}. {seller.operator} Courts at{' '}
+            {LEGAL.jurisdiction} have exclusive jurisdiction.
           </p>
           <p>
-            Prices are exclusive of 18% GST (SAC 998383), shown with GST before you pay. Photo and
-            video; editing is a separate service.
+            {seller.contact} {seller.grievance}
+          </p>
+          <p>
+            Prices are exclusive of 18% GST (SAC 998383), shown with GST before you pay. Video is a
+            videographer add-on from ₹2,000/hr, delivered as unedited clips and priced in the app
+            before you pay; editing is a separate service.
           </p>
           <p>
             Photos and reels on this site are licensed samples from Unsplash and Pexels, not Clickco

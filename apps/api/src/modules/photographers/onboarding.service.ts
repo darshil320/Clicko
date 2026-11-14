@@ -18,6 +18,8 @@ import {
 import type postgres from 'postgres';
 import type { TxHook } from '../../common/tx-hook';
 import { SQL } from '../../infra/db/db.module';
+import type { KycPurgeReason } from './kyc-retention.config';
+import { KycRetentionService } from './kyc-retention.service';
 import { KycRepository } from './repositories/kyc.repository';
 import { OnboardingRepository } from './repositories/onboarding.repository';
 import { FOREIGN_KEY_VIOLATION, sqlState, UNIQUE_VIOLATION } from './repositories/supply-rows';
@@ -31,6 +33,12 @@ import type {
 import { covers, DAY_MS, missingChecks, missingChecksMessage } from './supply-rules';
 
 const NOT_FOUND = { code: 'APPLICATION_NOT_FOUND', message: 'Application not found' };
+
+/** An application closing without onboarding ends the relationship (DPDP purge clock). */
+const PURGE_REASON: Partial<Record<ApplicationStage, KycPurgeReason>> = {
+  REJECTED: 'APPLICATION_REJECTED',
+  WITHDRAWN: 'APPLICATION_WITHDRAWN',
+};
 
 export interface MoveInput {
   readonly id: string;
@@ -55,6 +63,7 @@ export class OnboardingService {
     @Inject(SQL) private readonly sql: postgres.Sql,
     @Inject(OnboardingRepository) private readonly repo: OnboardingRepository,
     @Inject(KycRepository) private readonly kyc: KycRepository,
+    @Inject(KycRetentionService) private readonly retention: KycRetentionService,
   ) {}
 
   /** Every stage as a column (board stages first), longest-waiting cards first. */
@@ -144,6 +153,7 @@ export class OnboardingService {
       } else {
         await this.repo.setStage(tx, m.id, m.to);
       }
+      await this.followRetention(tx, app, m);
       await this.repo.appendEvent(tx, {
         applicationId: m.id,
         from: app.stage,
@@ -167,6 +177,23 @@ export class OnboardingService {
     const card = await this.repo.card(this.sql, m.id);
     if (!card) throw new NotFoundException(NOT_FOUND);
     return card;
+  }
+
+  /**
+   * Rejected or withdrawn: the applicant's KYC documents are due for purge. Reopened from there:
+   * the pending purge is called off. Same transaction as the move.
+   */
+  private async followRetention(
+    tx: postgres.TransactionSql,
+    app: { readonly stage: ApplicationStage; readonly photographerId: string },
+    m: MoveInput,
+  ): Promise<void> {
+    const reason = PURGE_REASON[m.to];
+    if (reason) {
+      await this.retention.schedule(tx, { photographerId: app.photographerId, reason, now: m.now });
+    } else if (PURGE_REASON[app.stage]) {
+      await this.retention.cancel(tx, { photographerId: app.photographerId, now: m.now });
+    }
   }
 
   /** A walk-in / referral applicant: an APPLICANT photographer and an APPLIED application. */

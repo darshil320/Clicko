@@ -1,4 +1,4 @@
-import { Button, IconTile, Input, Screen, Text } from '@clickco/ui';
+import { Button, Checkbox, IconTile, Input, Screen, Text } from '@clickco/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Aperture from 'lucide-react-native/icons/aperture';
 import MessageSquareText from 'lucide-react-native/icons/message-square-text';
@@ -8,6 +8,7 @@ import { IS_DEV } from '@/shared/config';
 import { userMessage } from '@/shared/errors';
 import { formatPhone } from '@/shared/format/phone';
 import { useNow } from '@/shared/hooks/useNow';
+import { openLegal } from '@/shared/legal';
 import { usePendingCount } from '@/shared/offline/store';
 import { useDevOtp, useRequestOtp, useVerifyOtp } from '../hooks';
 import { formatCountdown, OtpForm, PhoneForm, secondsUntil, toE164 } from '../lib/phone';
@@ -29,7 +30,7 @@ function PhoneStep() {
   const requestOtp = useRequestOtp();
   const form = useForm<PhoneForm>({
     resolver: zodResolver(PhoneForm),
-    defaultValues: { phone: '' },
+    defaultValues: { phone: '', agree: false },
   });
 
   const submit = form.handleSubmit(({ phone }) => {
@@ -87,9 +88,47 @@ function PhoneStep() {
           {userMessage(requestOtp.error)}
         </Text>
       ) : null}
+      <Controller
+        control={form.control}
+        name="agree"
+        render={({ field, fieldState }) => (
+          <Checkbox
+            checked={field.value}
+            onChange={field.onChange}
+            accessibilityLabel="I am 18 or older and agree to the Privacy Policy and Terms"
+            error={fieldState.error?.message}
+            testID="agree-terms"
+            label={
+              <Text>
+                I am 18 or older and agree to the{' '}
+                <Text
+                  variant="bodyStrong"
+                  className="underline"
+                  onPress={() => openLegal('privacy')}
+                  accessibilityRole="link"
+                >
+                  Privacy Policy
+                </Text>{' '}
+                and{' '}
+                <Text
+                  variant="bodyStrong"
+                  className="underline"
+                  onPress={() => openLegal('terms')}
+                  accessibilityRole="link"
+                >
+                  Terms
+                </Text>
+                .
+              </Text>
+            }
+          />
+        )}
+      />
       <SavedActionsNotice />
       <Text variant="caption" tone="tertiary">
-        By continuing you agree to receive a one-time code by SMS.
+        We use your number to sign you in by SMS code and to send job offers. For photographers we
+        also keep verification documents, payout details and your location at check-in and
+        check-out. The Privacy Policy explains why, for how long, and how to complain.
       </Text>
     </Screen>
   );

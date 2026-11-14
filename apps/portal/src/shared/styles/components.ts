@@ -56,6 +56,9 @@ function fieldCss(): string {
   return `
 .field{display:flex;flex-direction:column;gap:${px(space[2])};${font('caption')};font-weight:500;color:${c('text-primary')}}
 .hint{${font('caption')};font-weight:400;color:${c('text-secondary')}}
+.consent{display:flex;align-items:flex-start;gap:${px(space[2])};${font('caption')};color:${c('text-primary')}}
+.consent input{accent-color:${c('accent-default')};margin-top:${px(space[1])}}
+.consent a{text-decoration:underline;font-weight:500}
 input{width:100%;height:${px(layout.inputHeight)};padding:0 ${px(space[4])};border:1px solid ${c('border-strong')};
   border-radius:${px(radius.md)};background:${c('surface-overlay')};color:${c('text-primary')};box-shadow:var(--shadow-sm);
   font:inherit;font-variant-numeric:tabular-nums;

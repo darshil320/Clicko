@@ -12,6 +12,9 @@ export const SEED_DIR =
 
 const PRODUCTION_HOSTS = ['api.clickco.in', 'clickco.in', 'www.clickco.in'];
 
+/** Mirrors SIGN_IN_NOTICE_VERSION in packages/contracts/src/auth.ts (no packages here). */
+const SIGN_IN_NOTICE_VERSION = '2026-11-14';
+
 export class ApiFailure extends Error {
   constructor(status, code, message, details) {
     super(
@@ -97,7 +100,14 @@ export async function signIn(api, kind, phone) {
     throw error;
   }
   const session = await api.call('POST', `${prefix}/otp/verify`, {
-    json: { challengeId: challenge.challengeId, phone, code: otp.code, deviceId: 'loadtest-seed' },
+    json: {
+      challengeId: challenge.challengeId,
+      phone,
+      code: otp.code,
+      deviceId: 'loadtest-seed',
+      // The sign-in checkbox: a new account (or a photographer's first sign-in) needs it.
+      consent: { adultConfirmed: true, noticeVersion: SIGN_IN_NOTICE_VERSION },
+    },
   });
   return { tokens: pickTokens(session), account: session.user ?? session.photographer };
 }
