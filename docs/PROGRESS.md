@@ -2,6 +2,61 @@
 
 Updated at the end of every session. Newest first.
 
+## 2026-11-14 · Videography rate card (ADR-0034, uncommitted)
+- **Owner's card in ruleset 2026.11.14** (`engine/video-ruleset.ts`). VIDEOGRAPHER per hour by the
+  booking's tier: Basic ₹2,000, Semi-Pro ("Advanced") ₹3,000, Professional and Expert ₹5,000, the
+  same in every city. REELS ₹3,000 each, ₹2,000 each for all of them from 5, at most 20.
+  RAW_FOOTAGE ₹1,000 once per booking. Reels and raw footage need the videographer. VIDEOGRAPHER
+  is now open to every tier.
+- **Engine:** quantity-tier add-on prices (`addon_prices.min_quantity`), plus `addons.max_quantity`
+  and `addons.requires_addon_id` (addendum and migration 0021). New rejections:
+  `ADDON_REQUIRES_ADDON` and `DUPLICATE_ADDON`. The contract quantity ceiling is now 20. The
+  editor's diff key and label include the break, and it refuses `QUANTITY_BREAK_RISES`.
+- **Seed:** `seedVideoRuleset` (db:seed, db:seed:dev, e2e app) copies the live ruleset as a draft,
+  applies the video rows, closes the old ruleset and publishes with the editor's event and audit
+  trail. It never backdates and never overwrites ops catalogue edits.
+- **Client:** the configurator lists reels (a stepper) and raw footage (a switch) under the
+  videographer. The probe asks for the picked reel count, so the server's 5+ price shows. The
+  persisted draft is now v2 (`reels`).
+- **Owner items (ADR-0034 Consequences):** raw footage versus T&C §4.3 unedited clips; reel
+  turnaround and editing workflow (T&C §4.4); Expert rate; 20-reel cap; SAC for reel editing;
+  web copy still says Semi-Pro up.
+- **Tests:** API 2062 passed (168 files); client 202; contracts 131; admin 266; typecheck 17/17.
+
+## 2026-11-14 · Legal compliance pass — audit, Critical + High fixes, video pricing (uncommitted)
+- **Audit** (DPDP Act + Rules 2025, IT Rules 2021, E-Commerce Rules 2020, Dark Patterns 2023, TRAI,
+  RBI): GDPR/US out of scope (+91 sign-in, INR, India-only stores). 1 Critical, 10 High, 13 Medium,
+  11 Low. Fixed this session: the Critical and every High row. ADR-0033 lists what is left.
+- **Critical:** the legal render is strict on every production build (`isProductionBuild`, so
+  Vercel production too), not only `build:production`; previews stay drafts. Addresses need a
+  pincode and emails an `@` to count as resolved. Grievance Officer: Mehang Desai, Surat.
+- **Website:** privacy notice rewritten to DPDP s.5 (`content/privacy.md`); `/delete-account/`
+  page for Play; footer shows operator, address, care email and Grievance Officer
+  (`legal/disclosure.ts`); shared `legal/content.ts` loader.
+- **Apps:** client, Pro and portal sign-in need an unticked "18 or older + Privacy Policy and
+  Terms" box and send `consent` with the code; API refuses a new account without it (422
+  `CONSENT_REQUIRED`, code stays usable) and logs `user.consent_recorded` via the outbox.
+  Review screen: peak-season card, real cancellation ladder, links to Terms/Refund/Privacy/
+  Grievance, delivery line per T&C §5.1, "never a photo with an identifiable child" on the model
+  release. Profile → Legal rows in both apps.
+- **API:** KYC documents purged 180 days after offboarding or a closed application (daily
+  `supply.kyc-purge`, StoragePort only, events `photographer.kyc_purge_scheduled`,
+  `photographer_document.purged`).
+- **Video (ADR-0032):** VIDEOGRAPHER add-on, ₹2,000/hr, Semi-Pro and up, not multiplied; web copy
+  and client catalogue updated; no schema change (`alignLaunchAddonPrices` updates dev DBs).
+- **Runbook:** §12.6 breach procedure (CERT-In 6 h, Board + affected people without delay, Board
+  report 72 h, templates); §13.14–15 gaps.
+- **Tests:** API 1987 passed (with TEST_DATABASE_URL, `--maxWorkers=2`); web 204, client 180,
+  pro 260, portal 56, admin 266, contracts 129, api-client 129; typecheck 17/17.
+
+**Owner actions:** Grievance Officer email and phone, registered street address + pincode, privacy
+email — production web deploys fail until they are in `apps/web/src/legal/config.ts`. Turn on
+`video_uploads` per launch city before the first videographer booking. Ship logs to a drain with
+one-year retention. Lawyer review of the T&C v2.1 changes listed in ADR-0033.
+
+**Not done:** the Pro app and notifications do not show booked add-ons (second shooter or
+videographer); Medium/Low audit rows (ADR-0033 "Not done here").
+
 ## 2026-11-02 · Website design pass — Hallmark audit, ADR-0028
 - **Setup:** design skills hue, hallmark, better-typography and interface-design live in
   `~/.claude/skills`; CLAUDE.md §Design routes them by surface; the `clickco-design-pass` project

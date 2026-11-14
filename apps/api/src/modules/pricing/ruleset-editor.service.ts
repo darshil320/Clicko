@@ -29,6 +29,7 @@ import {
   rulesetState,
   versionFor,
 } from './editor/lifecycle';
+import { risingQuantityBreak } from './editor/quantity-breaks';
 import type { RulesetContent, RulesetRecord } from './editor/ruleset-content';
 import { diffRulesets } from './editor/ruleset-diff';
 import { computeQuote } from './engine';
@@ -535,6 +536,14 @@ export class RulesetEditorService {
         UnprocessableEntityException,
         'RATE_ZERO',
         'Every bookable tier needs an hourly rate above ₹0',
+      );
+    }
+    const rising = risingQuantityBreak(content.addonPrices);
+    if (rising) {
+      throw fail(
+        UnprocessableEntityException,
+        'QUANTITY_BREAK_RISES',
+        `${rising.addonName} from ${rising.minQuantity} can’t cost more each than fewer units`,
       );
     }
   }

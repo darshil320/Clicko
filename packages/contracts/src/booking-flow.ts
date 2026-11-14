@@ -4,7 +4,7 @@ import { IsoDateTime, Pincode, Uuid } from './common.js';
 import { BookingStatus, EmergencyBand, PlanTier } from './enums.js';
 import { Hours, MoneyPaise } from './money.js';
 import { BookingCharge, BookingPendingExtension } from './onsite.js';
-import { AddonCode, PriceQuote } from './pricing.js';
+import { AddonSelection, PriceQuote } from './pricing.js';
 
 /**
  * POST /bookings — the server re-prices from these inputs; a client-sent total
@@ -17,10 +17,7 @@ export const CreateBookingBody = z
     pincode: Pincode,
     scheduledStart: IsoDateTime,
     hours: Hours,
-    addons: z
-      .array(z.object({ code: AddonCode, quantity: z.int().min(1).max(4).default(1) }))
-      .max(8)
-      .default([]),
+    addons: z.array(AddonSelection).max(8).default([]),
     travelDistanceKm: z.number().min(0).max(500).multipleOf(0.01).optional(),
     promoCode: z.string().trim().toUpperCase().min(3).max(32).optional(),
     venueAddress: z.string().trim().min(5).max(500),

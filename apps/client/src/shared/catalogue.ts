@@ -87,10 +87,10 @@ export const TIER_COPY: Readonly<Record<PlanTier, TierCopy>> = {
   },
 };
 
-/** What no tier includes (ADR-0003 raw-only SLA, ADR-0005 photos-only launch). */
+/** What no tier includes (ADR-0003 raw-only SLA; ADR-0034 video is an add-on, reels priced apiece). */
 export const NOT_INCLUDED: readonly string[] = [
   'Editing and retouching — Clickco Edit is booked separately',
-  'Video — photos only at launch',
+  'Video — add a videographer, then reels or raw footage; other video editing is separate',
   'Prints and albums',
   'Travel beyond 15 km is charged per km',
 ];
@@ -129,7 +129,14 @@ export interface AddonInfo {
   readonly label: string;
   readonly minTier: PlanTier;
   readonly note?: string;
+  /** Only bookable with this add-on on (ADR-0034: reels and raw footage need the videographer). */
+  readonly requires?: AddonCode;
+  /** Booked as a count (reels) rather than on/off. Mirrors the server's addons.max_quantity. */
+  readonly maxCount?: number;
 }
+
+/** The server's limit on reels per booking (addons.max_quantity, ADR-0034). */
+export const REELS_MAX = 20;
 
 export const ADDONS: readonly AddonInfo[] = [
   {
@@ -137,6 +144,27 @@ export const ADDONS: readonly AddonInfo[] = [
     label: 'Second shooter',
     minTier: 'SEMI_PRO',
     note: 'Charged per hour',
+  },
+  {
+    code: 'VIDEOGRAPHER',
+    label: 'Videographer',
+    minTier: 'BASIC',
+    note: 'Charged per hour at your plan’s video rate',
+  },
+  {
+    code: 'REELS',
+    label: 'Reels',
+    minTier: 'BASIC',
+    note: 'Edited vertical reels, priced per reel — less per reel when you order more',
+    requires: 'VIDEOGRAPHER',
+    maxCount: REELS_MAX,
+  },
+  {
+    code: 'RAW_FOOTAGE',
+    label: 'Raw footage',
+    minTier: 'BASIC',
+    note: 'Every unedited clip, one price per booking',
+    requires: 'VIDEOGRAPHER',
   },
   {
     code: 'DRONE',
@@ -154,4 +182,18 @@ export function tierRank(tier: PlanTier): number {
 
 export function eligibleAddons(tier: PlanTier): readonly AddonInfo[] {
   return ADDONS.filter((addon) => tierRank(tier) >= tierRank(addon.minTier));
+}
+
+/** The add-ons listed on their own (switches). */
+export function topLevelAddons(tier: PlanTier): readonly AddonInfo[] {
+  return eligibleAddons(tier).filter((addon) => addon.requires === undefined);
+}
+
+/** The add-ons shown beneath `parent` once it is on (reels and raw footage under video). */
+export function addonsUnder(tier: PlanTier, parent: AddonCode): readonly AddonInfo[] {
+  return eligibleAddons(tier).filter((addon) => addon.requires === parent);
+}
+
+export function addonInfo(code: AddonCode): AddonInfo | undefined {
+  return ADDONS.find((addon) => addon.code === code);
 }

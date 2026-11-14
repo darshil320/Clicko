@@ -1,20 +1,18 @@
 import type { BookableTier, CategoryCode } from './rate-card';
 
 /**
- * What a booking captures (ADR-0023). A marketing-page choice only: the booking API's media model
- * belongs in packages/contracts when video ships. Video is priced in the app until then.
+ * What a booking captures (ADR-0023, ADR-0032). Video is the videographer add-on beside the
+ * photographer; video alone waits for its own ADR, so the picker does not offer it.
  */
-export type ShootMedia = 'PHOTO' | 'VIDEO' | 'BOTH';
+export type ShootMedia = 'PHOTO' | 'BOTH';
 
 export const MEDIA_OPTIONS: readonly { readonly value: ShootMedia; readonly label: string }[] = [
   { value: 'PHOTO', label: 'Photos' },
-  { value: 'VIDEO', label: 'Video' },
   { value: 'BOTH', label: 'Photos + video' },
 ];
 
 /** Terms §4.3: video is delivered unedited and camera-original; edits are a separate paid service. */
-export const VIDEO_DELIVERY = 'Unedited camera-original clips; reel edits are a paid add-on';
-export const VIDEO_PRICE_NOTE = 'priced in the app at launch';
+export const VIDEO_DELIVERY = 'Unedited camera-original clips; editing is a separate service';
 
 /** A real reason people book, mapped onto a bookable rate-card shoot so its price is exact. */
 export interface Moment {

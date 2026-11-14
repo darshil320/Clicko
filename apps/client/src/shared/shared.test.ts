@@ -10,7 +10,7 @@ import {
   splitBookings,
   statusPresentation,
 } from './booking-status';
-import { categoryLabel, eligibleAddons, isBookableTier } from './catalogue';
+import { categoryLabel, eligibleAddons, isBookableTier, NOT_INCLUDED } from './catalogue';
 import { userMessage } from './errors';
 import {
   addDays,
@@ -81,10 +81,28 @@ describe('catalogue', () => {
   });
 
   it('gates add-ons by tier and Signature is not instantly bookable', () => {
-    expect(eligibleAddons('BASIC')).toEqual([]);
+    expect(eligibleAddons('BASIC').map((a) => a.code)).not.toContain('DRONE');
     expect(eligibleAddons('EXPERT').map((a) => a.code)).toContain('DRONE');
     expect(isBookableTier('SIGNATURE')).toBe(false);
     expect(isBookableTier('EXPERT')).toBe(true);
+  });
+
+  it('offers a videographer on every tier, charged per hour (ADR-0034)', () => {
+    const videographer = eligibleAddons('BASIC').find((a) => a.code === 'VIDEOGRAPHER');
+    expect(videographer).toMatchObject({ label: 'Videographer', minTier: 'BASIC' });
+    expect(videographer?.note).toMatch(/per hour/i);
+  });
+
+  it('describes raw footage as the unedited clips and reels as priced per reel', () => {
+    const raw = eligibleAddons('BASIC').find((a) => a.code === 'RAW_FOOTAGE');
+    const reels = eligibleAddons('BASIC').find((a) => a.code === 'REELS');
+    expect(raw?.note).toMatch(/unedited/i);
+    expect(reels?.note).toMatch(/per reel/i);
+  });
+
+  it('no longer tells clients video is unavailable', () => {
+    expect(NOT_INCLUDED.join(' ')).not.toMatch(/photos only/i);
+    expect(NOT_INCLUDED.some((line) => /edited video|video edit/i.test(line))).toBe(true);
   });
 });
 

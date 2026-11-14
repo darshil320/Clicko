@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { SIGN_IN_NOTICE_VERSION } from '@clickco/contracts';
 import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -14,6 +15,7 @@ import { DevToolsModule } from '../dev/dev-tools.module';
 import { configureHttpApp } from '../http-app';
 import { seedLaunchCities } from '../infra/db/seed';
 import { seedLaunchRuleset } from '../infra/db/seeds/launch-ruleset.seed';
+import { seedVideoRuleset } from '../infra/db/seeds/video-ruleset.seed';
 import { OutboxPublisher, type PublishTickResult } from '../infra/outbox/outbox-publisher';
 import { JobRegistry } from '../infra/queues/job-registry';
 import { JOB_SCHEDULER, type JobScheduler } from '../infra/queues/job-scheduler';
@@ -31,6 +33,12 @@ import { createScratchDb, type ScratchDb } from './scratch-db';
 export type Json = Record<string, any>;
 
 export const E2E_SANDBOX_SECRET = 'e2e-sandbox-webhook-secret-0123456789';
+
+/** The sign-in checkbox, ticked: required for a new account or a photographer's first sign-in. */
+export const TEST_SIGN_IN_CONSENT = {
+  adultConfirmed: true,
+  noticeVersion: SIGN_IN_NOTICE_VERSION,
+} as const;
 
 /** Local Docker Redis (docker-compose). Each app gets its own key prefix, removed on close. */
 export const TEST_REDIS_URL =
@@ -111,11 +119,17 @@ export async function startE2eApp(opts: {
   readonly gateway?: PaymentGatewayPort;
   /** Extra environment variables (e.g. TRUST_PROXY_HOPS for the X-Forwarded-For tests). */
   readonly env?: Readonly<Record<string, string>>;
+  /**
+   * Seeds ruleset 2026.11.14 (ADR-0034) after the launch ruleset, as `pnpm db:seed` does. Default
+   * true. The pricing-editor suite turns it off: it runs in October against the launch card alone.
+   */
+  readonly videoRuleset?: boolean;
 }): Promise<E2eApp> {
   Logger.overrideLogger(false);
   const db = await createScratchDb();
   await seedLaunchCities(db.sql);
   await seedLaunchRuleset(db.sql);
+  if (opts.videoRuleset ?? true) await seedVideoRuleset(db.sql, opts.now);
   const prefix = `clickco-test-${randomBytes(4).toString('hex')}`;
   // Each app gets its own storage folder, removed on close (uploads used to pile up in the OS
   // temp dir, and in apps/api/.storage for development-mode apps).
@@ -179,7 +193,12 @@ export async function startE2eApp(opts: {
     const req = await call('POST', `${prefixPath}/otp/request`, { body: { phone } });
     await runDueJobs();
     const verify = await call('POST', `${prefixPath}/otp/verify`, {
-      body: { challengeId: req.json.data?.challengeId, phone, code: sms.last.get(phone) },
+      body: {
+        challengeId: req.json.data?.challengeId,
+        phone,
+        code: sms.last.get(phone),
+        consent: TEST_SIGN_IN_CONSENT,
+      },
     });
     if (verify.status !== 200) throw new Error(`login failed: ${JSON.stringify(verify.json)}`);
     return verify.json.data.accessToken as string;

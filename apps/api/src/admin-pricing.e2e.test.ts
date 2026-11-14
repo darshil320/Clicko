@@ -116,7 +116,9 @@ describe.runIf(TEST_DATABASE_URL)('the pricing editor', () => {
     `/admin/pricing/rulesets/${id}/preview?tier=PROFESSIONAL&categoryCode=FOOD&cityId=${surat}&hours=2&scheduledStart=${encodeURIComponent(START)}`;
 
   beforeAll(async () => {
-    e2e = await startE2eApp({ now: NOW, nodeEnv: 'test' });
+    // The editor's lifecycle runs in October from the launch card alone: a seeded 2026.11.14 would
+    // be a second, scheduled window in every overview and publish below.
+    e2e = await startE2eApp({ now: NOW, nodeEnv: 'test', videoRuleset: false });
     surat = await cityIdOf(e2e, 'Surat');
     const make = async (key: keyof typeof staff, role: StaffRole, cityId: string | null = null) => {
       const made = await bootstrapStaff(e2e, `${key}@clickco.test`, role, cityId);

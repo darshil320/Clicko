@@ -31,10 +31,10 @@ interface HeroPickerProps {
 }
 
 /**
- * The home hero's shoot picker (ADR-0019, ADR-0023): photos, video or both, then category, city,
- * hours and level. Photo prices come live from the rate card; video is priced in the app. Without
- * JavaScript the opening quote is shown and the controls stay disabled, so a choice never sits
- * beside a price that does not match it.
+ * The home hero's shoot picker (ADR-0019, ADR-0023, ADR-0032): photos or photos + video, then
+ * category, city, hours and level. Photo prices come live from the rate card; video is the
+ * videographer add-on, priced in the app. Without JavaScript the opening quote is shown and the
+ * controls stay disabled, so a choice never sits beside a price that does not match it.
  */
 export function HeroPicker({
   categories,
@@ -62,6 +62,7 @@ export function HeroPicker({
   const copy = describeQuote(
     shoot.media,
     quoteFor(shoot.tier, city.tier, category.code, shoot.hours),
+    shoot.tier,
   );
   const media = MEDIA_OPTIONS.find((m) => m.value === shoot.media)?.label ?? '';
 
@@ -137,7 +138,7 @@ export function HeroPicker({
         visible={barVisible}
         summary={`${category.label} in ${city.name}, ${shoot.hours} h, ${media.toLowerCase()}`}
         copy={copy}
-        extra={shoot.media === 'BOTH' ? '+ video in app' : undefined}
+        extra={shoot.media === 'BOTH' ? '+ videographer in app' : undefined}
         pickerHref={`#${PICKER_ID}`}
         waitlistHref={rest.waitlistHref}
       />

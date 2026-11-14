@@ -9,6 +9,8 @@ import {
   type CategoryCode,
   LEAD_TIME_BANDS,
   RATE_PER_HOUR_PAISE,
+  VIDEOGRAPHER_MIN_TIER,
+  VIDEOGRAPHER_PER_HOUR_PAISE,
 } from './rate-card';
 
 const DOC_05 = readFileSync(
@@ -78,5 +80,25 @@ describe('rate card mirrors docs/clickco-05-pricing-engine.md §5', () => {
       ['HOURS_3_8', 'HOURS_UNDER_3'].includes(b.code),
     );
     for (const band of shortNotice) expect(band.promise).toMatch(/best effort/i);
+  });
+});
+
+const ADR_0032 = readFileSync(
+  fileURLToPath(
+    new URL('../../../../docs/DECISIONS/0032-video-pricing-videographer-addon.md', import.meta.url),
+  ),
+  'utf8',
+);
+
+describe('videographer add-on mirrors ADR-0032 D1', () => {
+  const row = ADR_0032.match(/^\| VIDEOGRAPHER \| ([^|/]+)\/hr \| ✅ \| ([A-Z_]+) \|/m);
+
+  it('charges the ADR hourly rate', () => {
+    expect(row).not.toBeNull();
+    expect(VIDEOGRAPHER_PER_HOUR_PAISE).toBe(rupeesToPaise(rupees(row?.[1] ?? '-1')));
+  });
+
+  it('starts at the ADR minimum tier', () => {
+    expect(VIDEOGRAPHER_MIN_TIER).toBe(row?.[2]);
   });
 });

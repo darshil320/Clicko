@@ -3,8 +3,27 @@ import { IsoDateTime, Pincode } from './common.js';
 import { CityTier, EmergencyBand, PlanTier } from './enums.js';
 import { BasisPoints, Hours, MoneyPaise, SignedMoneyPaise } from './money.js';
 
-export const AddonCode = z.enum(['SECOND_SHOOTER', 'DRONE', 'LIGHTING_KIT', 'RUSH_24H']);
+export const AddonCode = z.enum([
+  'SECOND_SHOOTER',
+  'VIDEOGRAPHER',
+  'DRONE',
+  'LIGHTING_KIT',
+  'RUSH_24H',
+  'REELS',
+  'RAW_FOOTAGE',
+]);
 export type AddonCode = z.infer<typeof AddonCode>;
+
+/**
+ * Input sanity only: the most units any add-on line may ask for (20 reels, ADR-0034). The ruleset's
+ * own per-add-on limit (addons.max_quantity) is enforced by the pricing engine.
+ */
+export const ADDON_QUANTITY_CEILING = 20;
+
+export const AddonSelection = z.object({
+  code: AddonCode,
+  quantity: z.int().min(1).max(ADDON_QUANTITY_CEILING).default(1),
+});
 
 export const QuoteRequestBody = z.object({
   tier: PlanTier,
@@ -12,10 +31,7 @@ export const QuoteRequestBody = z.object({
   pincode: Pincode,
   scheduledStart: IsoDateTime,
   hours: Hours,
-  addons: z
-    .array(z.object({ code: AddonCode, quantity: z.int().min(1).max(4).default(1) }))
-    .max(8)
-    .default([]),
+  addons: z.array(AddonSelection).max(8).default([]),
   /** Optional exact distance; two decimals at most (metre precision is plenty). */
   travelDistanceKm: z.number().min(0).max(500).multipleOf(0.01).optional(),
   promoCode: z.string().trim().toUpperCase().min(3).max(32).optional(),

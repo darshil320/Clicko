@@ -13,7 +13,10 @@ import {
 const hhmm = (minute: number): string =>
   `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 
-/** What each tier promises (doc 01 Screen 2, v0.2 §10/G-13, ADR-0005: photos only at launch). */
+/**
+ * What each tier promises (doc 01 Screen 2, v0.2 §10/G-13). No tier includes video: it is the
+ * ADR-0032 videographer add-on, so video_included stays false.
+ */
 const DELIVERABLES = [
   {
     tier: 'BASIC',
@@ -170,4 +173,33 @@ export async function alignLaunchEmergencyRules(sql: postgres.Sql): Promise<numb
     changed += rows.length;
   }
   return changed;
+}
+
+/**
+ * DEVELOPMENT ONLY (ADR-0032). Databases seeded before ADR-0032 hold the launch ruleset without
+ * the VIDEOGRAPHER price (the addon row itself arrives through seedLaunchRuleset's
+ * ON CONFLICT DO NOTHING catalogue insert). Insert-only: an existing price is never changed, so
+ * no booking priced against the ruleset moves (Invariant 17); production has no rows yet.
+ * Idempotent: returns the rows it added.
+ */
+export async function alignLaunchAddonPrices(sql: postgres.Sql): Promise<number> {
+  const [rs] = await sql<{ id: string }[]>`
+    SELECT id FROM pricing_rulesets WHERE version = ${LAUNCH_RULESET_VERSION}`;
+  if (!rs) return 0;
+  let added = 0;
+  for (const [i, a] of ADDON_CATALOGUE.entries()) {
+    await sql`
+      INSERT INTO addons (code, name, requires_drone_credentials, requires_airspace_check, min_tier, sort_order)
+      VALUES (${a.code}, ${a.label}, ${a.requiresDroneCredentials}, ${a.requiresAirspaceCheck}, ${a.minTier}, ${i})
+      ON CONFLICT (code) DO NOTHING`;
+    const rows = await sql`
+      INSERT INTO addon_prices (ruleset_id, addon_id, tier, city_tier, amount_paise, is_per_hour, payout_share_bps)
+      SELECT ${rs.id}, ad.id, NULL, NULL, ${a.pricePaise.toString()}, ${a.isPerHour}, ${a.payoutShareBps}
+        FROM addons ad
+       WHERE ad.code = ${a.code}
+         AND NOT EXISTS (SELECT 1 FROM addon_prices ap WHERE ap.ruleset_id = ${rs.id} AND ap.addon_id = ad.id)
+      RETURNING id`;
+    added += rows.length;
+  }
+  return added;
 }

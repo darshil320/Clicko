@@ -76,7 +76,7 @@ export const TIERS: Readonly<Record<PlanTier, TierCopy>> = {
   },
 };
 
-/** What no standard tier includes (ADR-0003 RAW-only SLA, ADR-0005 photos-only launch). */
+/** What no standard tier includes (ADR-0003 RAW-only SLA; video is the ADR-0032 add-on, unedited). */
 export const NOT_INCLUDED: readonly string[] = [
   'Editing and retouching — Clickco Edit is a separate paid service',
   'Edited video and reels — clips come unedited; a reel edit is a separate paid service',

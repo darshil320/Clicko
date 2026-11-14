@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quoteFor } from '../lib/pricing';
 import { HERO_PICKER } from './home';
-import { MOMENTS } from './moments';
+import { MEDIA_OPTIONS, MOMENTS } from './moments';
 import { MIN_HOURS } from './rate-card';
 import { CATEGORY_REEL, REEL_WALL, REELS } from './reels';
 
@@ -35,5 +35,11 @@ describe('moments (ADR-0023)', () => {
     for (const item of REEL_WALL) expect(REELS[item.reel]).toBeDefined();
     expect(REELS.hero).toBeDefined();
     for (const name of Object.values(CATEGORY_REEL)) expect(REELS[name ?? '']).toBeDefined();
+  });
+});
+
+describe('what the picker sells (ADR-0032 D3)', () => {
+  it('offers photos, or photos with a videographer, and not video alone', () => {
+    expect(MEDIA_OPTIONS.map((m) => m.value)).toEqual(['PHOTO', 'BOTH']);
   });
 });

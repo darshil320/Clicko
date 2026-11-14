@@ -15,3 +15,4 @@ export * from './launch-ruleset';
 export * from './onsite-charges';
 export * from './payout';
 export * from './types';
+export * from './video-ruleset';

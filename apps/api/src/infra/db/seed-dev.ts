@@ -3,12 +3,13 @@ import { loadEnv } from '../../config/env';
 import { assertLocalTestDatabase } from './migrate';
 import { seedDevPhotographers } from './seeds/dev-photographers';
 import { seedDevStaff } from './seeds/dev-staff';
-import { alignLaunchEmergencyRules } from './seeds/launch-ruleset.seed';
+import { alignLaunchAddonPrices, alignLaunchEmergencyRules } from './seeds/launch-ruleset.seed';
+import { seedVideoRuleset } from './seeds/video-ruleset.seed';
 
 /**
  * `pnpm db:seed:dev` — demo photographers for the dispatch desk, one staff account per role for
- * the admin panel (ADR-0025; credentials in apps/api/CLAUDE.md), and the ADR-0012 launch-ruleset
- * realignment. Development databases on this machine only.
+ * the admin panel (ADR-0025; credentials in apps/api/CLAUDE.md), the ADR-0012 / ADR-0032
+ * launch-ruleset realignments and the ADR-0034 videography ruleset. Development databases on this machine only.
  */
 async function main(): Promise<void> {
   const env = loadEnv(process.env);
@@ -23,6 +24,12 @@ async function main(): Promise<void> {
     const aligned = await alignLaunchEmergencyRules(sql);
     if (aligned > 0)
       process.stdout.write(`Realigned ${aligned} launch emergency rules (ADR-0012).\n`);
+    const addonPrices = await alignLaunchAddonPrices(sql);
+    if (addonPrices > 0)
+      process.stdout.write(`Added ${addonPrices} launch add-on prices (ADR-0032).\n`);
+    const video = await seedVideoRuleset(sql, new Date());
+    if (video.created)
+      process.stdout.write('Published videography ruleset 2026.11.14 (ADR-0034).\n');
     const r = await seedDevPhotographers(sql);
     process.stdout.write(`Seeded ${r.inserted} new demo photographers.\n`);
     const staff = await seedDevStaff(sql, env.STAFF_TOTP_KEY, new Date());

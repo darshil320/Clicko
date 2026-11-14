@@ -15,7 +15,7 @@ const CATEGORIES = [
   'CORPORATE',
   'WEDDING',
 ] as const;
-const ADDONS = ['SECOND_SHOOTER', 'DRONE', 'LIGHTING_KIT', 'RUSH_24H'] as const;
+const ADDONS = ['SECOND_SHOOTER', 'VIDEOGRAPHER', 'DRONE', 'LIGHTING_KIT', 'RUSH_24H'] as const;
 
 const BAND_LABEL: Record<string, string> = {
   NONE: 'STANDARD (>48H)',

@@ -17,7 +17,7 @@ export function Moments() {
     <Section
       id="moments"
       title={['Made for moments', 'like this.']}
-      lead="Not just weddings. Pick the moment, we send the pro. Photo prices from Surat and Vadodara; video is priced in the app. Reels shown are licensed samples."
+      lead="Not just weddings. Pick the moment, we send the pro. Photo prices from Surat and Vadodara; video is a videographer add-on from ₹2,000/hr, priced in the app. Reels shown are licensed samples."
     >
       <ul className="moments">
         {MOMENTS.map((moment) => {

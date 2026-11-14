@@ -39,6 +39,7 @@ function card(idBase: number): RulesetContent {
         addonName: 'Drone coverage',
         tier: null,
         cityTier: null,
+        minQuantity: 1,
         amountPaise: 450000,
         isPerHour: false,
         payoutShareBps: 6000,
@@ -226,6 +227,31 @@ describe('diffRulesets (doc 05 §11 diff view)', () => {
       before: 12000,
       after: null,
     });
+  });
+
+  it('a quantity break (addendum 0021) is its own row beside the ordinary price', () => {
+    const live = card(0);
+    const draft = card(500);
+    const [drone] = draft.addonPrices;
+    if (!drone) throw new Error('fixture');
+    const rows = diffRulesets(
+      {
+        ...draft,
+        addonPrices: [
+          ...draft.addonPrices,
+          { ...drone, id: UUID(997), minQuantity: 5, amountPaise: 400000 },
+        ],
+      },
+      live,
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        section: 'ADDON_PRICE',
+        key: 'ADDON_PRICE:DRONE:ALL:ALL:5',
+        label: 'Drone coverage · 5 or more',
+        change: 'ADDED',
+      }),
+    ]);
   });
 
   it('identical festival rows are paired one to one, so a duplicate shows as added', () => {

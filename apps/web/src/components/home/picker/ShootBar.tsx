@@ -18,7 +18,7 @@ export function ShootBar({
   readonly visible: boolean;
   readonly summary: string;
   readonly copy: QuoteCopy;
-  /** What the price leaves out, e.g. video that is priced in the app. */
+  /** What the price leaves out, e.g. the videographer add-on, priced in the app. */
   readonly extra?: string;
   readonly pickerHref: string;
   readonly waitlistHref: string;

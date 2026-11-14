@@ -80,6 +80,10 @@ export interface AddonRule {
   readonly label: string;
   readonly minTier: PlanTier | null;
   readonly requiresAirspaceCheck: boolean;
+  /** addons.max_quantity (addendum 0021): the most units one booking may take. */
+  readonly maxQuantity: number;
+  /** addons.requires_addon_id (addendum 0021): another add-on that must be on the same booking. */
+  readonly requiresAddonCode: string | null;
 }
 
 export interface AddonPriceRule {
@@ -87,6 +91,11 @@ export interface AddonPriceRule {
   /** null = any tier / any city tier. Most specific match wins: (tier, cityTier) → (tier, null) → (null, null). */
   readonly tier: PlanTier | null;
   readonly cityTier: CityTier | null;
+  /**
+   * addon_prices.min_quantity (addendum 0021, ADR-0034): the row applies when the booking takes at
+   * least this many units, and its unit price then applies to EVERY unit. 1 = the ordinary price.
+   */
+  readonly minQuantity: number;
   readonly amountPaise: bigint;
   readonly isPerHour: boolean;
   /** Mirrors addon_prices.payout_share_bps. NOT used by the v1 engine: doc 05 step 12 applies the tier share to base + addons. */
@@ -185,6 +194,8 @@ export type RejectionCode =
   | 'UNKNOWN_CATEGORY'
   | 'ADDON_NOT_PRICED'
   | 'ADDON_TIER_INELIGIBLE'
+  | 'ADDON_REQUIRES_ADDON'
+  | 'DUPLICATE_ADDON'
   | 'INVALID_ADDON_QUANTITY'
   | 'NO_TRAVEL_SLAB'
   | 'NO_EMERGENCY_RULE'

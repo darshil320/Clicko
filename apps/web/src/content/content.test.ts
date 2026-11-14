@@ -104,3 +104,24 @@ describe('prices quoted in prose match the rate card', () => {
     expect(answer).toContain(`${formatRupees(fromPrice('BASIC', 'TIER_1').basePaise)} + GST`);
   });
 });
+
+describe('video copy (ADR-0032)', () => {
+  const videoAnswers = [
+    ...HOME_FAQS.filter((f) => /video/i.test(f.question)),
+    ...CATEGORIES.flatMap((c) => c.faqs.filter((f) => /video/i.test(f.question))),
+  ].map((f) => f.answer);
+
+  it('every video answer names the videographer add-on, its rate and unedited clips', () => {
+    expect(videoAnswers.length).toBeGreaterThan(0);
+    for (const answer of videoAnswers) {
+      expect(answer).toContain('videographer add-on');
+      expect(answer).toContain('₹2,000 an hour');
+      expect(answer).toMatch(/unedited/i);
+    }
+  });
+
+  it('no copy still says video is priced in the app at launch', () => {
+    expect(allCopy()).not.toMatch(/priced in the app at launch/i);
+    expect(allCopy()).not.toMatch(/plans that include it/i);
+  });
+});

@@ -109,6 +109,12 @@ describe('migrations mirror the specification (ADR-0006)', () => {
     );
   });
 
+  it('0021 is byte-identical to docs/schema-addenda/0021-addon-quantity-pricing.sql', () => {
+    expect(read('apps/api/src/infra/db/migrations/0021_addon_quantity_pricing.sql')).toBe(
+      read('docs/schema-addenda/0021-addon-quantity-pricing.sql'),
+    );
+  });
+
   it('0014 is byte-identical to docs/schema-addenda/0014-performance-indexes.sql', () => {
     expect(read('apps/api/src/infra/db/migrations/0014_performance_indexes.sql')).toBe(
       read('docs/schema-addenda/0014-performance-indexes.sql'),
@@ -137,6 +143,7 @@ describe('migrations mirror the specification (ADR-0006)', () => {
       '0018_outbox_claim_token.sql',
       '0019_client_cancellation_payout.sql',
       '0020_account_deletion.sql',
+      '0021_addon_quantity_pricing.sql',
     ]);
     for (const m of migrations) expect(m.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

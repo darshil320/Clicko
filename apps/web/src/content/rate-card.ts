@@ -46,6 +46,13 @@ export const CATEGORY_UPLIFT_BPS: Readonly<Record<CategoryCode, number>> = {
 /** Portrait and Event carry no uplift, so they are the honest base for "from" prices. */
 export const REFERENCE_UPLIFT_BPS = CATEGORY_UPLIFT_BPS.PORTRAIT;
 
+/**
+ * ADR-0032: video is the VIDEOGRAPHER add-on, a second person shooting unedited clips, charged per
+ * hour booked and never multiplied by surge or lead time. Not offered below Semi-Pro.
+ */
+export const VIDEOGRAPHER_PER_HOUR_PAISE = 200_000n;
+export const VIDEOGRAPHER_MIN_TIER: BookableTier = 'SEMI_PRO';
+
 export const MIN_HOURS = 2;
 /** Signature is quote-only with a 4-hour minimum (v0.2 §10, ADR-0005 OD-04). */
 export const SIGNATURE_MIN_HOURS = 4;

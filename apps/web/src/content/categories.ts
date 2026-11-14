@@ -192,8 +192,9 @@ export const CATEGORIES: readonly Category[] = [
       {
         question: 'Do you shoot video?',
         answer:
-          'Yes. Video is priced in the app at launch, which shows the plans that include it. It arrives ' +
-          'as unedited camera-original clips by secure link; a reel edit is a separate paid service.',
+          'Yes. Book the videographer add-on: a second person shooting video beside your photographer, ' +
+          '₹2,000 an hour from the Semi-Pro tier up, priced in the app before you pay. Clips arrive ' +
+          'unedited and camera-original by secure link; editing is a separate paid service.',
       },
     ],
   },

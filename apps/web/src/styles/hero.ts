@@ -147,7 +147,7 @@ function visualCss(): string {
 .hero-visual .reel.hero-photo{aspect-ratio:4/5}
 ${mq(bp.lg)}{
   .hero-photo{flex:1 1 auto;aspect-ratio:auto;min-height:${px(picker.photoMin)}}
-  .hero-visual .reel.hero-photo{aspect-ratio:9/16;width:auto;max-width:100%;align-self:center}
+  .hero-visual .reel.hero-photo{aspect-ratio:9/16;width:auto;max-width:100%;align-self:center;justify-self:left}
 }
 `;
 }

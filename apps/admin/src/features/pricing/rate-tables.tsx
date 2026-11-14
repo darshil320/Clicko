@@ -243,6 +243,7 @@ export function AddonsTable({ ruleset, save, changed }: TableProps) {
               {a.addonName}
               {a.tier ? ` · ${TIER_LABEL[a.tier]}` : ''}
               {a.cityTier ? ` · ${CITY_TIER_LABEL[a.cityTier]} cities` : ''}
+              {a.minQuantity > 1 ? ` · ${a.minQuantity} or more` : ''}
             </TableCell>
             <TableCell className="text-right">
               <InlineEdit
@@ -251,7 +252,8 @@ export function AddonsTable({ ruleset, save, changed }: TableProps) {
                 initial={paiseToRupeesText(a.amountPaise)}
                 prefix="₹"
                 changed={changed.has(
-                  `ADDON_PRICE:${a.addonCode}:${a.tier ?? 'ALL'}:${a.cityTier ?? 'ALL'}`,
+                  `ADDON_PRICE:${a.addonCode}:${a.tier ?? 'ALL'}:${a.cityTier ?? 'ALL'}` +
+                    (a.minQuantity > 1 ? `:${a.minQuantity}` : ''),
                 )}
                 disabled={save === null}
                 onCommit={async (text) => {
@@ -267,7 +269,12 @@ export function AddonsTable({ ruleset, save, changed }: TableProps) {
               />
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {a.isPerHour ? 'Per hour' : 'Once per booking'}
+              {/* Addendum 0021: a flat price is per unit; a quantity break prices every unit. */}
+              {a.isPerHour
+                ? 'Per hour'
+                : a.minQuantity > 1
+                  ? `Each, for all units from ${a.minQuantity}`
+                  : 'Each, per booking'}
             </TableCell>
           </TableRow>
         ))}

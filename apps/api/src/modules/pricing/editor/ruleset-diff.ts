@@ -89,9 +89,17 @@ const CATEGORY_UPLIFT: SectionSpec<Row<'categoryUplifts'>> = {
 
 const ADDON_PRICE: SectionSpec<Row<'addonPrices'>> = {
   section: 'ADDON_PRICE',
-  key: (r) => `ADDON_PRICE:${r.addonCode}:${r.tier ?? 'ALL'}:${r.cityTier ?? 'ALL'}`,
+  // A quantity break (addendum 0021) is its own row; the ordinary price keeps its old key.
+  key: (r) =>
+    `ADDON_PRICE:${r.addonCode}:${r.tier ?? 'ALL'}:${r.cityTier ?? 'ALL'}` +
+    (r.minQuantity > 1 ? `:${r.minQuantity}` : ''),
   label: (r) =>
-    [r.addonName, r.tier ? TIER[r.tier] : null, r.cityTier ? CITY_TIER[r.cityTier] : null]
+    [
+      r.addonName,
+      r.tier ? TIER[r.tier] : null,
+      r.cityTier ? CITY_TIER[r.cityTier] : null,
+      r.minQuantity > 1 ? `${r.minQuantity} or more` : null,
+    ]
       .filter(Boolean)
       .join(' · '),
   fields: [

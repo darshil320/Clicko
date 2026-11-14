@@ -2,6 +2,7 @@ import postgres from 'postgres';
 import { loadEnv } from '../../config/env';
 import { expandPincodes, LAUNCH_CITIES, type SeedCity } from './seeds/launch-cities';
 import { seedLaunchRuleset } from './seeds/launch-ruleset.seed';
+import { seedVideoRuleset } from './seeds/video-ruleset.seed';
 
 /** Idempotent reference-data seed. Inserts what is missing; never overwrites ops edits. */
 export async function seedLaunchCities(
@@ -42,6 +43,14 @@ async function main(): Promise<void> {
     const p = await seedLaunchRuleset(sql);
     process.stdout.write(
       p.created ? 'Published pricing ruleset 2026.10.01.\n' : 'Pricing ruleset already present.\n',
+    );
+    const v = await seedVideoRuleset(sql, new Date());
+    process.stdout.write(
+      v.created
+        ? 'Published pricing ruleset 2026.11.14 (videography, ADR-0034).\n'
+        : v.reason === 'ALREADY_PRESENT'
+          ? 'Videography ruleset already present.\n'
+          : 'A later ruleset is published: apply the ADR-0034 video card in the pricing editor.\n',
     );
   } finally {
     await sql.end();

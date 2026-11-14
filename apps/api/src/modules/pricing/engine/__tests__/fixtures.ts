@@ -14,6 +14,7 @@ import {
   type QuoteLine,
   type ResolvedVenue,
   type Ruleset,
+  videoRuleset,
 } from '../index';
 
 export const CITY = {
@@ -27,6 +28,13 @@ export const RULESET_ID = 'ruleset-launch-2026-11-01';
 /** A fresh launch ruleset (doc 05 §5 + ADR-0005) per call, so no test can leak state into another. */
 export function launch(): Ruleset {
   return launchRuleset(RULESET_ID, CITY);
+}
+
+export const VIDEO_RULESET_ID = 'ruleset-video-2026-11-14';
+
+/** The ADR-0034 ruleset: the launch card plus the videography rate card, fresh per call. */
+export function videoCard(): Ruleset {
+  return videoRuleset(VIDEO_RULESET_ID, CITY);
 }
 
 /** Surat: TIER_1, Gujarat (GST state 24 = Clickco's own state → CGST + SGST). */

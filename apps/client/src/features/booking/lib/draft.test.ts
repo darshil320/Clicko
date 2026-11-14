@@ -45,15 +45,25 @@ describe('draft → quote request', () => {
   it('probes every add-on the tier is eligible for', () => {
     expect(addonProbeRequest(base).addons?.map((a) => a.code)).toEqual([
       'SECOND_SHOOTER',
+      'VIDEOGRAPHER',
+      'REELS',
+      'RAW_FOOTAGE',
       'DRONE',
       'LIGHTING_KIT',
       'RUSH_24H',
     ]);
     expect(addonProbeRequest(withTier(base, 'SEMI_PRO')).addons?.map((a) => a.code)).toEqual([
       'SECOND_SHOOTER',
+      'VIDEOGRAPHER',
+      'REELS',
+      'RAW_FOOTAGE',
       'LIGHTING_KIT',
     ]);
-    expect(addonProbeRequest(withTier(base, 'BASIC')).addons).toEqual([]);
+    expect(addonProbeRequest(withTier(base, 'BASIC')).addons?.map((a) => a.code)).toEqual([
+      'VIDEOGRAPHER',
+      'REELS',
+      'RAW_FOOTAGE',
+    ]);
   });
 
   it('prices "from" as the uplift-free Portrait category for 2 hours', () => {
@@ -80,12 +90,18 @@ describe('editing a draft never mutates it', () => {
   });
 
   it('drops add-ons the new tier cannot take', () => {
-    const loaded = { ...base, addons: ['DRONE', 'LIGHTING_KIT', 'SECOND_SHOOTER'] as const };
+    const loaded = {
+      ...base,
+      addons: ['DRONE', 'LIGHTING_KIT', 'SECOND_SHOOTER', 'VIDEOGRAPHER'] as const,
+    };
     expect(withTier({ ...loaded, addons: [...loaded.addons] }, 'SEMI_PRO').addons).toEqual([
       'LIGHTING_KIT',
       'SECOND_SHOOTER',
+      'VIDEOGRAPHER',
     ]);
-    expect(withTier({ ...loaded, addons: [...loaded.addons] }, 'BASIC').addons).toEqual([]);
+    expect(withTier({ ...loaded, addons: [...loaded.addons] }, 'BASIC').addons).toEqual([
+      'VIDEOGRAPHER',
+    ]);
   });
 });
 

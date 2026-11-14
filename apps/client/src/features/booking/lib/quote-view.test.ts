@@ -172,3 +172,34 @@ describe('reading prices off quotes', () => {
     expect(hourlyRatePaise(portrait)).toBe(425000n);
   });
 });
+
+// T&C §3.2 / doc 05 §5: the peak-season refund rule is enforceable only if the client sees it
+// before paying (audit H, 14 Nov 2026).
+describe('quoteView peak season', () => {
+  it('warns about the stricter refund when the date is in peak season', () => {
+    expect(quoteView(quote({ isPeakSeason: true })).peakSeason).toBe(
+      'Your date is in peak season. If you cancel less than 7 days before the shoot, you get 50% of your advance back.',
+    );
+  });
+
+  it('says nothing outside peak season', () => {
+    expect(quoteView(quote()).peakSeason).toBeNull();
+  });
+});
+
+// ADR-0031 §3.3 comes before §3.2: same-day and emergency bookings follow the emergency rule
+// even in peak season, so the peak note would promise the wrong refund (domain review).
+describe('quoteView peak season on emergency bookings', () => {
+  it.each(['SAME_DAY', 'HOURS_3_8', 'HOURS_UNDER_3'] as const)(
+    'says nothing about peak season for a %s booking',
+    (emergencyBand) => {
+      expect(quoteView(quote({ isPeakSeason: true, emergencyBand })).peakSeason).toBeNull();
+    },
+  );
+
+  it('still warns for a next-day booking in peak season', () => {
+    expect(
+      quoteView(quote({ isPeakSeason: true, emergencyBand: 'NEXT_DAY' })).peakSeason,
+    ).not.toBeNull();
+  });
+});

@@ -4,7 +4,7 @@
 > [`DECISIONS/0005-open-decisions-resolved.md`](DECISIONS/0005-open-decisions-resolved.md).
 > **OD-06:** entity name = **Clicko** (Darshil, 22 Oct 2026); registered address still open.
 > **Still open — Darshil only:** OD-06 address, OD-09 (Grievance Officer).
-> **OD-11:** video is in scope (Darshil, 26 Oct 2026, ADR-0023); video rates still to be set in the pricing engine.
+> **OD-11:** resolved. Video is in scope (Darshil, 26 Oct 2026, ADR-0023) and priced as the VIDEOGRAPHER add-on, ₹2,000/hr from Semi-Pro (Darshil, 14 Nov 2026, ADR-0032). Rates per tier, reels and raw footage: owner's rate card, ADR-0034 (ruleset 2026.11.14). Video-only bookings need a later ADR.
 
 One row per decision the spec set explicitly marks as unresolved. Owner is Darshil unless stated otherwise. Sourced from `clickco-v0.2-locked-spec.md` §15, `clickco-terms-conditions-v2.md` (bracketed placeholders + changelog), and `clickco-05-pricing-engine.md` §12.
 

@@ -132,20 +132,27 @@ export class PricingRepository {
           name: string;
           min_tier: PlanTier | null;
           requires_airspace_check: boolean;
+          max_quantity: number;
+          requires_code: string | null;
         }[]
       >`
-          SELECT code, name, min_tier, requires_airspace_check FROM addons WHERE is_active OR NOT ${active}`,
+          SELECT a.code, a.name, a.min_tier, a.requires_airspace_check, a.max_quantity,
+                 r.code AS requires_code
+          FROM addons a LEFT JOIN addons r ON r.id = a.requires_addon_id
+          WHERE a.is_active OR NOT ${active}`,
       sql<
         {
           code: string;
           tier: PlanTier | null;
           city_tier: CityTier | null;
+          min_quantity: number;
           amount_paise: string;
           is_per_hour: boolean;
           payout_share_bps: number;
         }[]
       >`
-          SELECT a.code, p.tier, p.city_tier, p.amount_paise, p.is_per_hour, p.payout_share_bps
+          SELECT a.code, p.tier, p.city_tier, p.min_quantity, p.amount_paise, p.is_per_hour,
+                 p.payout_share_bps
           FROM addon_prices p JOIN addons a ON a.id = p.addon_id WHERE p.ruleset_id = ${id}`,
       sql<
         {
@@ -221,11 +228,14 @@ export class PricingRepository {
         label: a.name,
         minTier: a.min_tier,
         requiresAirspaceCheck: a.requires_airspace_check,
+        maxQuantity: a.max_quantity,
+        requiresAddonCode: a.requires_code,
       })),
       addonPrices: addonPrices.map((p) => ({
         addonCode: p.code,
         tier: p.tier,
         cityTier: p.city_tier,
+        minQuantity: p.min_quantity,
         amountPaise: BigInt(p.amount_paise),
         isPerHour: p.is_per_hour,
         payoutShareBps: p.payout_share_bps,

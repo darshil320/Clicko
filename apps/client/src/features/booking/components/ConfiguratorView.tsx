@@ -143,6 +143,7 @@ export function ConfiguratorView({
   const draft = useBookingDraft((s) => s.draft);
   const update = useBookingDraft((s) => s.update);
   const toggleAddon = useBookingDraft((s) => s.toggleAddon);
+  const setReels = useBookingDraft((s) => s.setReels);
   const setTier = useBookingDraft((s) => s.setTier);
   const now = useNow(CLOCK_TICK_MS);
   const form = useForm<VenueForm>({
@@ -304,9 +305,11 @@ export function ConfiguratorView({
           <AddonList
             tier={draft.tier}
             selected={draft.addons}
+            reels={draft.reels}
             prices={addonPrices(probe.data)}
             pricesLoading={probe.isPending}
             onToggle={toggleAddon}
+            onReels={setReels}
           />
         </Card>
       </Section>

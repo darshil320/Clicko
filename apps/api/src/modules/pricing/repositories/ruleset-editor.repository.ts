@@ -533,22 +533,24 @@ export class RulesetEditorRepository {
         name: string;
         tier: PlanTier | null;
         city_tier: CityTier | null;
+        min_quantity: number;
         amount: string;
         is_per_hour: boolean;
         payout_share_bps: number;
       }[]
     >`
-      SELECT p.id, a.code, a.name, p.tier, p.city_tier, p.amount_paise::text AS amount,
-             p.is_per_hour, p.payout_share_bps
+      SELECT p.id, a.code, a.name, p.tier, p.city_tier, p.min_quantity,
+             p.amount_paise::text AS amount, p.is_per_hour, p.payout_share_bps
       FROM addon_prices p JOIN addons a ON a.id = p.addon_id
       WHERE p.ruleset_id = ${id}
-      ORDER BY a.sort_order, a.code, p.tier NULLS FIRST, p.city_tier NULLS FIRST`;
+      ORDER BY a.sort_order, a.code, p.tier NULLS FIRST, p.city_tier NULLS FIRST, p.min_quantity`;
     return rows.map((r) => ({
       id: r.id,
       addonCode: r.code,
       addonName: r.name,
       tier: r.tier,
       cityTier: r.city_tier,
+      minQuantity: r.min_quantity,
       amountPaise: paise(r.amount),
       isPerHour: r.is_per_hour,
       payoutShareBps: r.payout_share_bps,

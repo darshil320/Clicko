@@ -47,7 +47,19 @@ export interface QuoteView {
     readonly note: string | null;
   };
   readonly balance: string | null;
+  /** T&C §3.2: the stricter refund rule, shown before payment whenever the date is peak. */
+  readonly peakSeason: string | null;
 }
+
+/** Bands paid in full at booking (T&C §2.2(b)): their emergency rule beats peak (ADR-0031 §3.3). */
+const PAID_IN_FULL_BANDS: ReadonlySet<PriceQuote['emergencyBand']> = new Set([
+  'SAME_DAY',
+  'HOURS_3_8',
+  'HOURS_UNDER_3',
+]);
+
+export const PEAK_SEASON_NOTE =
+  'Your date is in peak season. If you cancel less than 7 days before the shoot, you get 50% of your advance back.';
 
 function payNowLabel(q: PriceQuote): { label: string; note: string | null } {
   if (q.captureOnAcceptOnly) {
@@ -88,6 +100,8 @@ export function quoteView(q: PriceQuote): QuoteView {
     total: rupees(q.totalPaise),
     payNow: { label: pay.label, amount: rupees(q.advancePaise), note: pay.note },
     balance: q.balancePaise > 0 ? rupees(q.balancePaise) : null,
+    peakSeason:
+      q.isPeakSeason && !PAID_IN_FULL_BANDS.has(q.emergencyBand) ? PEAK_SEASON_NOTE : null,
   };
 }
 

@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { computeQuote } from '../index';
+import { ADDON_CATALOGUE } from '../launch-ruleset';
 import {
   CITY,
   hoursBefore,
@@ -269,6 +270,99 @@ describe('Addons', () => {
     expect(quote.addonsAmountPaise).toBe(300_000n);
   });
 
+  describe('Videographer (ADR-0032)', () => {
+    it('charges ₹2,000 for every hour booked', () => {
+      const request = quoteRequest({ hours: 2.5, addons: [{ code: 'VIDEOGRAPHER', quantity: 1 }] });
+
+      const quote = quoteOf(computeQuote(request, launch()));
+
+      // 200000 × 5 half-hours / 2
+      expect(quote.addonsAmountPaise).toBe(500_000n);
+    });
+
+    it('emits an ADDON_VIDEOGRAPHER line labelled Videographer', () => {
+      const request = quoteRequest({ addons: [{ code: 'VIDEOGRAPHER', quantity: 1 }] });
+
+      const quote = quoteOf(computeQuote(request, launch()));
+
+      expect(quote.lines).toContainEqual(
+        expect.objectContaining({
+          code: 'ADDON_VIDEOGRAPHER',
+          label: 'Videographer',
+          amountPaise: 400_000n,
+        }),
+      );
+    });
+
+    it('takes a videographer on a Basic booking (ADR-0034 opens video to every tier)', () => {
+      const request = quoteRequest({
+        tier: 'BASIC',
+        addons: [{ code: 'VIDEOGRAPHER', quantity: 1 }],
+      });
+
+      const quote = quoteOf(computeQuote(request, launch()));
+
+      // 2026.10.01 keeps its flat ₹2,000/hr row: 200000 × 4 / 2
+      expect(quote.addonsAmountPaise).toBe(400_000n);
+    });
+
+    it('accepts a videographer on Semi-Pro', () => {
+      const request = quoteRequest({
+        tier: 'SEMI_PRO',
+        addons: [{ code: 'VIDEOGRAPHER', quantity: 1 }],
+      });
+
+      const quote = quoteOf(computeQuote(request, launch()));
+
+      // 200000 × 4 / 2
+      expect(quote.addonsAmountPaise).toBe(400_000n);
+    });
+
+    it('is never multiplied by emergency, festival, night or weekend factors', () => {
+      const request = quoteRequest({
+        ...everyFactor(),
+        hours: 2,
+        addons: [{ code: 'VIDEOGRAPHER', quantity: 1 }],
+      });
+
+      const quote = quoteOf(computeQuote(request, launch()));
+
+      expect(quote.addonsAmountPaise).toBe(400_000n);
+    });
+
+    it('sits beside a second shooter as its own line', () => {
+      const request = quoteRequest({
+        hours: 2,
+        addons: [
+          { code: 'SECOND_SHOOTER', quantity: 1 },
+          { code: 'VIDEOGRAPHER', quantity: 1 },
+        ],
+      });
+
+      const quote = quoteOf(computeQuote(request, launch()));
+
+      // 150000 × 2 + 200000 × 2
+      expect(quote.addonsAmountPaise).toBe(700_000n);
+    });
+
+    it('is priced in the launch catalogue at 200000 paise per hour, 62% payout, every tier', () => {
+      const videographer = ADDON_CATALOGUE.find((a) => a.code === 'VIDEOGRAPHER');
+
+      expect(videographer).toEqual({
+        code: 'VIDEOGRAPHER',
+        label: 'Videographer',
+        minTier: 'BASIC',
+        requiresAirspaceCheck: false,
+        requiresDroneCredentials: false,
+        pricePaise: 200_000n,
+        isPerHour: true,
+        maxQuantity: 4,
+        requiresAddonCode: null,
+        payoutShareBps: 6200,
+      });
+    });
+  });
+
   it('accepts a drone on Expert, above its minimum tier', () => {
     const request = quoteRequest({ tier: 'EXPERT', addons: [{ code: 'DRONE', quantity: 1 }] });
 
@@ -368,7 +462,7 @@ describe('Addons', () => {
     // Rows deliberately listed least-specific first so "first match wins" would fail.
     const rulesetWithTieredDronePrices = () => {
       const base = launch();
-      const drone = { addonCode: 'DRONE', isPerHour: false, payoutShareBps: 6000 };
+      const drone = { addonCode: 'DRONE', minQuantity: 1, isPerHour: false, payoutShareBps: 6000 };
       return {
         ...base,
         addonPrices: [
@@ -656,6 +750,15 @@ describe('Expected payout', () => {
 
     // (850000 + 300000) × 0.60 = 690000.  Addon's own 62% would give 510000 + 186000 = 696000.
     expect(quote.expectedPayoutPaise).toBe(690_000n);
+  });
+
+  it('pays the tier share on a videographer, like a second shooter', () => {
+    const request = quoteRequest({ addons: [{ code: 'VIDEOGRAPHER', quantity: 1 }] });
+
+    const quote = quoteOf(computeQuote(request, launch()));
+
+    // (850000 + 400000) × 0.60
+    expect(quote.expectedPayoutPaise).toBe(750_000n);
   });
 
   it('ignores the promo discount when computing the payout', () => {

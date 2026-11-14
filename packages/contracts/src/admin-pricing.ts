@@ -112,6 +112,8 @@ export const PricingAddonPriceRow = z.object({
   addonName: z.string(),
   tier: PlanTier.nullable(),
   cityTier: CityTier.nullable(),
+  /** Addendum 0021: from this many units, this unit price covers every unit. 1 = ordinary. */
+  minQuantity: z.int().min(1),
   amountPaise: MoneyPaise,
   isPerHour: z.boolean(),
   payoutShareBps: BasisPoints,
@@ -358,7 +360,7 @@ export const AdminPricingPreviewQuery = z.object({
   cityId: Uuid,
   hours: z.coerce.number().pipe(Hours),
   scheduledStart: IsoDateTime,
-  addons: z.preprocess(csv, z.array(AddonCode).max(4)).default([]),
+  addons: z.preprocess(csv, z.array(AddonCode).max(AddonCode.options.length)).default([]),
   travelDistanceKm: z.coerce.number().min(0).max(500).multipleOf(0.01).optional(),
 });
 export type AdminPricingPreviewQuery = z.output<typeof AdminPricingPreviewQuery>;

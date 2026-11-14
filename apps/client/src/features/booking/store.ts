@@ -5,7 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type { BookableTier } from '@/shared/catalogue';
 import { claimKey, type KeyRing } from '@/shared/idempotency';
 import { kvStorage } from '@/shared/storage/kv';
-import { type BookingDraft, toggleAddon, withTier } from './lib/draft';
+import { type BookingDraft, setReels, toggleAddon, upgradeDraft, withTier } from './lib/draft';
 
 export interface CreatedBooking {
   readonly bookingId: string;
@@ -24,9 +24,10 @@ interface BookingDraftState {
   readonly created: CreatedBooking | null;
   readonly payment: OpenPayment | null;
   start(draft: BookingDraft): void;
-  update(patch: Partial<Omit<BookingDraft, 'tier' | 'addons'>>): void;
+  update(patch: Partial<Omit<BookingDraft, 'tier' | 'addons' | 'reels'>>): void;
   setTier(tier: BookableTier): void;
   toggleAddon(code: AddonCode): void;
+  setReels(count: number): void;
   /** The Idempotency-Key for `scope` + this exact request (reused on retry, fresh on change). */
   claimKey(scope: string, fingerprint: string): string;
   bookingCreated(created: CreatedBooking): void;
@@ -37,6 +38,14 @@ interface BookingDraftState {
 }
 
 const EMPTY = { draft: null, keys: {}, created: null, payment: null } as const;
+
+type PersistedDraftState = Pick<BookingDraftState, 'draft' | 'keys' | 'created' | 'payment'>;
+
+/** Upgrades a persisted state from an older version; never mutates what was read. */
+function migrateDraftState(persisted: unknown, version: number): PersistedDraftState {
+  const state = (persisted ?? EMPTY) as PersistedDraftState;
+  return { ...state, draft: upgradeDraft(state.draft, version) };
+}
 
 /**
  * The booking being put together, plus the keys and ids of its checkout. Persisted, so a
@@ -59,6 +68,10 @@ export const useBookingDraft = create<BookingDraftState>()(
         const { draft } = get();
         if (draft) set({ draft: toggleAddon(draft, code) });
       },
+      setReels: (count) => {
+        const { draft } = get();
+        if (draft) set({ draft: setReels(draft, count) });
+      },
       claimKey: (scope, fingerprint) => {
         const claimed = claimKey(get().keys, scope, fingerprint, () => newIdempotencyKey());
         if (claimed.ring !== get().keys) set({ keys: claimed.ring });
@@ -75,7 +88,9 @@ export const useBookingDraft = create<BookingDraftState>()(
     }),
     {
       name: 'clickco.booking-draft',
-      version: 1,
+      version: 2,
+      // v2 (ADR-0034): drafts gained a reel count. A v1 draft resumes with none.
+      migrate: (persisted, version) => migrateDraftState(persisted, version),
       storage: createJSONStorage(() => kvStorage),
       partialize: ({ draft, keys, created, payment }) => ({ draft, keys, created, payment }),
     },

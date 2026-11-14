@@ -1,5 +1,6 @@
 /**
- * Launch ruleset 2026.10.01 — doc 05 §5 rate card + ADR-0005 festival calendar.
+ * Launch ruleset 2026.10.01 — doc 05 §5 rate card + ADR-0005 festival calendar + the ADR-0032
+ * videographer add-on.
  * Single source for both the engine tests and the database seed, so the two
  * can never disagree.
  */
@@ -46,6 +47,9 @@ export const CATEGORY_CATALOGUE = [
   sort: number;
 }>;
 
+/** What every launch add-on allowed per booking before addendum 0021 (the old contract cap). */
+const LAUNCH_MAX_QUANTITY = 4;
+
 export const ADDON_CATALOGUE: readonly (AddonRule & {
   readonly pricePaise: bigint;
   readonly isPerHour: boolean;
@@ -61,6 +65,8 @@ export const ADDON_CATALOGUE: readonly (AddonRule & {
     pricePaise: rupees(1500),
     isPerHour: true,
     payoutShareBps: 6200,
+    maxQuantity: LAUNCH_MAX_QUANTITY,
+    requiresAddonCode: null,
   },
   {
     code: 'DRONE',
@@ -71,6 +77,8 @@ export const ADDON_CATALOGUE: readonly (AddonRule & {
     pricePaise: rupees(4500),
     isPerHour: false,
     payoutShareBps: 6000,
+    maxQuantity: LAUNCH_MAX_QUANTITY,
+    requiresAddonCode: null,
   },
   {
     code: 'LIGHTING_KIT',
@@ -81,6 +89,8 @@ export const ADDON_CATALOGUE: readonly (AddonRule & {
     pricePaise: rupees(1500),
     isPerHour: false,
     payoutShareBps: 6000,
+    maxQuantity: LAUNCH_MAX_QUANTITY,
+    requiresAddonCode: null,
   },
   {
     code: 'RUSH_24H',
@@ -91,8 +101,38 @@ export const ADDON_CATALOGUE: readonly (AddonRule & {
     pricePaise: rupees(2500),
     isPerHour: false,
     payoutShareBps: 6000,
+    maxQuantity: LAUNCH_MAX_QUANTITY,
+    requiresAddonCode: null,
+  },
+  // ADR-0032: a second person shooting video. Last, so a database seeded before it keeps every
+  // earlier add-on's sort order. ADR-0034 opens it to every tier (the catalogue is not versioned)
+  // and prices it per tier from ruleset 2026.11.14; this ruleset keeps its flat ₹2,000/hr row,
+  // which equals the new Basic rate.
+  {
+    code: 'VIDEOGRAPHER',
+    label: 'Videographer',
+    minTier: 'BASIC',
+    requiresAirspaceCheck: false,
+    requiresDroneCredentials: false,
+    pricePaise: rupees(2000),
+    isPerHour: true,
+    payoutShareBps: 6200,
+    maxQuantity: LAUNCH_MAX_QUANTITY,
+    requiresAddonCode: null,
   },
 ];
+
+/** The catalogue fields the engine reads (the seed reads the rest). */
+export function toAddonRule(a: AddonRule): AddonRule {
+  return {
+    code: a.code,
+    label: a.label,
+    minTier: a.minTier,
+    requiresAirspaceCheck: a.requiresAirspaceCheck,
+    maxQuantity: a.maxQuantity,
+    requiresAddonCode: a.requiresAddonCode,
+  };
+}
 
 export interface LaunchCityIds {
   readonly surat: string;
@@ -240,16 +280,12 @@ export function launchRuleset(id: string, cityIds: LaunchCityIds): Ruleset {
     weekend: { isoDays: [6, 7], multiplierBps: 11000 },
     festivals: festivals(cityIds),
     travelSlabs: travelSlabs(),
-    addons: ADDON_CATALOGUE.map(({ code, label, minTier, requiresAirspaceCheck }) => ({
-      code,
-      label,
-      minTier,
-      requiresAirspaceCheck,
-    })),
+    addons: ADDON_CATALOGUE.map(toAddonRule),
     addonPrices: ADDON_CATALOGUE.map((a) => ({
       addonCode: a.code,
       tier: null,
       cityTier: null,
+      minQuantity: 1,
       amountPaise: a.pricePaise,
       isPerHour: a.isPerHour,
       payoutShareBps: a.payoutShareBps,

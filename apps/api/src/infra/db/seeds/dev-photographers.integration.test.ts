@@ -9,7 +9,11 @@ import {
 } from '../../../test-support/scratch-db';
 import { seedLaunchCities } from '../seed';
 import { DEV_PHOTOGRAPHERS, devPhone, seedDevPhotographers } from './dev-photographers';
-import { alignLaunchEmergencyRules, seedLaunchRuleset } from './launch-ruleset.seed';
+import {
+  alignLaunchAddonPrices,
+  alignLaunchEmergencyRules,
+  seedLaunchRuleset,
+} from './launch-ruleset.seed';
 
 describe('dev photographer data', () => {
   it('uses valid, unique numbers in the +91 99990 00xxx block, clear of demo and test numbers', () => {
@@ -80,6 +84,22 @@ describe.runIf(TEST_DATABASE_URL)('seedDevPhotographers in Postgres', () => {
       ['HOURS_3_8', false, 90],
       ['HOURS_UNDER_3', false, 90],
     ]);
+  });
+
+  it('adds the ADR-0032 videographer price to a launch ruleset seeded before it, once', async () => {
+    await db.sql`DELETE FROM addon_prices
+                 WHERE addon_id = (SELECT id FROM addons WHERE code = 'VIDEOGRAPHER')`;
+    expect(await alignLaunchAddonPrices(db.sql)).toBe(1);
+    expect(await alignLaunchAddonPrices(db.sql)).toBe(0);
+    const [row] = await db.sql<
+      { amount: string; perHour: boolean; share: number; minTier: string }[]
+    >`
+      SELECT ap.amount_paise::text AS amount, ap.is_per_hour AS "perHour",
+             ap.payout_share_bps AS share, a.min_tier AS "minTier"
+      FROM addon_prices ap JOIN addons a ON a.id = ap.addon_id
+      WHERE a.code = 'VIDEOGRAPHER'`;
+    // ADR-0034 opened the videographer to every tier (the catalogue is not versioned).
+    expect(row).toEqual({ amount: '200000', perHour: true, share: 6200, minTier: 'BASIC' });
   });
 
   it('makes exactly one photographer dispatchable for a drone booking in Surat', async () => {
